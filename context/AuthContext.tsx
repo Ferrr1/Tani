@@ -1,5 +1,10 @@
 // src/context/AuthContext.tsx
 import { supabase } from "@/lib/supabase";
+import {
+    changeMyPassword,
+    getMyProfile,
+    updateMyProfile,
+} from "@/services/profileService";
 import type { Profile, Role } from "@/types/profile";
 import type { Session, User } from "@supabase/supabase-js";
 import React, {
@@ -12,11 +17,8 @@ import React, {
     useState,
 } from "react";
 
-/** Bentuk state Auth global */
 type AuthState = {
-    /** True saat bootstrap awal / aksi auth berjalan */
     loading: boolean;
-    /** True hanya saat bootstrap awal, cocok buat skeleton global */
     booting: boolean;
 
     session: Session | null;
@@ -25,22 +27,17 @@ type AuthState = {
     role: Role | null;
     isAdmin: boolean;
 
-    // === Actions ===
-    /** Sign up email/password (tanpa OTP confirm) */
     signUp: (params: { email: string; password: string; meta?: Partial<Profile> }) => Promise<void>;
-    /** Sign in email/password */
     signIn: (params: { email: string; password: string }) => Promise<void>;
-    /** Kirim email reset password */
     sendPasswordReset: (email: string) => Promise<void>;
-    /** Logout */
     signOut: () => Promise<void>;
-    /** Refresh profil dari DB */
     refreshProfile: () => Promise<void>;
 
-    /** 🔹 Update profil milik user sendiri */
-    updateProfile: (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>) => Promise<void>;
-    /** 🔹 Ganti password sendiri (tanpa konfirmasi) */
+    updateProfile: (
+        patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>
+    ) => Promise<void>;
     changePassword: (newPassword: string) => Promise<void>;
+    // changeEmail?: (newEmail: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -59,20 +56,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isAdmin = role === "admin";
 
     const fetchProfile = useCallback(async (u?: User | null) => {
-        const current = u ?? (await supabase.auth.getUser()).data.user;
-        if (!current) {
-            setProfile(null);
-            return;
-        }
-
-        const { data, error } = await supabase
-            .from("profiles")
-            .select("id, email, full_name, nama_desa, jenis_tanaman, luas_lahan, role")
-            .eq("id", current.id)
-            .maybeSingle();
-
-        if (error) throw error;
-        setProfile((data as Profile) ?? null);
+        // ✅ Ambil via service (RLS aman; hanya tabel public.profiles)
+        const p = await getMyProfile();
+        setProfile(p);
     }, []);
 
     const bootstrap = useCallback(async () => {
@@ -89,17 +75,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setProfile(null);
             }
         } finally {
-            setLoading(false); // selesai tahap bootstrap utama
+            setLoading(false);
             setBooting(false);
             initializing.current = false;
         }
     }, [fetchProfile]);
 
     useEffect(() => {
-        // Bootstrap awal
         bootstrap();
 
-        // Sinkronkan perubahan session dari Supabase
         const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
             setSession(newSession);
             setUser(newSession?.user ?? null);
@@ -130,13 +114,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
-                    options: {
-                        data: meta ?? {}, // raw_user_meta_data -> bisa dipakai trigger untuk isi tabel profiles
-                    },
+                    options: { data: meta ?? {} },
                 });
                 if (error) throw error;
 
-                // Jika signUp langsung mengembalikan session (tergantung setting email confirm), set state.
                 if (data.session?.user) {
                     setSession(data.session);
                     setUser(data.session.user);
@@ -170,7 +151,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(true);
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                // Untuk RN, gunakan deep link kustom app kamu (schema di app.config.ts -> android.intentFilters/ios)
                 redirectTo: "attendance://reset-password",
             });
             if (error) throw error;
@@ -196,57 +176,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshProfile = useCallback(async () => {
         setLoading(true);
         try {
-            await fetchProfile(user);
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchProfile, user]);
-
-    /** 🔹 Update profil milik user sendiri */
-    const updateProfile = useCallback(async (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>) => {
-        if (!user?.id) throw new Error("Not authenticated");
-        setLoading(true);
-        try {
-            // Normalisasi field
-            const body: Record<string, any> = { ...patch };
-            if ("luas_lahan" in body) {
-                const n = Number(body.luas_lahan);
-                body.luas_lahan = Number.isFinite(n) && n >= 0 ? n : null;
-            }
-            ["full_name", "nama_desa", "jenis_tanaman"].forEach((k) => {
-                if (k in body) {
-                    const v = body[k];
-                    body[k] = (v ?? "").toString().trim() || null;
-                }
-            });
-
-            const { data, error } = await supabase
-                .from("profiles")
-                .update(body)
-                .eq("id", user.id)
-                .select("id, email, full_name, nama_desa, jenis_tanaman, luas_lahan, role")
-                .single();
-
-            if (error) throw error;
-            setProfile(data as Profile);
-        } finally {
-            setLoading(false);
-        }
-    }, [user]);
-
-    /** 🔹 Ganti password sendiri (langsung berlaku, tanpa konfirmasi) */
-    const changePassword = useCallback(async (newPassword: string) => {
-        if (!newPassword || newPassword.length < 6) {
-            throw new Error("Password minimal 6 karakter");
-        }
-        setLoading(true);
-        try {
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) throw error;
+            const p = await getMyProfile();
+            setProfile(p);
         } finally {
             setLoading(false);
         }
     }, []);
+
+    const updateProfile = useCallback(
+        async (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>) => {
+            setLoading(true);
+            try {
+                const updated = await updateMyProfile(patch);
+                setProfile(updated);
+            } finally {
+                setLoading(false);
+            }
+        },
+        []
+    );
+
+    const changePassword = useCallback(async (newPassword: string) => {
+        setLoading(true);
+        try {
+            await changeMyPassword(newPassword);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Optional kalau mau expose ganti email dari Context:
+    // const changeEmail = useCallback(async (newEmail: string) => {
+    //   setLoading(true);
+    //   try {
+    //     await changeMyEmail(newEmail);
+    //     await refreshProfile();
+    //   } finally {
+    //     setLoading(false);
+    //   }
+    // }, [refreshProfile]);
 
     const value = useMemo<AuthState>(
         () => ({
@@ -264,6 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             refreshProfile,
             updateProfile,
             changePassword,
+            // changeEmail,
         }),
         [
             loading,
@@ -280,6 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             refreshProfile,
             updateProfile,
             changePassword,
+            // changeEmail,
         ]
     );
 

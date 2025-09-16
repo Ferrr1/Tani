@@ -102,7 +102,7 @@ export default function ReportScreen() {
     /** Share */
     const onShare = async () => {
         const lines = [
-            `Report Usahatani (${season.name} • ${year})`,
+            `Report Usahatani (${season.name} | ${year})`,
             `Luas lahan: ${ha} Ha`,
             `Total Penerimaan: ${money(totalProduction)}`,
             `Total Biaya Tunai: ${money(totalCash)}`,

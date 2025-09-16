@@ -140,7 +140,7 @@ export default function HomeScreen() {
             <HeaderLogoutButton size={28} confirm={true} />
 
             <Pressable
-              onPress={() => router.replace("/(sub)/profile")}
+              onPress={() => router.push("/(sub)/profile")}
               style={[
                 styles.avatarWrap,
                 { borderColor: C.success, backgroundColor: C.surface },

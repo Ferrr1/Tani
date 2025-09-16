@@ -42,7 +42,7 @@ export default function LoginScreen() {
     const onSubmit = async (v: LoginForm) => {
         await signIn({ email: v.email.trim(), password: v.password });
         // jika sukses, AuthContext akan punya session → arahkan ke tabs/home
-        router.replace("/(tabs)");
+        router.push("/(tabs)");
     };
 
     return (

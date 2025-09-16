@@ -21,11 +21,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type RegisterForm = {
     fullName: string;
-    email: string;        // DIPAKAI: email untuk akun
-    password: string;     // DIPAKAI: password login
+    email: string;
+    password: string;
     village: string;
     cropType: string;
-    landAreaHa: string;   // string -> diparse number
+    landAreaHa: string;
 };
 
 const CROP_OPTIONS = [
@@ -43,7 +43,7 @@ export default function RegisterScreen() {
     const S = Tokens;
     const router = useRouter();
     const { signUp, loading } = useAuth(); // pakai loading dari AuthContext
-
+    const [showPwd, setShowPwd] = useState(false);
     const [showCrop, setShowCrop] = useState(false);
 
     const {
@@ -103,11 +103,7 @@ export default function RegisterScreen() {
                     luas_lahan: ha, // simpan apa adanya dalam hektar (sesuai trigger kamu)
                 } as any,
             });
-
-            // Tergantung setting "Email Confirmations" di Supabase:
-            // - Jika off: biasanya langsung dapat session -> langsung arahkan ke home/dashboard
-            // - Jika on: user perlu konfirmasi via email -> arahkan ke info screen
-            router.replace("/(tabs)");
+            router.push("/(tabs)");
         } catch (e: any) {
             console.warn("register error", e);
             const msg = e?.message || "Terjadi kesalahan saat pendaftaran";
@@ -221,25 +217,39 @@ export default function RegisterScreen() {
                                 minLength: { value: 6, message: "Minimal 6 karakter" },
                             }}
                             render={({ field: { onChange, onBlur, value } }) => (
-                                <TextInput
-                                    placeholder="Password"
-                                    placeholderTextColor={C.icon}
-                                    secureTextEntry
-                                    onBlur={onBlur}
-                                    onChangeText={onChange}
-                                    value={value}
-                                    style={[
-                                        styles.input,
-                                        {
-                                            borderColor: errors.password ? C.danger : C.border,
-                                            color: C.text,
-                                            fontFamily: Fonts.sans as any,
-                                            borderRadius: S.radius.md,
-                                            paddingHorizontal: S.spacing.md,
-                                            paddingVertical: 10,
-                                        },
-                                    ]}
-                                />
+                                <View style={{ position: "relative" }}>
+                                    <TextInput
+                                        placeholder="Password"
+                                        placeholderTextColor={C.icon}
+                                        secureTextEntry={!showPwd}
+                                        onBlur={onBlur}
+                                        onChangeText={onChange}
+                                        value={value}
+                                        style={[
+                                            styles.input,
+                                            {
+                                                borderColor: errors.password ? C.danger : C.border,
+                                                color: C.text,
+                                                fontFamily: Fonts.sans as any,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
+                                                paddingRight: 42, // space for eye icon
+                                            },
+                                        ]}
+                                    />
+                                    <Pressable
+                                        onPress={() => setShowPwd((s) => !s)}
+                                        hitSlop={10}
+                                        style={{ position: "absolute", right: 10, top: 10, height: 24, width: 24, alignItems: "center", justifyContent: "center" }}
+                                    >
+                                        <Ionicons
+                                            name={showPwd ? "eye-off-outline" : "eye-outline"}
+                                            size={20}
+                                            color={C.icon}
+                                        />
+                                    </Pressable>
+                                </View>
                             )}
                         />
                         {errors.password && (
@@ -429,15 +439,10 @@ export default function RegisterScreen() {
                         </Text>
                     </View>
 
-                    <View
-                        style={[
-                            styles.helper,
-                            { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg },
-                        ]}
-                    >
+                    <View style={[styles.helper, { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg }]}>
+                        <Ionicons name="information-circle-outline" size={24} color={C.textMuted} />
                         <Text style={{ color: C.textMuted, fontFamily: Fonts.serif as any }}>
-                            📧 Kami menggunakan email & password. Jika verifikasi email diaktifkan di Supabase,
-                            cek inbox/spam untuk konfirmasi.
+                            Pastikan menggunakan email yang terdaftar
                         </Text>
                     </View>
                 </View>
@@ -474,5 +479,5 @@ const styles = StyleSheet.create({
     btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
     info: { marginTop: 14, textAlign: "center", fontSize: 13 },
     link: { fontWeight: "700", textDecorationLine: "underline" },
-    helper: { marginTop: 18, padding: 12 },
+    helper: { marginTop: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 },
 });

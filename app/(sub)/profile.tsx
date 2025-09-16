@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -8,17 +9,16 @@ import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
     Alert,
-    Image,
     Keyboard,
     Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     View,
-    useColorScheme,
+    useColorScheme
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type ProfileForm = {
@@ -44,7 +44,6 @@ export default function ProfileScreen() {
 
     const { profile, updateProfile, loading } = useAuth();
 
-    const [avatar, setAvatar] = useState<string | null>("https://i.pravatar.cc/200?img=12");
     const [showCrop, setShowCrop] = useState(false);
 
     const {
@@ -117,6 +116,7 @@ export default function ProfileScreen() {
             Keyboard.dismiss();
             Alert.alert("Tersimpan", "Profil berhasil diperbarui.");
         } catch (e: any) {
+            console.warn(e)
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan profil.");
         }
     };
@@ -132,7 +132,7 @@ export default function ProfileScreen() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.replace("/(tabs)")}
+                        onPress={() => router.push("/(tabs)")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
@@ -149,11 +149,13 @@ export default function ProfileScreen() {
                 </View>
             </LinearGradient>
 
-            <ScrollView
-                style={{ flex: 1 }}
+            <KeyboardAwareScrollView
                 contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl + 64 }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                enableOnAndroid
+                enableAutomaticScroll
+                extraScrollHeight={Platform.select({ ios: 80, android: 120 })}
             >
                 {/* Kartu profil */}
                 <View
@@ -176,19 +178,15 @@ export default function ProfileScreen() {
                                 scheme === "light" ? S.shadow.light : S.shadow.dark,
                             ]}
                         >
-                            {avatar ? (
-                                <Image source={{ uri: avatar }} style={styles.avatar} />
-                            ) : (
-                                <Ionicons name="person-circle-outline" size={84} color={C.icon} />
-                            )}
-                            <Pressable
-                                onPress={() => {
-                                    setAvatar((prev) => (prev ? "https://i.pravatar.cc/200?img=5" : "https://i.pravatar.cc/200?img=12"));
-                                }}
-                                style={[styles.camBtn, { backgroundColor: C.tint, borderColor: C.border }]}
-                            >
-                                <Ionicons name="camera-outline" size={16} color="#fff" />
-                            </Pressable>
+                            <Text
+                                style={{
+                                    color: C.text,
+                                    fontFamily: Fonts.rounded as any,
+                                    fontSize: 16,
+                                    fontWeight: "bold"
+                                }}>
+                                {getInitialsName(profile?.full_name || "")}
+                            </Text>
                         </View>
 
                         <View style={{ flex: 1 }}>
@@ -432,7 +430,7 @@ export default function ProfileScreen() {
                         </>
                     )}
                 </Pressable>
-            </ScrollView>
+            </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }
@@ -450,14 +448,10 @@ const styles = StyleSheet.create({
     // avatar
     avatarRow: { flexDirection: "row", gap: 14, alignItems: "center", marginBottom: 6 },
     avatarWrap: {
+        justifyContent: "center", alignItems: "center",
         width: 86, height: 86, borderRadius: 86, overflow: "hidden", borderWidth: 1, position: "relative",
     },
     avatar: { width: "100%", height: "100%" },
-    camBtn: {
-        position: "absolute", right: 4, bottom: 4, width: 28, height: 28, borderRadius: 999,
-        alignItems: "center", justifyContent: "center", borderWidth: 1,
-    },
-
     label: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
     input: {
         borderWidth: 1, fontSize: 15, paddingHorizontal: 12,

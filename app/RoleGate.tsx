@@ -62,7 +62,7 @@ export default function RoleGate({ children }: { children: React.ReactNode }): J
         // kalau bukan di target, arahkan
         if (!alreadyInTarget) {
             redirected.current = true;
-            router.replace(target);
+            router.push(target);
         }
     }, [isReady, session, sessionId, role, isAdmin, pathname, router]);
 

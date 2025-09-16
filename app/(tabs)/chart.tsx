@@ -2,8 +2,9 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+    ActivityIndicator,
     Dimensions,
     Pressable,
     ScrollView,
@@ -15,35 +16,9 @@ import {
 import PieChart from "react-native-pie-chart";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/** ===== Dummy data (gampang diganti API) ===== */
-type Season = { id: string; name: string; start: string; end: string };
-type Txn = {
-    id: string;
-    type: "income" | "expense";
-    amount: number;
-    date: string;
-    seasonId: string;
-};
-
-const SEASONS: Season[] = [
-    { id: "s1", name: "Musim 1", start: "2025-02-01", end: "2025-11-30" },
-    { id: "s2", name: "Musim 2", start: "2026-02-01", end: "2026-11-30" },
-];
-
-const TXNS: Txn[] = [
-    // s1 - 2025
-    { id: "t1", type: "income", amount: 120000, date: "2025-02-10", seasonId: "s1" },
-    { id: "t2", type: "expense", amount: 50000, date: "2025-02-12", seasonId: "s1" },
-    { id: "t3", type: "income", amount: 150000, date: "2025-03-18", seasonId: "s1" },
-    { id: "t4", type: "expense", amount: 70000, date: "2025-03-03", seasonId: "s1" },
-    { id: "t5", type: "income", amount: 300000, date: "2025-07-01", seasonId: "s1" },
-    { id: "t6", type: "expense", amount: 120000, date: "2025-07-07", seasonId: "s1" },
-    // s2 - 2026
-    { id: "t7", type: "income", amount: 180000, date: "2026-03-12", seasonId: "s2" },
-    { id: "t8", type: "expense", amount: 60000, date: "2026-03-16", seasonId: "s2" },
-    { id: "t9", type: "income", amount: 260000, date: "2026-08-09", seasonId: "s2" },
-    { id: "t10", type: "expense", amount: 100000, date: "2026-08-22", seasonId: "s2" },
-];
+import { useExpenseList } from "@/services/expenseService";
+import { useReceiptList } from "@/services/receiptService";
+import { useSeasonList } from "@/services/seasonService";
 
 /** ===== Util ===== */
 const money = (n: number) =>
@@ -56,60 +31,122 @@ export default function ChartScreen() {
     const C = Colors[scheme];
     const S = Tokens;
 
-    // filter
-    const [seasonIdx, setSeasonIdx] = useState(0);
-    const [year, setYear] = useState<number | "all">("all");
+    // seasons
+    const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
+    const seasons = useMemo(
+        () =>
+            [...seasonRows].sort(
+                (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+            ),
+        [seasonRows]
+    );
+
+    // selected season
+    const [seasonId, setSeasonId] = useState<string>("");
     const [openSeason, setOpenSeason] = useState(false);
+
+    // default pilih musim terbaru saat available
+    useEffect(() => {
+        fetchSeasons();
+    }, [fetchSeasons]);
+
+    useEffect(() => {
+        if (!seasonId && seasons.length) {
+            setSeasonId(seasons[0].id);
+        }
+    }, [seasons, seasonId]);
+
+    const currentSeason = useMemo(
+        () => seasons.find((s) => s.id === seasonId) || null,
+        [seasons, seasonId]
+    );
+
+    // data hooks
+    const {
+        loading: receiptsLoading,
+        rows: receiptRows,
+        seasonId: receiptSeasonId,
+        setSeasonId: setReceiptSeasonId,
+        fetchOnce: fetchReceipts,
+    } = useReceiptList(seasonId || "all");
+
+    const {
+        loading: expensesLoading,
+        rows: expenseRows,
+        seasonId: expenseSeasonId,
+        setSeasonId: setExpenseSeasonId,
+        fetchOnce: fetchExpenses,
+    } = useExpenseList(seasonId || "all");
+
+    // sinkron filter musim ke dua list
+    useEffect(() => {
+        if (seasonId && receiptSeasonId !== seasonId) setReceiptSeasonId(seasonId);
+        if (seasonId && expenseSeasonId !== seasonId) setExpenseSeasonId(seasonId);
+    }, [seasonId, receiptSeasonId, expenseSeasonId, setReceiptSeasonId, setExpenseSeasonId]);
+
+    // initial fetch (hooks sudah ada guard inFlight)
+    useEffect(() => {
+        if (seasonId) {
+            fetchReceipts();
+            fetchExpenses();
+        }
+    }, [seasonId, fetchReceipts, fetchExpenses]);
+
+    // filter tahun
+    const [year, setYear] = useState<number | "all">("all");
     const [openYear, setOpenYear] = useState(false);
 
-    const season = SEASONS[seasonIdx];
-
     const yearOptions = useMemo(() => {
-        const ys = Array.from(
-            new Set(TXNS.filter((t) => t.seasonId === season.id).map((t) => getYear(t.date)))
-        ).sort();
-        return ys;
-    }, [seasonIdx]);
-
-    // data terfilter
-    const filtered = useMemo(() => {
-        return TXNS.filter(
-            (t) => t.seasonId === season.id && (year === "all" ? true : getYear(t.date) === year)
+        if (!seasonId) return [];
+        const yearsFromReceipts = receiptRows.map((r) => getYear(r.created_at));
+        const yearsFromExpenses = expenseRows.map((e) =>
+            e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)
         );
-    }, [season.id, year]);
+        const uniq = Array.from(new Set([...yearsFromReceipts, ...yearsFromExpenses]));
+        return uniq.sort((a, b) => a - b);
+    }, [seasonId, receiptRows, expenseRows]);
 
-    // agregasi (income & expense) + per bulan (kalau nanti mau dipakai lagi)
-    const { totalIn, totalOut } = useMemo(() => {
-        const inc = Array(12).fill(0);
-        const exp = Array(12).fill(0);
-        for (const t of filtered) {
-            const m = new Date(t.date).getMonth();
-            if (t.type === "income") inc[m] += t.amount;
-            else exp[m] += t.amount;
-        }
-        return {
-            byMonthIncome: inc,
-            byMonthExpense: exp,
-            totalIn: inc.reduce((a, b) => a + b, 0),
-            totalOut: exp.reduce((a, b) => a + b, 0),
-        };
-    }, [filtered]);
+    // data terfilter by tahun
+    const filteredReceipts = useMemo(() => {
+        if (year === "all") return receiptRows;
+        return receiptRows.filter((r) => getYear(r.created_at) === year);
+    }, [receiptRows, year]);
 
-    /** ===== Pie sizing ===== */
+    const filteredExpenses = useMemo(() => {
+        if (year === "all") return expenseRows;
+        return expenseRows.filter((e) =>
+            (e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)) === year
+        );
+    }, [expenseRows, year]);
+
+    // agregasi
+    const totalIn = useMemo(
+        () => filteredReceipts.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
+        [filteredReceipts]
+    );
+    const totalOut = useMemo(
+        () => filteredExpenses.reduce((acc, r) => acc + (Number(r.total_all) || 0), 0),
+        [filteredExpenses]
+    );
+
+    /** ===== Pie sizing & series ===== */
     const chartWidth = Dimensions.get("window").width - S.spacing.lg * 2;
-    const pieSize = Math.min(chartWidth - 24, 280); // sedikit padding kiri/kanan
+    const pieSize = Math.min(chartWidth - 24, 280);
 
     const total = totalIn + totalOut;
     const pctIn = total > 0 ? Math.round((totalIn / total) * 100) : 0;
     const pctOut = total > 0 ? 100 - pctIn : 0;
-    const seriesData = [
+    const series = [
         { value: totalIn, color: C.success }, // penerimaan
         { value: totalOut, color: C.danger },  // pengeluaran
     ];
+    const loading = seasonLoading || receiptsLoading || expensesLoading;
+    const showBlocking = loading && (!currentSeason || (receiptRows.length === 0 && expenseRows.length === 0));
+
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
             <ScrollView contentContainerStyle={{ paddingBottom: S.spacing.xl }}>
-                {/* Header gradient + back */}
+                {/* Header gradient */}
                 <LinearGradient
                     colors={[C.gradientFrom, C.gradientTo]}
                     start={{ x: 0, y: 0 }}
@@ -138,29 +175,37 @@ export default function ChartScreen() {
                                 ]}
                             >
                                 <Ionicons name="leaf-outline" size={14} color={C.textMuted} />
-                                <Text style={[styles.chipText, { color: C.text }]}>{season.name}</Text>
+                                <Text style={[styles.chipText, { color: C.text }]}>
+                                    {currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
+                                </Text>
                                 <Ionicons name={openSeason ? "chevron-up" : "chevron-down"} size={14} color={C.icon} />
                             </Pressable>
                             {openSeason && (
                                 <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface }]}>
-                                    {SEASONS.map((s, i) => (
+                                    {seasons.map((s) => (
                                         <Pressable
                                             key={s.id}
                                             onPress={() => {
-                                                setSeasonIdx(i);
+                                                setSeasonId(s.id);
                                                 setOpenSeason(false);
+                                                // reset tahun tiap ganti musim agar tidak tersangkut ke tahun yang tidak ada
+                                                setYear("all");
                                             }}
                                             style={({ pressed }) => [
                                                 styles.dropItem,
                                                 {
                                                     backgroundColor:
-                                                        i === seasonIdx ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                                                        s.id === seasonId ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
                                                     opacity: pressed ? 0.95 : 1,
                                                 },
                                             ]}
                                         >
-                                            <Text style={{ color: C.text, fontWeight: (i === seasonIdx ? "800" : "600") as any }}>
-                                                {s.name}
+                                            <Text style={{ color: C.text, fontWeight: (s.id === seasonId ? "800" : "600") as any }}>
+                                                Musim Ke-{s.season_no}
+                                            </Text>
+                                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                                {new Date(s.start_date).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })} —{" "}
+                                                {new Date(s.end_date).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                                             </Text>
                                         </Pressable>
                                     ))}
@@ -215,84 +260,89 @@ export default function ChartScreen() {
                     </View>
                 </LinearGradient>
 
+                {/* Body */}
                 <View style={{ paddingHorizontal: S.spacing.lg }}>
-                    {/* Ringkasan */}
-                    <View
-                        style={[
-                            styles.summary,
-                            { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
-                        ]}
-                    >
-                        <View style={styles.summaryItem}>
-                            <Ionicons name="arrow-down-circle-outline" size={18} color={C.success} />
-                            <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Penerimaan</Text>
-                            <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn)}</Text>
+                    {/* Blocking loader (awal) */}
+                    {showBlocking ? (
+                        <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                            <ActivityIndicator color={C.tint} />
+                            <Text style={{ marginTop: 8, color: C.textMuted }}>Memuat grafik…</Text>
                         </View>
-                        <View style={[styles.sep, { backgroundColor: C.border }]} />
-                        <View style={styles.summaryItem}>
-                            <Ionicons name="arrow-up-circle-outline" size={18} color={C.danger} />
-                            <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Pengeluaran</Text>
-                            <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalOut)}</Text>
-                        </View>
-                        <View style={[styles.sep, { backgroundColor: C.border }]} />
-                        <View style={styles.summaryItem}>
-                            <Ionicons name="cash-outline" size={18} color={C.tint} />
-                            <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Bersih</Text>
-                            <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn - totalOut)}</Text>
-                        </View>
-                    </View>
-
-                    {/* Kartu Chart (Pie) */}
-                    <View
-                        style={[
-                            styles.chartCard,
-                            { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
-                            scheme === "light" ? S.shadow.light : S.shadow.dark,
-                        ]}
-                    >
-                        <Text style={[styles.chartTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
-                            Komposisi ({season.name}
-                            {year === "all" ? "" : ` • ${year}`})
-                        </Text>
-
-                        {total === 0 ? (
-                            <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                                <Text style={{ color: C.textMuted }}>Belum ada data untuk filter ini.</Text>
+                    ) : (
+                        <>
+                            {/* Ringkasan */}
+                            <View
+                                style={[
+                                    styles.summary,
+                                    { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
+                                ]}
+                            >
+                                <View style={styles.summaryItem}>
+                                    <Ionicons name="arrow-down-circle-outline" size={18} color={C.success} />
+                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Penerimaan</Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn)}</Text>
+                                </View>
+                                <View style={[styles.sep, { backgroundColor: C.border }]} />
+                                <View style={styles.summaryItem}>
+                                    <Ionicons name="arrow-up-circle-outline" size={18} color={C.danger} />
+                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Pengeluaran</Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalOut)}</Text>
+                                </View>
+                                <View style={[styles.sep, { backgroundColor: C.border }]} />
+                                <View style={styles.summaryItem}>
+                                    <Ionicons name="cash-outline" size={18} color={C.tint} />
+                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Bersih</Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn - totalOut)}</Text>
+                                </View>
                             </View>
-                        ) : (
-                            <View style={{ alignItems: "center", gap: 12 }}>
-                                <PieChart
-                                    widthAndHeight={pieSize}
-                                    series={seriesData}
-                                // Donut? tinggal aktifkan salah satu dari dua gaya di bawah:
 
-                                // 1) Donut transparan:
-                                // cover={0.6}
-
-                                // 2) Donut berwarna (matching surface):
-                                // cover={{ radius: 0.6, color: C.surface }}
-
-                                // (opsional kecil) beri jarak antar slice:
-                                // padAngle={0.01}
-                                />
-                                <Text style={{ color: C.textMuted }}>
-                                    {pctIn}% Penerimaan | {pctOut}% Pengeluaran
+                            {/* Kartu Chart (Pie) */}
+                            <View
+                                style={[
+                                    styles.chartCard,
+                                    { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
+                                    scheme === "light" ? S.shadow.light : S.shadow.dark,
+                                ]}
+                            >
+                                <Text style={[styles.chartTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
+                                    Komposisi ({currentSeason ? `Musim Ke-${currentSeason.season_no}` : "–"}
+                                    {year === "all" ? "" : ` | ${year}`})
                                 </Text>
-                            </View>
-                        )}
 
-                        {/* Legend */}
-                        <View style={{ flexDirection: "row", gap: 16, marginTop: 12 }}>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.success }} />
-                                <Text style={{ color: C.textMuted, fontSize: 12 }}>Penerimaan</Text>
+                                {/* --- Pie --- */}
+                                {total === 0 ? (
+                                    <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                                        <Text style={{ color: C.textMuted }}>Belum ada data untuk filter ini.</Text>
+                                    </View>
+                                ) : (
+                                    <View style={{ alignItems: "center", gap: 12 }}>
+                                        <PieChart
+                                            widthAndHeight={pieSize}          // number
+                                            series={series}      // number[]
+                                        // Aktifkan donut kalau mau:
+                                        // coverRadius={0.6}               // 0..1
+                                        // coverFill={C.surface}           // string (warna)
+                                        />
+                                        <Text style={{ color: C.textMuted }}>
+                                            {pctIn}% Penerimaan | {pctOut}% Pengeluaran
+                                        </Text>
+                                    </View>
+                                )}
+
+                                {/* Legend */}
+                                <View style={{ flexDirection: "row", gap: 16, marginTop: 12 }}>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                        <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.success }} />
+                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>Penerimaan</Text>
+                                    </View>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                        <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.danger }} />
+                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>Pengeluaran</Text>
+                                    </View>
+                                </View>
                             </View>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.danger }} />
-                                <Text style={{ color: C.textMuted, fontSize: 12 }}>Pengeluaran</Text>
-                            </View>
-                        </View>
-                    </View>
+                        </>
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>

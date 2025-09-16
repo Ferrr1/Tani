@@ -1,30 +1,21 @@
 // app/season/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { SeasonRow, useSeasonList, useSeasonService } from "@/services/seasonService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
-  View,
   useColorScheme,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-/** ===== Dummy data untuk Musim (sesuai contoh gambar) ===== */
-type SeasonRow = { id: string; number: number; start: string; end: string };
-
-const SEASONS: SeasonRow[] = [
-  { id: "22-s1", number: 1, start: "2022-08-12", end: "2022-09-26" },
-  { id: "22-s2", number: 2, start: "2022-09-27", end: "2022-10-31" },
-  { id: "22-s3", number: 3, start: "2022-11-01", end: "2022-12-05" },
-];
-
-const YEARS = [2022]; // filter tahun (bisa ditambah dinamis dari backend)
 
 export default function SeasonScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -32,16 +23,30 @@ export default function SeasonScreen() {
   const C = Colors[scheme];
   const S = Tokens;
 
-  const [loading, setLoading] = useState(false);
-  const [openYearList, setOpenYearList] = useState(false);
-  const [year, setYear] = useState<number>(YEARS[0]);
-  const [showAll, setShowAll] = useState(true);
+  // Data list anti-spam (fetchOnce, refresh, filter tahun)
+  const {
+    loading,
+    refreshing,
+    data,
+    years,
+    year,
+    setYear,
+    fetchOnce,
+    refresh,
+  } = useSeasonList();
 
-  const data = useMemo(() => {
-    // kalau backend multi-tahun, saring pakai year dari start/end
-    const rows = SEASONS;
-    return showAll ? rows : rows.slice(0, 3);
-  }, [showAll]);
+  // CRUD (hapus)
+  const { deleteSeason } = useSeasonService();
+
+  // buka/utup dropdown tahun
+  const [openYearList, setOpenYearList] = React.useState(false);
+
+  // initial fetch (idempotent)
+  useFocusEffect(
+    useCallback(() => {
+      fetchOnce();
+    }, [fetchOnce])
+  );
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("id-ID", {
@@ -50,11 +55,37 @@ export default function SeasonScreen() {
       year: "numeric",
     });
 
-  const onAdd = async () => {
-    // TODO: buka form tambah musim / bottom sheet
-    setLoading(true);
-    setTimeout(() => setLoading(false), 600);
-  };
+  const handleEdit = useCallback(
+    (item: SeasonRow) => {
+      router.push(`/(form)/season/seasonForm?seasonId=${item.id}`);
+    },
+    [router]
+  );
+
+  const handleDelete = useCallback(
+    (item: SeasonRow) => {
+      Alert.alert(
+        "Hapus Musim",
+        `Yakin menghapus Musim ke-${item.season_no}?`,
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Hapus",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteSeason(item.id);
+                await refresh(); // sinkron ulang tanpa ubah filter tahun user
+              } catch (e: any) {
+                Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus musim.");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [deleteSeason, refresh]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: SeasonRow }) => (
@@ -65,7 +96,7 @@ export default function SeasonScreen() {
           scheme === "light" ? S.shadow.light : S.shadow.dark,
         ]}
       >
-        {/* Badge tanggal (2 baris) */}
+        {/* Badge tanggal */}
         <View
           style={[
             styles.dateBadge,
@@ -75,28 +106,28 @@ export default function SeasonScreen() {
           <Ionicons name="calendar-outline" size={14} color={C.icon} />
           <View>
             <Text style={{ color: C.text, fontSize: 11, fontWeight: "700" }}>
-              {fmtDate(item.start)}
+              {fmtDate(item.start_date)}
             </Text>
             <Text style={{ color: C.text, fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-              {fmtDate(item.end)}
+              {fmtDate(item.end_date)}
             </Text>
           </View>
         </View>
 
-        {/* Tengah: Musim ke- */}
+        {/* Tengah */}
         <View style={{ flex: 1 }}>
           <Text style={{ color: C.textMuted, fontSize: 12, fontFamily: Fonts.serif as any }}>
             Musim
           </Text>
           <Text style={{ color: C.text, fontSize: 16, fontWeight: "900", marginTop: 2 }}>
-            Ke-{item.number}
+            Ke-{item.season_no}
           </Text>
         </View>
 
         {/* Aksi */}
         <View style={styles.actions}>
           <Pressable
-            onPress={() => console.log("Ubah musim", item.id)}
+            onPress={() => handleEdit(item)}
             style={({ pressed }) => [
               styles.actionBtn,
               { borderColor: C.border, backgroundColor: C.surfaceSoft, opacity: pressed ? 0.9 : 1 },
@@ -107,7 +138,7 @@ export default function SeasonScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => console.log("Hapus musim", item.id)}
+            onPress={() => handleDelete(item)}
             style={({ pressed }) => [
               styles.actionBtn,
               { borderColor: C.border, backgroundColor: C.surfaceSoft, opacity: pressed ? 0.9 : 1 },
@@ -119,12 +150,15 @@ export default function SeasonScreen() {
         </View>
       </View>
     ),
-    [C, S, scheme]
+    [C, S, scheme, handleEdit, handleDelete]
   );
+
+  // loader blok awal
+  const showBlockingLoader = loading && data.length === 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-      {/* Header gradient + judul + CTA tambah (menyerupai IncomeScreen) */}
+      {/* Header */}
       <LinearGradient
         colors={[C.gradientFrom, C.gradientTo]}
         start={{ x: 0, y: 0 }}
@@ -133,7 +167,7 @@ export default function SeasonScreen() {
       >
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.replace("/(tabs)")}
+            onPress={() => router.push("/(tabs)")}
             style={({ pressed }) => [
               styles.iconBtn,
               { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
@@ -148,91 +182,108 @@ export default function SeasonScreen() {
         </View>
 
         <Pressable
-          onPress={onAdd}
+          onPress={() => router.push("/(form)/season/seasonForm")}
           style={({ pressed }) => [
             styles.addBtn,
             { backgroundColor: C.tint, borderRadius: S.radius.xl, opacity: pressed ? 0.98 : 1 },
           ]}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="add-circle-outline" size={18} color="#fff" />
-              <Text style={[styles.addText, { fontFamily: Fonts.rounded as any }]}>
-                Tambah Data Musim
-              </Text>
-            </>
-          )}
+          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+          <Text style={[styles.addText, { fontFamily: Fonts.rounded as any }]}>
+            Tambah Data Musim
+          </Text>
         </Pressable>
       </LinearGradient>
 
-      {/* List + selector tahun (card di header list) */}
-      <FlatList
-        data={data}
-        keyExtractor={(it) => it.id}
-        contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
-        ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
-        ListHeaderComponent={
-          <View
-            style={[
-              styles.selectorCard,
-              { backgroundColor: C.surface, borderColor: C.border, borderRadius: S.radius.lg },
-              scheme === "light" ? S.shadow.light : S.shadow.dark,
-            ]}
-          >
-            <Pressable
-              onPress={() => setOpenYearList((v) => !v)}
-              style={({ pressed }) => [
-                styles.yearRow,
-                { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
+      {showBlockingLoader ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={C.tint} />
+          <Text style={{ marginTop: 8, color: C.textMuted }}>Menyiapkan data…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={(it) => it.id}
+          contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
+          ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
+          refreshing={refreshing}
+          onRefresh={refresh}
+          ListHeaderComponent={
+            <View
+              style={[
+                styles.selectorCard,
+                { backgroundColor: C.surface, borderColor: C.border, borderRadius: S.radius.lg },
+                scheme === "light" ? S.shadow.light : S.shadow.dark,
               ]}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.yearTitle, { color: C.text }]}>Tahun</Text>
-                <Text style={[styles.yearValue, { color: C.textMuted }]}>{year}</Text>
-              </View>
-              <Ionicons name={openYearList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-            </Pressable>
+              <Pressable
+                onPress={() => setOpenYearList((v) => !v)}
+                style={({ pressed }) => [
+                  styles.yearRow,
+                  { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.yearTitle, { color: C.text }]}>Tahun</Text>
+                  <Text style={[styles.yearValue, { color: C.textMuted }]}>
+                    {year === "all" ? "Semua" : year}
+                  </Text>
+                </View>
+                <Ionicons name={openYearList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+              </Pressable>
 
-            {openYearList && (
-              <View style={[styles.yearList, { borderColor: C.border }]}>
-                {YEARS.map((y) => (
+              {openYearList && (
+                <View style={[styles.yearList, { borderColor: C.border }]}>
                   <Pressable
-                    key={y}
                     onPress={() => {
-                      setYear(y);
+                      setYear("all"); // tidak akan di-override lagi oleh service
                       setOpenYearList(false);
                     }}
                     style={({ pressed }) => [
                       styles.yearItem,
                       {
-                        backgroundColor: y === year ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                        backgroundColor: year === "all" ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
                         opacity: pressed ? 0.96 : 1,
                       },
                     ]}
                   >
-                    <Text style={{ color: C.text, fontWeight: (y === year ? "800" : "600") as any }}>{y}</Text>
+                    <Text style={{ color: C.text, fontWeight: (year === "all" ? "800" : "600") as any }}>
+                      Semua
+                    </Text>
                   </Pressable>
-                ))}
+
+                  {years.map((y) => (
+                    <Pressable
+                      key={y}
+                      onPress={() => {
+                        setYear(y);
+                        setOpenYearList(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.yearItem,
+                        {
+                          backgroundColor: y === year ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                          opacity: pressed ? 0.96 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: C.text, fontWeight: (y === year ? "800" : "600") as any }}>{y}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View style={{ alignItems: "center", marginTop: 32 }}>
+                <Text style={{ color: C.textMuted }}>Belum ada data musim.</Text>
               </View>
-            )}
-          </View>
-        }
-        renderItem={renderItem}
-        ListFooterComponent={
-          <View style={{ marginTop: S.spacing.md }}>
-            <Pressable
-              onPress={() => setShowAll((v) => !v)}
-              style={({ pressed }) => [{ alignSelf: "flex-start", opacity: pressed ? 0.9 : 1 }]}
-            >
-              <Text style={{ color: C.tint, fontWeight: "800" }}>
-                {showAll ? "Sembunyikan" : "Tampilkan Semua"}
-              </Text>
-            </Pressable>
-          </View>
-        }
-      />
+            ) : null
+          }
+          renderItem={renderItem}
+        />
+      )}
     </SafeAreaView>
   );
 }

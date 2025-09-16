@@ -1,34 +1,21 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useReceiptList, useReceiptService } from "@/services/receiptService";
+import { useSeasonList } from "@/services/seasonService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useColorScheme
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-// ---- dummy data ----
-type Season = { id: string; name: string; start: string; end: string };
-type Income = { id: string; date: string; amount: number; seasonId: string };
-
-const SEASONS: Season[] = [
-  { id: "s1", name: "Musim 1", start: "2025-02-08", end: "2025-11-02" },
-  { id: "s2", name: "Musim 2", start: "2026-02-01", end: "2026-10-30" },
-];
-
-const INCOMES: Income[] = [
-  { id: "i1", date: "2025-11-12", amount: 50000, seasonId: "s1" },
-  { id: "i2", date: "2025-11-01", amount: 50000, seasonId: "s1" },
-  { id: "i3", date: "2025-11-13", amount: 25000, seasonId: "s1" },
-  { id: "i4", date: "2026-03-01", amount: 120000, seasonId: "s2" },
-  { id: "i5", date: "2026-03-12", amount: 80000, seasonId: "s2" },
-];
 
 export default function IncomeScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -36,17 +23,68 @@ export default function IncomeScreen() {
   const S = Tokens;
   const router = useRouter();
 
-  const [seasonIdx, setSeasonIdx] = useState(0);
+  // === Seasons ===
+  const {
+    loading: seasonLoading,
+    rows: seasonRows,        // seluruh season user
+    fetchOnce: fetchSeasons,
+    // refresh: refreshSeasons, // kalau perlu
+  } = useSeasonList();
+
+  // season terpilih
+  const [seasonId, setSeasonId] = useState<string | "all">("all");
   const [openSeasonList, setOpenSeasonList] = useState(false);
 
-  const season = SEASONS[seasonIdx];
+  // set default season saat data season tersedia (terbaru)
+  useEffect(() => {
+    if (seasonRows.length && (seasonId === "all" || !seasonId)) {
+      const sorted = [...seasonRows].sort(
+        (a, b) =>
+          new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+      );
+      setSeasonId(sorted[0].id);
+    }
+  }, [seasonRows, seasonId]);
 
-  const items = useMemo(() => {
-    const filtered = INCOMES
-      .filter((i) => i.seasonId === season.id)
-      .sort((a, b) => +new Date(b.date) - +new Date(a.date));
-    return filtered.slice(0, 3);
-  }, [season.id]);
+  const seasons = useMemo(
+    () =>
+      [...seasonRows].sort(
+        (a, b) =>
+          new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+      ),
+    [seasonRows]
+  );
+
+  const currentSeason = useMemo(
+    () => seasons.find((s) => s.id === seasonId),
+    [seasons, seasonId]
+  );
+
+  // === Receipts ===
+  const {
+    loading: receiptLoading,
+    refreshing,
+    data: receipts,          // daftar receipts sesuai filter seasonId
+    setSeasonId: setReceiptSeasonId,
+    fetchOnce: fetchReceipts,
+    refresh: refreshReceipts,
+    grandTotal,
+  } = useReceiptList(seasonId);
+
+  const { deleteReceipt } = useReceiptService();
+
+  // initial fetch on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchSeasons();
+      fetchReceipts();
+    }, [fetchSeasons, fetchReceipts])
+  );
+
+  // sinkron filter receipts saat seasonId berubah
+  useEffect(() => {
+    setReceiptSeasonId(seasonId);
+  }, [seasonId, setReceiptSeasonId]);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("id-ID", {
@@ -56,10 +94,43 @@ export default function IncomeScreen() {
     });
 
   const formatMoney = (n: number) =>
-    `+${n.toLocaleString("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 })}`;
+    `+${(Number(n) || 0).toLocaleString("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    })}`;
+
+  const handleEdit = useCallback(
+    (id: string) => {
+      // Ganti route di bawah sesuai strukturmu
+      router.push(`/(form)/income/incomeForm?receiptId=${id}`);
+    },
+    [router]
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      Alert.alert("Hapus Penerimaan", "Yakin menghapus data ini?", [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteReceipt(id);
+              await refreshReceipts();
+            } catch (e: any) {
+              Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus data.");
+            }
+          },
+        },
+      ]);
+    },
+    [deleteReceipt, refreshReceipts]
+  );
 
   const renderItem = useCallback(
-    ({ item }: { item: Income }) => (
+    ({ item }: { item: any }) => (
       <View
         style={[
           styles.rowCard,
@@ -71,37 +142,53 @@ export default function IncomeScreen() {
           scheme === "light" ? S.shadow.light : S.shadow.dark,
         ]}
       >
-        {/* Kiri: tanggal badge */}
+        {/* Kiri: badge tanggal & ringkas info */}
         <View
           style={[
             styles.dateBadge,
             { backgroundColor: C.surfaceSoft, borderColor: C.border },
           ]}
         >
-          <Text style={{ color: C.text, fontSize: 12, fontWeight: "700" }}>
-            {formatDate(item.date)}
-          </Text>
-          <Text
-            style={{ color: C.textMuted, fontSize: 12, fontFamily: Fonts.serif as any }}
+          {/* Catatan: tabel receipts belum punya kolom tanggal eksplisit; pakai created_at */}
+          <Text style={{ color: C.text, fontSize: 12, fontWeight: "700" }}
             numberOfLines={1}
           >
-            Penerimaan
+            {formatDate(item.created_at)}
           </Text>
           <Text
-            style={{ color: C.success, fontSize: 16, fontWeight: "900", marginTop: 2 }}
+            style={{
+              color: C.textMuted,
+              fontSize: 12,
+              fontFamily: Fonts.serif as any,
+            }}
             numberOfLines={1}
           >
-            {formatMoney(item.amount)}
+            {item.unit_type} × {Number(item.quantity)}
+          </Text>
+          <Text
+            style={{
+              color: C.success,
+              fontSize: 16,
+              fontWeight: "900",
+              marginTop: 2,
+            }}
+            numberOfLines={1}
+          >
+            {formatMoney(item.total)}
           </Text>
         </View>
 
         {/* Aksi */}
         <View style={styles.actions}>
           <Pressable
-            onPress={() => console.log("Ubah", item.id)}
+            onPress={() => handleEdit(item.id)}
             style={({ pressed }) => [
               styles.actionBtn,
-              { borderColor: C.border, backgroundColor: C.surfaceSoft, opacity: pressed ? 0.9 : 1 },
+              {
+                borderColor: C.border,
+                backgroundColor: C.surfaceSoft,
+                opacity: pressed ? 0.9 : 1,
+              },
             ]}
           >
             <Ionicons name="create-outline" size={16} color={C.text} />
@@ -109,10 +196,14 @@ export default function IncomeScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => console.log("Hapus", item.id)}
+            onPress={() => handleDelete(item.id)}
             style={({ pressed }) => [
               styles.actionBtn,
-              { borderColor: C.border, backgroundColor: C.surfaceSoft, opacity: pressed ? 0.9 : 1 },
+              {
+                borderColor: C.border,
+                backgroundColor: C.surfaceSoft,
+                opacity: pressed ? 0.9 : 1,
+              },
             ]}
           >
             <Ionicons name="trash-outline" size={16} color={C.danger} />
@@ -121,12 +212,14 @@ export default function IncomeScreen() {
         </View>
       </View>
     ),
-    [C, S, scheme]
+    [C, S, scheme, handleEdit, handleDelete]
   );
+
+  const showBlocking = (seasonLoading || receiptLoading) && receipts.length === 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-      {/* Header gradient + back + CTA tambah */}
+      {/* Header gradient + title + CTA tambah */}
       <LinearGradient
         colors={[C.gradientFrom, C.gradientTo]}
         start={{ x: 0, y: 0 }}
@@ -141,8 +234,11 @@ export default function IncomeScreen() {
         </View>
 
         <Pressable
-          onPress={
-            () => router.replace("/(form)/income/incomeForm")
+          onPress={() =>
+            router.push(
+              // Ganti path form sesuai strukturnya
+              `/(form)/income/incomeForm${seasonId && seasonId !== "all" ? `?seasonId=${seasonId}` : ""}`
+            )
           }
           style={({ pressed }) => [
             styles.addBtn,
@@ -156,74 +252,112 @@ export default function IncomeScreen() {
         </Pressable>
       </LinearGradient>
 
-      {/* ===== FlatList saja (header list + item card) ===== */}
-      <FlatList
-        data={items}
-        keyExtractor={(it) => it.id}
-        contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
-        ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
-        ListHeaderComponent={
-          <View
-            style={[
-              styles.selectorCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.border,
-                borderRadius: S.radius.lg,
-                marginBottom: S.spacing.md,
-              },
-              scheme === "light" ? S.shadow.light : S.shadow.dark,
-            ]}
-          >
-            {/* Selector Musim (dropdown sederhana) */}
-            <Pressable
-              onPress={() => setOpenSeasonList((v) => !v)}
-              style={({ pressed }) => [
-                styles.seasonRow,
-                { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
+      {showBlocking ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={C.tint} />
+          <Text style={{ marginTop: 8, color: C.textMuted }}>Menyiapkan data…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={receipts}
+          keyExtractor={(it) => it.id}
+          contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
+          ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
+          refreshing={refreshing}
+          onRefresh={refreshReceipts}
+          ListHeaderComponent={
+            <View
+              style={[
+                styles.selectorCard,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: C.border,
+                  borderRadius: S.radius.lg,
+                  marginBottom: S.spacing.md,
+                },
+                scheme === "light" ? S.shadow.light : S.shadow.dark,
               ]}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.seasonTitle, { color: C.text }]}>{season.name}</Text>
-                <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                  {formatDate(season.start)} — {formatDate(season.end)}
+              {/* Season selector */}
+              <Pressable
+                onPress={() => setOpenSeasonList((v) => !v)}
+                style={({ pressed }) => [
+                  styles.seasonRow,
+                  { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.seasonTitle, { color: C.text }]}>
+                    {currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
+                  </Text>
+                  {currentSeason && (
+                    <Text style={[styles.seasonRange, { color: C.textMuted }]}>
+                      {formatDate(currentSeason.start_date)} — {formatDate(currentSeason.end_date)}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name={openSeasonList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+              </Pressable>
+
+              {openSeasonList && (
+                <View style={[styles.seasonList, { borderColor: C.border }]}>
+                  {seasons.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      onPress={() => {
+                        setSeasonId(s.id);
+                        setOpenSeasonList(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.seasonItem,
+                        {
+                          backgroundColor:
+                            s.id === seasonId
+                              ? scheme === "light"
+                                ? C.surfaceSoft
+                                : C.surface
+                              : "transparent",
+                          opacity: pressed ? 0.96 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: C.text,
+                          fontWeight: (s.id === seasonId ? "800" : "600") as any,
+                        }}
+                      >
+                        Musim Ke-{s.season_no}
+                      </Text>
+                      <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                        {formatDate(s.start_date)} — {formatDate(s.end_date)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          }
+          ListFooterComponent={
+            receipts.length > 0 ? (
+              <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                <Text style={{ color: C.textMuted, fontSize: 12 }}>Total Penerimaan</Text>
+                <Text style={{ color: C.success, fontSize: 16, fontWeight: "900" }}>
+                  {formatMoney(grandTotal)}
                 </Text>
               </View>
-              <Ionicons name={openSeasonList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-            </Pressable>
-
-            {openSeasonList && (
-              <View style={[styles.seasonList, { borderColor: C.border }]}>
-                {SEASONS.map((s, i) => (
-                  <Pressable
-                    key={s.id}
-                    onPress={() => {
-                      setSeasonIdx(i);
-                      setOpenSeasonList(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.seasonItem,
-                      {
-                        backgroundColor:
-                          i === seasonIdx ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
-                        opacity: pressed ? 0.96 : 1,
-                      },
-                    ]}
-                  >
-                    <Text style={{ color: C.text, fontWeight: i === seasonIdx ? "800" as any : "600" as any }}>
-                      {s.name}
-                    </Text>
-                    <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                      {formatDate(s.start)} — {formatDate(s.end)}
-                    </Text>
-                  </Pressable>
-                ))}
+            ) : null
+          }
+          renderItem={renderItem}
+          ListEmptyComponent={
+            !(seasonLoading || receiptLoading) ? (
+              <View style={{ alignItems: "center", marginTop: 24 }}>
+                <Text style={{ color: C.textMuted }}>Belum ada data penerimaan.</Text>
               </View>
-            )}
-          </View>
-        }
-        renderItem={renderItem}
-      />
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -265,17 +399,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
   },
   dateBadge: {
-    width: 180,
-    maxWidth: "50%",
+    maxWidth: 175,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
     gap: 6,
   },
   actions: { flexDirection: "row", gap: 8, marginLeft: 8 },

@@ -76,7 +76,7 @@ export default function HomeAdminScreen() {
             <View style={{ flex: 1 }}>
                 <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>{item.fullName}</Text>
                 <Text style={{ color: C.textMuted, fontSize: 12 }} numberOfLines={1}>
-                    {item.phone} • {item.village}
+                    {item.phone} | {item.village}
                 </Text>
 
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
