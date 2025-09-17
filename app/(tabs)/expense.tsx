@@ -117,7 +117,6 @@ export default function ExpenseScreen() {
 
 
     const goEdit = (expenseId: string) => {
-        // type akan di-resolve oleh costType dari DB (getExpenseById)
         const qs = seasonId && seasonId !== "all" ? `?expenseId=${expenseId}&seasonId=${seasonId}` : `?expenseId=${expenseId}`;
         router.push(`/(form)/expense/costType${qs}`);
     };
@@ -138,7 +137,6 @@ export default function ExpenseScreen() {
                     <View style={{ width: 36 }} />
                 </View>
 
-                {/* Dua tombol langsung pilih type */}
                 <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                     <Pressable
                         onPress={() =>

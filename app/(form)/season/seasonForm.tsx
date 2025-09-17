@@ -1,6 +1,8 @@
 // app/(form)/season/seasonForm.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonService } from "@/services/seasonService";
+import { fmtDMY, fromISOtoDMY, parseDMY, toISO } from "@/types/date";
+import { SeasonFormValues } from "@/types/season";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,34 +22,6 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type SeasonFormValues = {
-    seasonNo: string;   // "1", "2", ...
-    startDate: string;  // "dd/mm/yyyy"
-    endDate: string;    // "dd/mm/yyyy"
-};
-
-// === Helpers ===
-const pad2 = (n: number) => String(n).padStart(2, "0");
-const fmtDMY = (d?: Date | null) =>
-    d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : "";
-
-const parseDMY = (s: string): Date | null => {
-    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((s || "").trim());
-    if (!m) return null;
-    const [, dd, mm, yyyy] = m;
-    const d = Number(dd), mth = Number(mm), y = Number(yyyy);
-    if (mth < 1 || mth > 12 || d < 1 || d > 31) return null;
-    const date = new Date(y, mth - 1, d);
-    if (date.getFullYear() !== y || date.getMonth() !== mth - 1 || date.getDate() !== d) return null;
-    return date;
-};
-const toISO = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const fromISOtoDMY = (iso: string) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    return fmtDMY(d);
-};
 
 export default function SeasonForm() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -220,7 +194,6 @@ export default function SeasonForm() {
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header gradien (gaya profile) */}
             <LinearGradient
                 colors={[C.gradientFrom, C.gradientTo]}
                 start={{ x: 0, y: 0 }}
@@ -264,7 +237,6 @@ export default function SeasonForm() {
                     enableAutomaticScroll
                     extraScrollHeight={Platform.select({ ios: 80, android: 120 })}
                 >
-                    {/* Kartu form (gaya profile) */}
                     <View
                         style={[
                             styles.card,
@@ -448,8 +420,6 @@ const styles = StyleSheet.create({
     },
     title: { fontSize: 22, fontWeight: "800" },
     subtitle: { fontSize: 12, marginTop: 2 },
-
-    // Card form
     card: { padding: 16, borderWidth: 1 },
 
     label: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
@@ -459,8 +429,6 @@ const styles = StyleSheet.create({
         backgroundColor: "transparent",
     },
     err: { marginTop: 6, fontSize: 12 },
-
-    // Select-like input (tanggal)
     selectInput: {
         borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     },
@@ -468,8 +436,6 @@ const styles = StyleSheet.create({
         flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
     },
-
-    // Save button
     saveBtn: {
         marginTop: 16, paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
     },

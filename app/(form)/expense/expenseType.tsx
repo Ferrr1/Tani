@@ -4,7 +4,7 @@ import { useSeasonList } from "@/services/seasonService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -20,7 +20,7 @@ export default function ExpenseForm() {
     const [seasonOpen, setSeasonOpen] = useState(false);
     const [seasonIdx, setSeasonIdx] = useState(0);
 
-    React.useEffect(() => {
+    useEffect(() => {
         fetchOnce();
     }, [fetchOnce]);
 

@@ -14,6 +14,8 @@ export const CROP_OPTIONS: string[] = [
   "Lainnya",
 ];
 
+export type LoginForm = { email: string; password: string };
+
 export type RegisterForm = {
   fullName: string;
   email: string;
@@ -30,4 +32,5 @@ export type Profile = {
   nama_desa: string | null;
   jenis_tanaman: string | null;
   luas_lahan: number | null;
+  role: Role | null;
 };

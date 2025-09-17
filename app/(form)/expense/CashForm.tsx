@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
     Alert,
@@ -23,9 +23,7 @@ import SectionButton from "@/components/SectionButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
 import { CashFormValues, Category, ChemItem, LaborForm, SATUAN_KIMIA, SEED_UNIT, SEEDLING_UNIT, SERVICE_UNIT, Unit, UNIT_FERTILIZER } from "@/types/expense";
-const currency = (n: number) =>
-    n.toLocaleString("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
-
+import { currency } from "@/utils/currency";
 type Mode = "create" | "edit";
 
 export default function CashForm({
@@ -65,6 +63,7 @@ export default function CashForm({
     const [openPestCtrl, setOpenPestCtrl] = useState(false);
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
+    const [openExtras, setOpenExtras] = useState(false);
 
     // data buckets
     const [seedItems, setSeedItems] = useState<ChemItem[]>([]);
@@ -75,7 +74,7 @@ export default function CashForm({
     const [fungiItems, setFungiItems] = useState<ChemItem[]>([]);
 
     const addChem = (
-        setter: React.Dispatch<React.SetStateAction<ChemItem[]>>,
+        setter: Dispatch<SetStateAction<ChemItem[]>>,
         item: Omit<ChemItem, "id">
     ) => setter((prev) => [...prev, { ...item, id: String(Date.now() + Math.random()) }]);
 
@@ -172,7 +171,7 @@ export default function CashForm({
                     const unit: Unit | undefined = it?.metadata?.unit;
 
                     // bahan/kimia
-                    const pushChem = (setter: React.Dispatch<React.SetStateAction<ChemItem[]>>) => {
+                    const pushChem = (setter: Dispatch<SetStateAction<ChemItem[]>>) => {
                         const id = String(Date.now() + Math.random());
                         const qty = String(it.quantity ?? "");
                         const price = String(it.unit_price ?? "");
@@ -716,40 +715,51 @@ export default function CashForm({
                         subtotal={calcLaborSubtotal(watch("labor").postharvest)}
                     />
 
-                    {/* ===== Biaya lain ===== */}
-                    <View style={{ marginTop: 12, gap: 10 }}>
-                        <Text style={{ color: C.textMuted, fontWeight: "800" }}>Biaya Lain</Text>
-                        <RHFLineInput
-                            label="Pajak"
-                            name="extras.tax"
-                            control={control}
-                            C={C}
-                            rules={{
-                                validate: (v: CashFormValues["extras"]["tax"]) =>
-                                    v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
-                            }}
-                        />
-                        <RHFLineInput
-                            label="Sewa Lahan"
-                            name="extras.landRent"
-                            control={control}
-                            C={C}
-                            rules={{
-                                validate: (v: CashFormValues["extras"]["landRent"]) =>
-                                    v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
-                            }}
-                        />
-                        <RHFLineInput
-                            label="Transportasi"
-                            name="extras.transport"
-                            control={control}
-                            C={C}
-                            rules={{
-                                validate: (v: CashFormValues["extras"]["transport"]) =>
-                                    v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
-                            }}
-                        />
-                    </View>
+                    {/* ===== Biaya Lain ===== */}
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Biaya Lain</Text>
+                    <SectionButton
+                        title="Pajak & Sewa Lahan"
+                        icon="pricetag-outline"
+                        open={openExtras}
+                        onPress={() => setOpenExtras((v) => !v)}
+                        C={C}
+                        S={S}
+                    />
+                    {openExtras && (
+                        <View style={{ marginTop: 8, gap: 10 }}>
+                            <Text style={{ color: C.textMuted, fontWeight: "800" }}>Biaya Lain</Text>
+                            <RHFLineInput
+                                label="Pajak"
+                                name="extras.tax"
+                                control={control}
+                                C={C}
+                                rules={{
+                                    validate: (v: CashFormValues["extras"]["tax"]) =>
+                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                }}
+                            />
+                            <RHFLineInput
+                                label="Sewa Lahan"
+                                name="extras.landRent"
+                                control={control}
+                                C={C}
+                                rules={{
+                                    validate: (v: CashFormValues["extras"]["landRent"]) =>
+                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                }}
+                            />
+                            <RHFLineInput
+                                label="Transportasi"
+                                name="extras.transport"
+                                control={control}
+                                C={C}
+                                rules={{
+                                    validate: (v: CashFormValues["extras"]["transport"]) =>
+                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                }}
+                            />
+                        </View>
+                    )}
 
                     {/* ===== Footer ===== */}
                     <View style={{ marginTop: 12 }}>

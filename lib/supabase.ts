@@ -4,14 +4,11 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
-// ---- Ambil dari app.config.ts -> extra ----
 type Extra = {
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 };
-
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
-
 export const SUPABASE_URL =
   extra.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 

@@ -105,7 +105,7 @@ export type NonCashLaborInput = {
   peopleCount: number;
   days: number;
   dailyWage: number;
-  note?: string | null;
+  jamKerja?: number | null;
   stageLabel?: string | null;
 };
 

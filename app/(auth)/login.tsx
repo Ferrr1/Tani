@@ -1,5 +1,7 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { LoginForm } from "@/types/profile";
+import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -16,10 +18,6 @@ import {
     useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type LoginForm = { email: string; password: string };
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
 export default function LoginScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";

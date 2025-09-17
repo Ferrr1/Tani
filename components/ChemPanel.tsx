@@ -1,7 +1,7 @@
 import { ChemItem, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import Chip from "./Chip";
 
@@ -18,7 +18,7 @@ export default function ChemPanel({
     placeholderName: string;
     onAdd: (p: { name?: string; unit: Unit; qty: string; price: string }) => void;
     rows: ChemItem[];
-    setRows: React.Dispatch<React.SetStateAction<ChemItem[]>>;
+    setRows: Dispatch<SetStateAction<ChemItem[]>>;
 }) {
     const { C } = schemeColors;
     const [name, setName] = useState("");
@@ -85,7 +85,7 @@ export default function ChemPanel({
                         </Pressable>
                     </View>
                     <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>
-                        {r.unit} • {r.qty} × {currency(parseFloat(r.price || "0") || 0)}
+                        {r.unit} | {r.qty} × {currency(parseFloat(r.price || "0") || 0)}
                     </Text>
                 </View>
             ))}

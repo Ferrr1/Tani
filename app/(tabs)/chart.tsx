@@ -2,7 +2,7 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
@@ -16,14 +16,15 @@ import {
 import PieChart from "react-native-pie-chart";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useExpenseList } from "@/services/expenseService";
-import { useReceiptList } from "@/services/receiptService";
-import { useSeasonList } from "@/services/seasonService";
+import { useChartData } from "@/services/chartService";
 
 /** ===== Util ===== */
 const money = (n: number) =>
-    n.toLocaleString("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
-const getYear = (iso: string) => new Date(iso).getFullYear();
+    n.toLocaleString("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+    });
 
 /** ===== Screen ===== */
 export default function ChartScreen() {
@@ -31,102 +32,25 @@ export default function ChartScreen() {
     const C = Colors[scheme];
     const S = Tokens;
 
-    // seasons
-    const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
-    const seasons = useMemo(
-        () =>
-            [...seasonRows].sort(
-                (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-            ),
-        [seasonRows]
-    );
+    // chart service (gabungan & filter-aware)
+    const {
+        seasons,
+        seasonId,
+        setSeasonId,
+        year,
+        setYear,
+        yearOptions,
+        totalIn,
+        totalOut,
+        loading,
+    } = useChartData("all");
 
-    // selected season
-    const [seasonId, setSeasonId] = useState<string>("");
     const [openSeason, setOpenSeason] = useState(false);
-
-    // default pilih musim terbaru saat available
-    useEffect(() => {
-        fetchSeasons();
-    }, [fetchSeasons]);
-
-    useEffect(() => {
-        if (!seasonId && seasons.length) {
-            setSeasonId(seasons[0].id);
-        }
-    }, [seasons, seasonId]);
-
-    const currentSeason = useMemo(
-        () => seasons.find((s) => s.id === seasonId) || null,
-        [seasons, seasonId]
-    );
-
-    // data hooks
-    const {
-        loading: receiptsLoading,
-        rows: receiptRows,
-        seasonId: receiptSeasonId,
-        setSeasonId: setReceiptSeasonId,
-        fetchOnce: fetchReceipts,
-    } = useReceiptList(seasonId || "all");
-
-    const {
-        loading: expensesLoading,
-        rows: expenseRows,
-        seasonId: expenseSeasonId,
-        setSeasonId: setExpenseSeasonId,
-        fetchOnce: fetchExpenses,
-    } = useExpenseList(seasonId || "all");
-
-    // sinkron filter musim ke dua list
-    useEffect(() => {
-        if (seasonId && receiptSeasonId !== seasonId) setReceiptSeasonId(seasonId);
-        if (seasonId && expenseSeasonId !== seasonId) setExpenseSeasonId(seasonId);
-    }, [seasonId, receiptSeasonId, expenseSeasonId, setReceiptSeasonId, setExpenseSeasonId]);
-
-    // initial fetch (hooks sudah ada guard inFlight)
-    useEffect(() => {
-        if (seasonId) {
-            fetchReceipts();
-            fetchExpenses();
-        }
-    }, [seasonId, fetchReceipts, fetchExpenses]);
-
-    // filter tahun
-    const [year, setYear] = useState<number | "all">("all");
     const [openYear, setOpenYear] = useState(false);
 
-    const yearOptions = useMemo(() => {
-        if (!seasonId) return [];
-        const yearsFromReceipts = receiptRows.map((r) => getYear(r.created_at));
-        const yearsFromExpenses = expenseRows.map((e) =>
-            e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)
-        );
-        const uniq = Array.from(new Set([...yearsFromReceipts, ...yearsFromExpenses]));
-        return uniq.sort((a, b) => a - b);
-    }, [seasonId, receiptRows, expenseRows]);
-
-    // data terfilter by tahun
-    const filteredReceipts = useMemo(() => {
-        if (year === "all") return receiptRows;
-        return receiptRows.filter((r) => getYear(r.created_at) === year);
-    }, [receiptRows, year]);
-
-    const filteredExpenses = useMemo(() => {
-        if (year === "all") return expenseRows;
-        return expenseRows.filter((e) =>
-            (e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)) === year
-        );
-    }, [expenseRows, year]);
-
-    // agregasi
-    const totalIn = useMemo(
-        () => filteredReceipts.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
-        [filteredReceipts]
-    );
-    const totalOut = useMemo(
-        () => filteredExpenses.reduce((acc, r) => acc + (Number(r.total_all) || 0), 0),
-        [filteredExpenses]
+    const currentSeason = useMemo(
+        () => (seasonId !== "all" ? seasons.find((s) => s.id === seasonId) || null : null),
+        [seasons, seasonId]
     );
 
     /** ===== Pie sizing & series ===== */
@@ -138,135 +62,271 @@ export default function ChartScreen() {
     const pctOut = total > 0 ? 100 - pctIn : 0;
     const series = [
         { value: totalIn, color: C.success }, // penerimaan
-        { value: totalOut, color: C.danger },  // pengeluaran
+        { value: totalOut, color: C.danger }, // pengeluaran
     ];
-    const loading = seasonLoading || receiptsLoading || expensesLoading;
-    const showBlocking = loading && (!currentSeason || (receiptRows.length === 0 && expenseRows.length === 0));
+
+    const showBlocking =
+        loading && total === 0; // tampilkan loader blocking kalau masih kosong & loading
+
+    const activeFilterText =
+        seasonId !== "all"
+            ? `Filter: Musim Ke-${currentSeason?.season_no ?? "?"}`
+            : year !== "all"
+                ? `Filter: Tahun ${year}`
+                : "Filter: Semua data";
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
             <ScrollView contentContainerStyle={{ paddingBottom: S.spacing.xl }}>
-                {/* Header gradient */}
+                {/* Header gradient (title only) */}
                 <LinearGradient
                     colors={[C.gradientFrom, C.gradientTo]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
+                    style={[
+                        styles.header,
+                        { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg },
+                    ]}
                 >
                     <View style={styles.headerRow}>
-                        <Text style={[styles.headerTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
+                        <Text
+                            style={[
+                                styles.headerTitle,
+                                { color: C.text, fontFamily: Fonts.rounded as any },
+                            ]}
+                        >
                             Grafik
                         </Text>
                         <View style={{ width: 36 }} />
-                    </View>
-
-                    {/* Filter pills */}
-                    <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-                        {/* Musim */}
-                        <View style={{ flex: 1 }}>
-                            <Pressable
-                                onPress={() => {
-                                    setOpenSeason((v) => !v);
-                                    setOpenYear(false);
-                                }}
-                                style={({ pressed }) => [
-                                    styles.chip,
-                                    { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.96 : 1 },
-                                ]}
-                            >
-                                <Ionicons name="leaf-outline" size={14} color={C.textMuted} />
-                                <Text style={[styles.chipText, { color: C.text }]}>
-                                    {currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
-                                </Text>
-                                <Ionicons name={openSeason ? "chevron-up" : "chevron-down"} size={14} color={C.icon} />
-                            </Pressable>
-                            {openSeason && (
-                                <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface }]}>
-                                    {seasons.map((s) => (
-                                        <Pressable
-                                            key={s.id}
-                                            onPress={() => {
-                                                setSeasonId(s.id);
-                                                setOpenSeason(false);
-                                                // reset tahun tiap ganti musim agar tidak tersangkut ke tahun yang tidak ada
-                                                setYear("all");
-                                            }}
-                                            style={({ pressed }) => [
-                                                styles.dropItem,
-                                                {
-                                                    backgroundColor:
-                                                        s.id === seasonId ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
-                                                    opacity: pressed ? 0.95 : 1,
-                                                },
-                                            ]}
-                                        >
-                                            <Text style={{ color: C.text, fontWeight: (s.id === seasonId ? "800" : "600") as any }}>
-                                                Musim Ke-{s.season_no}
-                                            </Text>
-                                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                                {new Date(s.start_date).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })} —{" "}
-                                                {new Date(s.end_date).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-                                            </Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Tahun */}
-                        <View style={{ flex: 1 }}>
-                            <Pressable
-                                onPress={() => {
-                                    setOpenYear((v) => !v);
-                                    setOpenSeason(false);
-                                }}
-                                style={({ pressed }) => [
-                                    styles.chip,
-                                    { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.96 : 1 },
-                                ]}
-                            >
-                                <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
-                                <Text style={[styles.chipText, { color: C.text }]}>{year === "all" ? "Semua Tahun" : year}</Text>
-                                <Ionicons name={openYear ? "chevron-up" : "chevron-down"} size={14} color={C.icon} />
-                            </Pressable>
-                            {openYear && (
-                                <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface }]}>
-                                    <Pressable
-                                        onPress={() => {
-                                            setYear("all");
-                                            setOpenYear(false);
-                                        }}
-                                        style={({ pressed }) => [styles.dropItem, { opacity: pressed ? 0.95 : 1 }]}
-                                    >
-                                        <Text style={{ color: C.text, fontWeight: (year === "all" ? "800" : "600") as any }}>
-                                            Semua Tahun
-                                        </Text>
-                                    </Pressable>
-                                    {yearOptions.map((y) => (
-                                        <Pressable
-                                            key={y}
-                                            onPress={() => {
-                                                setYear(y);
-                                                setOpenYear(false);
-                                            }}
-                                            style={({ pressed }) => [styles.dropItem, { opacity: pressed ? 0.95 : 1 }]}
-                                        >
-                                            <Text style={{ color: C.text, fontWeight: ((year === y ? "800" : "600") as any) }}>{y}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
                     </View>
                 </LinearGradient>
 
                 {/* Body */}
                 <View style={{ paddingHorizontal: S.spacing.lg }}>
+                    {/* === Filter Section (DI LUAR HEADER) === */}
+                    <View style={{ marginTop: 16 }}>
+                        {/* Filter pills */}
+                        <View style={{ flexDirection: "row", gap: 10 }}>
+                            {/* Musim */}
+                            <View style={{ flex: 1 }}>
+                                <Pressable
+                                    onPress={() => {
+                                        setOpenSeason((v) => !v);
+                                        setOpenYear(false);
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.chip,
+                                        {
+                                            borderColor: C.border,
+                                            backgroundColor: C.surface,
+                                            opacity: pressed ? 0.96 : 1,
+                                        },
+                                    ]}
+                                >
+                                    <Ionicons name="leaf-outline" size={14} color={C.textMuted} />
+                                    <Text style={[styles.chipText, { color: C.text }]}>
+                                        {currentSeason
+                                            ? `Musim Ke-${currentSeason.season_no}`
+                                            : seasonId === "all"
+                                                ? "Semua Musim"
+                                                : "Pilih Musim"}
+                                    </Text>
+                                    <Ionicons
+                                        name={openSeason ? "chevron-up" : "chevron-down"}
+                                        size={14}
+                                        color={C.icon}
+                                    />
+                                </Pressable>
+                                {openSeason && (
+                                    <View
+                                        style={[
+                                            styles.dropdown,
+                                            { borderColor: C.border, backgroundColor: C.surface },
+                                        ]}
+                                    >
+                                        {/* Opsi Semua Musim */}
+                                        <Pressable
+                                            onPress={() => {
+                                                setSeasonId("all");
+                                                setOpenSeason(false);
+                                                // eksklusif: reset year
+                                                setYear("all");
+                                            }}
+                                            style={({ pressed }) => [
+                                                styles.dropItem,
+                                                { opacity: pressed ? 0.95 : 1 },
+                                            ]}
+                                        >
+                                            <Text
+                                                style={{
+                                                    color: C.text,
+                                                    fontWeight: (seasonId === "all"
+                                                        ? "800"
+                                                        : "600") as any,
+                                                }}
+                                            >
+                                                Semua Musim
+                                            </Text>
+                                        </Pressable>
+
+                                        {seasons.map((s) => (
+                                            <Pressable
+                                                key={s.id}
+                                                onPress={() => {
+                                                    setSeasonId(s.id);
+                                                    setOpenSeason(false);
+                                                    // eksklusif: ketika pilih musim, tahun di-reset
+                                                    setYear("all");
+                                                }}
+                                                style={({ pressed }) => [
+                                                    styles.dropItem,
+                                                    {
+                                                        backgroundColor:
+                                                            s.id === seasonId
+                                                                ? scheme === "light"
+                                                                    ? C.surfaceSoft
+                                                                    : C.surface
+                                                                : "transparent",
+                                                        opacity: pressed ? 0.95 : 1,
+                                                    },
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={{
+                                                        color: C.text,
+                                                        fontWeight: (s.id === seasonId
+                                                            ? "800"
+                                                            : "600") as any,
+                                                    }}
+                                                >
+                                                    Musim Ke-{s.season_no}
+                                                </Text>
+                                                <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                                    {new Date(s.start_date).toLocaleDateString("id-ID", {
+                                                        day: "2-digit",
+                                                        month: "short",
+                                                        year: "numeric",
+                                                    })}{" "}
+                                                    —{" "}
+                                                    {new Date(s.end_date).toLocaleDateString("id-ID", {
+                                                        day: "2-digit",
+                                                        month: "short",
+                                                        year: "numeric",
+                                                    })}
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Tahun */}
+                            <View style={{ flex: 1 }}>
+                                <Pressable
+                                    onPress={() => {
+                                        setOpenYear((v) => !v);
+                                        setOpenSeason(false);
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.chip,
+                                        {
+                                            borderColor: C.border,
+                                            backgroundColor: C.surface,
+                                            opacity: pressed ? 0.96 : 1,
+                                        },
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="calendar-outline"
+                                        size={14}
+                                        color={C.textMuted}
+                                    />
+                                    <Text style={[styles.chipText, { color: C.text }]}>
+                                        {year === "all" ? "Semua Tahun" : year}
+                                    </Text>
+                                    <Ionicons
+                                        name={openYear ? "chevron-up" : "chevron-down"}
+                                        size={14}
+                                        color={C.icon}
+                                    />
+                                </Pressable>
+                                {openYear && (
+                                    <View
+                                        style={[
+                                            styles.dropdown,
+                                            { borderColor: C.border, backgroundColor: C.surface },
+                                        ]}
+                                    >
+                                        <Pressable
+                                            onPress={() => {
+                                                setYear("all");
+                                                setOpenYear(false);
+                                                // eksklusif: reset season
+                                                setSeasonId("all");
+                                            }}
+                                            style={({ pressed }) => [
+                                                styles.dropItem,
+                                                { opacity: pressed ? 0.95 : 1 },
+                                            ]}
+                                        >
+                                            <Text
+                                                style={{
+                                                    color: C.text,
+                                                    fontWeight: (year === "all" ? "800" : "600") as any,
+                                                }}
+                                            >
+                                                Semua Tahun
+                                            </Text>
+                                        </Pressable>
+                                        {yearOptions.map((y) => (
+                                            <Pressable
+                                                key={y}
+                                                onPress={() => {
+                                                    setYear(y);
+                                                    setOpenYear(false);
+                                                    // eksklusif: ketika pilih tahun, musim di-reset
+                                                    setSeasonId("all");
+                                                }}
+                                                style={({ pressed }) => [
+                                                    styles.dropItem,
+                                                    { opacity: pressed ? 0.95 : 1 },
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={{
+                                                        color: C.text,
+                                                        fontWeight: ((year === y ? "800" : "600") as any),
+                                                    }}
+                                                >
+                                                    {y}
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+
+                        {/* Keterangan filter aktif */}
+                        <Text
+                            style={{
+                                marginTop: 8,
+                                color: C.textMuted,
+                                fontSize: 12,
+                                fontWeight: "700",
+                            }}
+                        >
+                            {activeFilterText}
+                        </Text>
+                    </View>
+
                     {/* Blocking loader (awal) */}
                     {showBlocking ? (
                         <View style={{ paddingVertical: 24, alignItems: "center" }}>
                             <ActivityIndicator color={C.tint} size={"large"} />
-                            <Text style={{ marginTop: 8, color: C.textMuted }}>Memuat grafik…</Text>
+                            <Text style={{ marginTop: 8, color: C.textMuted }}>
+                                Memuat grafik…
+                            </Text>
                         </View>
                     ) : (
                         <>
@@ -274,25 +334,49 @@ export default function ChartScreen() {
                             <View
                                 style={[
                                     styles.summary,
-                                    { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
+                                    {
+                                        borderColor: C.border,
+                                        backgroundColor: C.surface,
+                                        borderRadius: S.radius.lg,
+                                    },
                                 ]}
                             >
                                 <View style={styles.summaryItem}>
-                                    <Ionicons name="arrow-down-circle-outline" size={18} color={C.success} />
-                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Penerimaan</Text>
-                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn)}</Text>
+                                    <Ionicons
+                                        name="arrow-down-circle-outline"
+                                        size={18}
+                                        color={C.success}
+                                    />
+                                    <Text
+                                        style={[styles.summaryLabel, { color: C.textMuted }]}
+                                    >{`Penerimaan`}</Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>
+                                        {money(totalIn)}
+                                    </Text>
                                 </View>
                                 <View style={[styles.sep, { backgroundColor: C.border }]} />
                                 <View style={styles.summaryItem}>
-                                    <Ionicons name="arrow-up-circle-outline" size={18} color={C.danger} />
-                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Pengeluaran</Text>
-                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalOut)}</Text>
+                                    <Ionicons
+                                        name="arrow-up-circle-outline"
+                                        size={18}
+                                        color={C.danger}
+                                    />
+                                    <Text
+                                        style={[styles.summaryLabel, { color: C.textMuted }]}
+                                    >{`Pengeluaran`}</Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>
+                                        {money(totalOut)}
+                                    </Text>
                                 </View>
                                 <View style={[styles.sep, { backgroundColor: C.border }]} />
                                 <View style={styles.summaryItem}>
                                     <Ionicons name="cash-outline" size={18} color={C.tint} />
-                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>Bersih</Text>
-                                    <Text style={[styles.summaryValue, { color: C.text }]}>{money(totalIn - totalOut)}</Text>
+                                    <Text style={[styles.summaryLabel, { color: C.textMuted }]}>
+                                        Bersih
+                                    </Text>
+                                    <Text style={[styles.summaryValue, { color: C.text }]}>
+                                        {money(totalIn - totalOut)}
+                                    </Text>
                                 </View>
                             </View>
 
@@ -300,28 +384,39 @@ export default function ChartScreen() {
                             <View
                                 style={[
                                     styles.chartCard,
-                                    { borderColor: C.border, backgroundColor: C.surface, borderRadius: S.radius.lg },
+                                    {
+                                        borderColor: C.border,
+                                        backgroundColor: C.surface,
+                                        borderRadius: S.radius.lg,
+                                    },
                                     scheme === "light" ? S.shadow.light : S.shadow.dark,
                                 ]}
                             >
-                                <Text style={[styles.chartTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
-                                    Komposisi ({currentSeason ? `Musim Ke-${currentSeason.season_no}` : "–"}
-                                    {year === "all" ? "" : ` | ${year}`})
+                                <Text
+                                    style={[
+                                        styles.chartTitle,
+                                        { color: C.text, fontFamily: Fonts.rounded as any },
+                                    ]}
+                                >
+                                    Komposisi{" "}
+                                    {seasonId !== "all" && currentSeason
+                                        ? `(Musim Ke-${currentSeason.season_no})`
+                                        : ""}
+                                    {year !== "all" ? (seasonId !== "all" ? ` | ${year}` : `(${year})`) : ""}
                                 </Text>
 
                                 {/* --- Pie --- */}
                                 {total === 0 ? (
                                     <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                                        <Text style={{ color: C.textMuted }}>Belum ada data untuk filter ini.</Text>
+                                        <Text style={{ color: C.textMuted }}>
+                                            Belum ada data untuk filter ini.
+                                        </Text>
                                     </View>
                                 ) : (
                                     <View style={{ alignItems: "center", gap: 12 }}>
                                         <PieChart
-                                            widthAndHeight={pieSize}          // number
-                                            series={series}      // number[]
-                                        // Aktifkan donut kalau mau:
-                                        // coverRadius={0.6}               // 0..1
-                                        // coverFill={C.surface}           // string (warna)
+                                            widthAndHeight={pieSize}
+                                            series={series as any}
                                         />
                                         <Text style={{ color: C.textMuted }}>
                                             {pctIn}% Penerimaan | {pctOut}% Pengeluaran
@@ -331,13 +426,35 @@ export default function ChartScreen() {
 
                                 {/* Legend */}
                                 <View style={{ flexDirection: "row", gap: 16, marginTop: 12 }}>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                        <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.success }} />
-                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>Penerimaan</Text>
+                                    <View
+                                        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                                    >
+                                        <View
+                                            style={{
+                                                width: 12,
+                                                height: 12,
+                                                borderRadius: 3,
+                                                backgroundColor: C.success,
+                                            }}
+                                        />
+                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                            Penerimaan
+                                        </Text>
                                     </View>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                        <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.danger }} />
-                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>Pengeluaran</Text>
+                                    <View
+                                        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                                    >
+                                        <View
+                                            style={{
+                                                width: 12,
+                                                height: 12,
+                                                borderRadius: 3,
+                                                backgroundColor: C.danger,
+                                            }}
+                                        />
+                                        <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                            Pengeluaran
+                                        </Text>
                                     </View>
                                 </View>
                             </View>
@@ -354,6 +471,7 @@ const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     headerTitle: { fontSize: 18, fontWeight: "800" },
+
     chip: {
         flexDirection: "row",
         alignItems: "center",
@@ -368,7 +486,7 @@ const styles = StyleSheet.create({
     dropItem: { paddingHorizontal: 12, paddingVertical: 10 },
 
     summary: {
-        marginTop: 16,
+        marginTop: 12,
         padding: 12,
         borderWidth: 1,
         flexDirection: "row",

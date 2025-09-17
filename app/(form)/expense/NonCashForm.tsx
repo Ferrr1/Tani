@@ -90,11 +90,9 @@ export default function NonCashForm({
         mode: "onChange",
     });
 
-    /** ===== Initial loading + hydrate edit ===== */
     const didHydrateEdit = useRef(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
 
-    // map label -> key form (heuristik + code kuat)
     const labelToKey: Record<string, keyof FormValues["labor"]> = useMemo(
         () => ({
             "pesemaian": "nursery",
@@ -155,6 +153,16 @@ export default function NonCashForm({
                     listNonCashExtras(expenseId),
                 ]);
                 if (!alive) return;
+                console.log(
+                    "HYDRATE NONCASH EXPENSE",
+                    expenseId,
+                    "LABORS",
+                    labors,
+                    "TOOLS",
+                    toolsRows,
+                    "EXTRAS",
+                    extras,
+                )
 
                 // tools
                 setTools(
@@ -266,7 +274,7 @@ export default function NonCashForm({
                 peopleCount: people,
                 days,
                 dailyWage: wage,
-                note: r.jamKerja ? `Jam kerja: ${r.jamKerja}` : null,
+                jamKerja: r.jamKerja !== "" ? Math.max(0, toNum(r.jamKerja)) : null,
                 stageLabel,               // contoh: "Pesemaian"
                 // metadata tambahan akan disimpan oleh repo sebagai { labor_type, note } — cukup isi fields utama
             };
@@ -287,12 +295,12 @@ export default function NonCashForm({
             peopleCount: number;
             days: number;
             dailyWage: number;
-            note?: string | null;
+            jamKerja?: number | null;
             stageLabel?: string | null;
         }[];
 
         // 2) tools
-        const toolItems = (fv.tools || [])
+        const toolItems = (tools || [])
             .map((t) => {
                 const quantity = Math.max(0, toNum(t.jumlah));
                 const purchasePrice = Math.max(0, toNum(t.hargaBeli));
@@ -305,7 +313,6 @@ export default function NonCashForm({
                     purchasePrice,
                     usefulLifeYears,
                     salvageValue,
-                    note: null as string | null,
                 };
             })
             .filter(Boolean) as {
@@ -314,15 +321,14 @@ export default function NonCashForm({
                 purchasePrice: number;
                 usefulLifeYears?: number | null;
                 salvageValue?: number | null;
-                note?: string | null;
             }[];
 
         // 3) extras
-        const extras: { type: "tax" | "land_rent"; amount: number; note?: string | null }[] = [];
+        const extras: { type: "tax" | "land_rent"; amount: number; }[] = [];
         const vTax = toNum(fv.extras.tax);
-        if (vTax > 0) extras.push({ type: "tax", amount: vTax, note: null });
+        if (vTax > 0) extras.push({ type: "tax", amount: vTax });
         const vRent = toNum(fv.extras.landRent);
-        if (vRent > 0) extras.push({ type: "land_rent", amount: vRent, note: null });
+        if (vRent > 0) extras.push({ type: "land_rent", amount: vRent });
 
         return { labors, tools: toolItems, extras };
     };
@@ -352,7 +358,6 @@ export default function NonCashForm({
         }
     };
 
-    /** ===== UI ===== */
     const showBlocking = initialLoading || svcLoading === true;
 
     return (

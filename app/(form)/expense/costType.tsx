@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
 import { useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, useColorScheme, View } from "react-native";
 import CashForm from "./CashForm";
 import NonCashForm from "./NonCashForm";
@@ -15,7 +15,7 @@ export default function TypeCostScreen() {
     const { getExpenseById } = useExpenseService();
     const [resolved, setResolved] = useState<{ isCash: boolean; seasonId: string } | null>(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         let alive = true;
         (async () => {
             if (!expenseId) {

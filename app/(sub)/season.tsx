@@ -4,7 +4,7 @@ import { SeasonRow, useSeasonList, useSeasonService } from "@/services/seasonSer
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,7 +39,7 @@ export default function SeasonScreen() {
   const { deleteSeason } = useSeasonService();
 
   // buka/utup dropdown tahun
-  const [openYearList, setOpenYearList] = React.useState(false);
+  const [openYearList, setOpenYearList] = useState(false);
 
   // initial fetch (idempotent)
   useFocusEffect(

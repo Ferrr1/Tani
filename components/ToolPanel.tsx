@@ -1,7 +1,7 @@
 import { ToolForm } from "@/types/expense";
 import { currency } from "@/utils/currency";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 export default function ToolPanel({
@@ -11,7 +11,7 @@ export default function ToolPanel({
 }: {
     C: any;
     tools: ToolForm[];
-    setTools: React.Dispatch<React.SetStateAction<ToolForm[]>>;
+    setTools: Dispatch<SetStateAction<ToolForm[]>>;
 }) {
     const [nama, setNama] = useState("");
     const [jumlah, setJumlah] = useState("");
@@ -67,7 +67,7 @@ export default function ToolPanel({
             </View>
             <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
-                    placeholder="Umur ekonomis (tahun) — opsional"
+                    placeholder="Umur ekonomis (tahun)"
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={umurThn}
@@ -75,7 +75,7 @@ export default function ToolPanel({
                     style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
                 />
                 <TextInput
-                    placeholder="Nilai sisa — opsional"
+                    placeholder="Nilai sisa"
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={nilaiSisa}
@@ -101,9 +101,9 @@ export default function ToolPanel({
                         </Pressable>
                     </View>
                     <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>
-                        {r.jumlah} unit • {currency(parseFloat(r.hargaBeli || "0") || 0)}
-                        {r.umurThn ? ` • umur ${r.umurThn} th` : ""}
-                        {r.nilaiSisa ? ` • nilai sisa ${currency(parseFloat(r.nilaiSisa || "0") || 0)}` : ""}
+                        {r.jumlah} unit | {currency(parseFloat(r.hargaBeli || "0") || 0)}
+                        {r.umurThn ? ` | umur ${r.umurThn} th` : ""}
+                        {r.nilaiSisa ? ` | nilai sisa ${currency(parseFloat(r.nilaiSisa || "0") || 0)}` : ""}
                     </Text>
                 </View>
             ))}

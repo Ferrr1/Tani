@@ -163,7 +163,7 @@ export const expenseRepo = {
         ensureMoneyNum(l.dailyWage, "Upah harian");
         return {
           kind: "labor" as const,
-          label: l.stageLabel ?? l.note ?? "Tenaga kerja",
+          label: l.stageLabel ?? "Tenaga kerja",
           quantity: null,
           unit_price: null,
           people_count: l.peopleCount,
@@ -173,7 +173,7 @@ export const expenseRepo = {
           useful_life_years: null,
           salvage_value: null,
           extra_kind: null,
-          metadata: { labor_type: l.laborType, note: l.note ?? null },
+          metadata: { labor_type: l.laborType, jamKerja: l.jamKerja },
         };
       })
       .filter(Boolean) as any[];
@@ -363,7 +363,7 @@ export const expenseRepo = {
         ensureMoneyNum(l.dailyWage, "Upah harian");
         return {
           kind: "labor" as const,
-          label: l.stageLabel ?? l.note ?? "Tenaga kerja",
+          label: l.stageLabel ?? "Tenaga kerja",
           quantity: null,
           unit_price: null,
           people_count: l.peopleCount,
@@ -373,7 +373,7 @@ export const expenseRepo = {
           useful_life_years: null,
           salvage_value: null,
           extra_kind: null,
-          metadata: { labor_type: l.laborType, note: l.note ?? null },
+          metadata: { labor_type: l.laborType, jamKerja: l.jamKerja },
         };
       })
       .filter(Boolean) as any[];
@@ -404,6 +404,7 @@ export const expenseRepo = {
         };
       })
       .filter(Boolean) as any[];
+    console.log("EXPENSE SERVICE, TOOL ITEMS", toolItems);
 
     const extraItems = (input.extras || [])
       .map((e) => {
@@ -438,13 +439,16 @@ export const expenseRepo = {
       throw new Error("Isi minimal satu data tenaga kerja, alat, atau extras.");
     }
 
-    // delete + insert
     const { error: eDel } = await supabase
       .from("expense_items")
       .delete()
       .eq("expense_id", expenseId);
     if (eDel) throw eDel;
-    const { error: eIns } = await supabase.from("expense_items").insert(items);
+
+    const payload = items.map((it) => ({ ...it, expense_id: expenseId }));
+    const { error: eIns } = await supabase
+      .from("expense_items")
+      .insert(payload);
     if (eIns) throw eIns;
   },
 
@@ -549,6 +553,7 @@ export function useExpenseService() {
     (input: { expenseId: string } & CreateNonCashExpenseInput) => {
       const u = ensureUser();
       const { expenseId, ...rest } = input;
+      console.log("updateNonCashExpense", { expenseId, rest });
       return expenseRepo.updateNonCash(u.id, expenseId, rest);
     },
     [ensureUser]

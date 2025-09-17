@@ -2,6 +2,8 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useReceiptService } from "@/services/receiptService";
 import { useSeasonList } from "@/services/seasonService";
+import { fmtDate, yearOf } from "@/types/date";
+import { IncomeFormValues, UNIT_OPTIONS } from "@/types/income";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,23 +22,6 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type FormValues = {
-    quantity: string; // input string → parse float
-    unit: string;     // unit_type
-    price: string;    // unit_price
-    seasonId: string; // season_id
-};
-
-const UNIT_OPTIONS = ["kg", "ton", "karung", "ikat", "liter", "buah"];
-
-const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-    });
-const yearOf = (iso: string) => new Date(iso).getFullYear();
 
 export default function IncomeForm() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -75,7 +60,7 @@ export default function IncomeForm() {
         setValue,
         reset,
         formState: { errors },
-    } = useForm<FormValues>({
+    } = useForm<IncomeFormValues>({
         defaultValues: { quantity: "", unit: "", price: "", seasonId: "" },
         mode: "onChange",
     });
@@ -184,7 +169,7 @@ export default function IncomeForm() {
     }, [seasons, isEdit, seasonIdFromQuery, setValue]);
 
     // ===== Submit
-    const onSubmit = async (v: FormValues) => {
+    const onSubmit = async (v: IncomeFormValues) => {
         const q = parseFloat((v.quantity || "").replace(",", "."));
         const p = parseFloat((v.price || "").replace(",", "."));
 
