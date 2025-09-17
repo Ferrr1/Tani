@@ -8,7 +8,6 @@ import { Link, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,9 +39,9 @@ export default function HomeScreen() {
   const displayName = profile?.full_name ?? "Pengunjung";
   const greet = useMemo(() => {
     const h = new Date().getHours();
-    if (h < 11) return "Selamat pagi";
-    if (h < 15) return "Selamat siang";
-    if (h < 18) return "Selamat sore";
+    if (h < 11) return "Selamat pagi 🌤";
+    if (h < 15) return "Selamat siang ☀";
+    if (h < 18) return "Selamat sore 🔆";
     return "Selamat malam";
   }, []);
 
@@ -103,13 +102,6 @@ export default function HomeScreen() {
     return TZ_ABBR[wx.location.tz_id] ?? (wx.location.tz_id.split("/").pop() || "WIB");
   }, [wx]);
 
-  // ====== Grid 2 kolom
-  const { width } = Dimensions.get("window");
-  const COLS = 2;
-  const GAP = S.spacing.md;
-  const SIDE = S.spacing.lg;
-  const tile = Math.floor((width - SIDE * 2 - GAP * (COLS - 1)) / COLS);
-
   const menus = [
     { key: "season", label: "Musim", icon: "calendar-outline", color: C.success, href: "/season" },
     { key: "income", label: "Penerimaan", icon: "arrow-down-circle-outline", color: C.success, href: "/income" },
@@ -130,7 +122,7 @@ export default function HomeScreen() {
         >
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.greet, { color: C.text, fontFamily: Fonts.rounded as any }]}>{greet} 👋</Text>
+              <Text style={[styles.greet, { color: C.text, fontFamily: Fonts.rounded as any }]}>{greet}</Text>
               <Text style={[styles.greetName, { color: C.text, fontFamily: Fonts.sans as any }]}>{displayName}</Text>
               <Text style={[styles.greetSub, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
                 Semoga panenmu subur dan melimpah.
@@ -209,21 +201,16 @@ export default function HomeScreen() {
             )}
           </LinearGradient>
 
-          {/* ====== MENU: 2 per baris, kotak radius kecil */}
-          <View style={{ marginTop: S.spacing.lg, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around" }}>
+          <View style={{ marginTop: S.spacing.lg, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
             {menus.map((m, i) => (
-              <Link key={m.key} href={m.href} asChild>
+              <Link style={{ justifyContent: "center", alignItems: "center" }} key={m.key} href={m.href} asChild>
                 <Pressable
                   style={({ pressed }) => [
                     styles.square,
                     {
-                      width: tile,
-                      height: tile,
                       backgroundColor: C.surface,
                       borderColor: C.border,
-                      borderRadius: S.radius.md, // kecil
-                      marginRight: i % COLS === 0 ? GAP : 0,
-                      marginBottom: GAP,
+                      borderRadius: S.radius.md,
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     },
                     scheme === "light" ? S.shadow.light : S.shadow.dark,
@@ -288,7 +275,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
   },
   squareIconWrap: {
     width: 56,

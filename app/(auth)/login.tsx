@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -38,9 +39,12 @@ export default function LoginScreen() {
     });
 
     const onSubmit = async (v: LoginForm) => {
-        await signIn({ email: v.email.trim(), password: v.password });
-        // jika sukses, AuthContext akan punya session → arahkan ke tabs/home
-        router.push("/(tabs)");
+        try {
+            await signIn({ email: v.email.trim(), password: v.password });
+            router.push("/(tabs)");
+        } catch (error: any) {
+            Alert.alert("Gagal", error?.message ?? "Tidak dapat login.");
+        }
     };
 
     return (

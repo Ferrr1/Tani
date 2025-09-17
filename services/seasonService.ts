@@ -1,41 +1,14 @@
 // services/seasonService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import {
+  CreateSeasonInput,
+  SeasonRow,
+  UpdateSeasonInput,
+} from "@/types/season";
+import { ensureDates } from "@/utils/season";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export type SeasonRow = {
-  id: string;
-  user_id: string;
-  season_no: number;
-  start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
-  created_at: string;
-  updated_at: string;
-};
-
-export type CreateSeasonInput = {
-  seasonNo: number;
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
-};
-
-export type UpdateSeasonInput = {
-  id: string;
-  seasonNo?: number;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string; // YYYY-MM-DD
-};
-
-const ensureDates = (start: string, end: string) => {
-  const d1 = new Date(start);
-  const d2 = new Date(end);
-  if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) {
-    throw new Error("Format tanggal tidak valid (YYYY-MM-DD).");
-  }
-  if (d2.getTime() < d1.getTime()) {
-    throw new Error("Tanggal selesai harus setelah/sama dengan tanggal mulai.");
-  }
-};
 export const seasonRepo = {
   async list(userId: string): Promise<SeasonRow[]> {
     // Hard filter ke user_id selain mengandalkan RLS

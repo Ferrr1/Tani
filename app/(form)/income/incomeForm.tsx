@@ -2,8 +2,8 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useReceiptService } from "@/services/receiptService";
 import { useSeasonList } from "@/services/seasonService";
-import { fmtDate, yearOf } from "@/types/date";
 import { IncomeFormValues, UNIT_OPTIONS } from "@/types/income";
+import { fmtDate, yearOf } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";

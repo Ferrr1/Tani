@@ -65,7 +65,6 @@ export default function ExpenseScreen() {
 
     const { deleteExpense } = useExpenseService();
 
-    // fetch on focus (anti spam karena hook sudah guard inFlight)
     useFocusEffect(
         useCallback(() => {
             fetchSeasons();
@@ -73,7 +72,6 @@ export default function ExpenseScreen() {
         }, [fetchSeasons, fetchExpenses])
     );
 
-    // sinkron filter
     useEffect(() => {
         setExpenseSeasonId(seasonId);
     }, [seasonId, setExpenseSeasonId]);

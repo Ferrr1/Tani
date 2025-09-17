@@ -81,7 +81,6 @@ export default function IncomeScreen() {
     }, [fetchSeasons, fetchReceipts])
   );
 
-  // sinkron filter receipts saat seasonId berubah
   useEffect(() => {
     setReceiptSeasonId(seasonId);
   }, [seasonId, setReceiptSeasonId]);

@@ -1,6 +1,5 @@
-// app.config.ts (format defineConfig, gaya Tani)
 import type { ExpoConfig } from "@expo/config";
-import "dotenv/config"; // agar .env lokal kebaca saat dev
+import "dotenv/config";
 
 const config: ExpoConfig = {
   name: "Tani",
@@ -18,8 +17,8 @@ const config: ExpoConfig = {
 
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/images/icon.png",
-      backgroundColor: "#ffffff01",
+      foregroundImage: "./assets/images/logo.png",
+      backgroundColor: "#ffffffff",
     },
     edgeToEdgeEnabled: true,
     package: "com.fersetya.tani",
@@ -31,7 +30,7 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
     output: "static",
-    favicon: "./assets/images/favicon.png",
+    favicon: "./assets/images/logo.png",
   },
 
   plugins: [
@@ -39,7 +38,7 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/icon.png",
+        image: "./assets/images/logo.png",
         imageWidth: 200,
         resizeMode: "contain",
         backgroundColor: "#ffffffff",
@@ -53,7 +52,6 @@ const config: ExpoConfig = {
     eas: {
       projectId: "499aeff3-9c75-4fd4-9478-5955b8faada4",
     },
-    // Pakai prefix EXPO_PUBLIC_* agar tersedia di runtime app
     SUPABASE_URL:
       process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "",
     SUPABASE_ANON_KEY:

@@ -1,4 +1,3 @@
-// app/reports/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,10 +16,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/** ====== Dummy master data (per hektar) ======
- * Angka-angka per hektar, nanti tinggal dikali luas lahan (ha).
- * Kamu bisa ganti dengan data dari backend.
- */
 type Row = { label: string; qty?: number; unit?: string; price?: number };
 type Season = { id: string; name: string; years: number[] };
 
