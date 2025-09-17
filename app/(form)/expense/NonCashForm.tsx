@@ -1,61 +1,28 @@
-// app/expense/NonCashForm.tsx
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 import {
     Alert,
     Platform,
     Pressable,
     StyleSheet,
     Text,
-    TextInput,
     View,
-    useColorScheme,
+    useColorScheme
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import LaborOne from "@/components/LaborOne";
+import RHFLineInput from "@/components/RHFLineInput";
+import SectionButton from "@/components/SectionButton";
+import ToolPanel from "@/components/ToolPanel";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
-
-/** ===== Types (UI only) ===== */
-type LaborForm = {
-    tipe: "borongan" | "harian"; // map → laborType: "contract" | "daily"
-    jumlahOrang: string;
-    jumlahHari: string;
-    jamKerja: string; // metadata only
-    upahHarian: string;
-};
-
-type ToolForm = {
-    id: string;
-    nama: string;
-    jumlah: string;
-    hargaBeli: string;
-    umurThn: string;   // optional
-    nilaiSisa: string; // optional
-};
-
-type FormValues = {
-    labor: {
-        nursery: LaborForm;
-        land_prep: LaborForm;
-        planting: LaborForm;
-        fertilizing: LaborForm;
-        irrigation: LaborForm;
-        weeding: LaborForm;
-        pest_ctrl: LaborForm;
-        harvest: LaborForm;
-        postharvest: LaborForm;
-    };
-    tools: ToolForm[];
-    extras: { tax: string; landRent: string };
-};
-
-const currency = (n: number) =>
-    n.toLocaleString("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
+import { FormValues, LaborForm, ToolForm } from "@/types/expense";
+import { currency } from "@/utils/currency";
 
 export default function NonCashForm({
     seasonId,
@@ -251,12 +218,12 @@ export default function NonCashForm({
         return Number.isFinite(v) ? v : 0;
     };
 
-    const calcLaborSubtotal = (lf: LaborForm) => {
+    const calcLaborSubtotal = useCallback((lf: LaborForm) => {
         const orang = toNum(lf.jumlahOrang);
         const hari = toNum(lf.jumlahHari);
         const upah = toNum(lf.upahHarian);
         return orang > 0 && hari > 0 && upah >= 0 ? orang * hari * upah : 0;
-    };
+    }, []);
 
     // watches
     const laborW = watch("labor");
@@ -282,7 +249,7 @@ export default function NonCashForm({
 
         const extrasTotal = toNum(extrasW.tax) + toNum(extrasW.landRent);
         return laborTotal + toolsTotal + extrasTotal;
-    }, [laborW, tools, extrasW]);
+    }, [calcLaborSubtotal, laborW, tools, extrasW]);
 
     /** ===== Build payload (sesuai service) ===== */
     const buildPayload = (fv: FormValues) => {
@@ -602,337 +569,6 @@ export default function NonCashForm({
                 </KeyboardAwareScrollView>
             )}
         </SafeAreaView>
-    );
-}
-
-/** ===== Reusable bits (sama dengan CashForm) ===== */
-function SectionButton({
-    title,
-    icon,
-    open,
-    onPress,
-    C,
-    S,
-}: {
-    title: string;
-    icon: any;
-    open: boolean;
-    onPress: () => void;
-    C: any;
-    S: any;
-}) {
-    return (
-        <Pressable
-            onPress={onPress}
-            style={({ pressed }) => [
-                {
-                    borderWidth: 1,
-                    borderColor: open ? C.tint : C.border,
-                    backgroundColor: open ? C.surfaceSoft : C.surface,
-                    borderRadius: S.radius.lg,
-                    paddingVertical: 12,
-                    paddingHorizontal: 12,
-                    opacity: pressed ? 0.96 : 1,
-                },
-                S.shadow.light,
-            ]}
-        >
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <View
-                        style={{
-                            width: 30,
-                            height: 30,
-                            borderRadius: 999,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            backgroundColor: (C.tint + "1A") as any,
-                        }}
-                    >
-                        <Ionicons name={icon} size={16} color={C.tint} />
-                    </View>
-                    <Text style={{ color: C.text, fontWeight: "900" }}>{title}</Text>
-                </View>
-                <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-            </View>
-        </Pressable>
-    );
-}
-
-function Chip({ label, active, onPress, C }: { label: string; active: boolean; onPress: () => void; C: any }) {
-    return (
-        <Pressable
-            onPress={onPress}
-            style={[
-                {
-                    borderWidth: 1,
-                    borderRadius: 999,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderColor: active ? C.tint : C.border,
-                    backgroundColor: active ? C.surfaceSoft : C.surface,
-                },
-            ]}
-        >
-            <Text style={{ color: active ? C.tint : C.text, fontWeight: "800" }}>{label}</Text>
-        </Pressable>
-    );
-}
-
-function RHFLineInput({
-    label,
-    name,
-    control,
-    C,
-    rules,
-}: {
-    label: string;
-    name: any;
-    control: any;
-    C: any;
-    rules?: any;
-}) {
-    return (
-        <View style={{ gap: 6, flex: 1 }}>
-            <Text style={{ color: C.textMuted, fontSize: 12, fontWeight: "800" }}>{label}</Text>
-            <Controller
-                control={control}
-                name={name}
-                rules={rules}
-                render={({ field: { value, onChange }, fieldState: { error } }) => (
-                    <>
-                        <TextInput
-                            placeholder={label}
-                            placeholderTextColor={C.icon}
-                            value={value}
-                            onChangeText={onChange}
-                            keyboardType="numeric"
-                            style={{
-                                borderWidth: 1,
-                                borderColor: error ? C.danger : C.border,
-                                color: C.text,
-                                borderRadius: 10,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                            }}
-                        />
-                        {!!error && (
-                            <Text style={{ color: C.danger, fontSize: 11 }}>
-                                {String(error.message || "Input tidak valid")}
-                            </Text>
-                        )}
-                    </>
-                )}
-            />
-        </View>
-    );
-}
-
-function LaborOne({
-    title,
-    icon,
-    open,
-    onPress,
-    name,
-    control,
-    setValue,
-    subtotal,
-    C,
-    S,
-}: {
-    title: string;
-    icon: any;
-    open: boolean;
-    onPress: () => void;
-    name: string;
-    control: any;
-    setValue: any;
-    subtotal: number;
-    C: any;
-    S: any;
-}) {
-    return (
-        <>
-            <SectionButton title={title} icon={icon} open={open} onPress={onPress} C={C} S={S} />
-            {open && (
-                <View style={{ marginTop: 8, gap: 10 }}>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        {(["borongan", "harian"] as const).map((t) => (
-                            <Controller
-                                key={t}
-                                control={control}
-                                name={`${name}.tipe`}
-                                render={({ field: { value } }) => (
-                                    <Chip
-                                        label={t[0].toUpperCase() + t.slice(1)}
-                                        active={value === t}
-                                        onPress={() => setValue(`${name}.tipe`, t, { shouldDirty: true })}
-                                        C={C}
-                                    />
-                                )}
-                            />
-                        ))}
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        <RHFLineInput
-                            label="Jumlah Orang"
-                            name={`${name}.jumlahOrang`}
-                            control={control}
-                            C={C}
-                            rules={{
-                                required: "Wajib diisi",
-                                validate: (v: string) => parseFloat((v || "0").replace(",", ".")) > 0 || "Harus > 0",
-                            }}
-                        />
-                        <RHFLineInput
-                            label="Jumlah Hari"
-                            name={`${name}.jumlahHari`}
-                            control={control}
-                            C={C}
-                            rules={{
-                                required: "Wajib diisi",
-                                validate: (v: string) => parseFloat((v || "0").replace(",", ".")) > 0 || "Harus > 0",
-                            }}
-                        />
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        <RHFLineInput
-                            label="Jumlah Jam Kerja"
-                            name={`${name}.jamKerja`}
-                            control={control}
-                            C={C}
-                            rules={{
-                                validate: (v: string) =>
-                                    v === "" || parseFloat((v || "0").replace(",", ".")) >= 0 || "Tidak valid",
-                            }}
-                        />
-                        <RHFLineInput
-                            label="Upah Harian"
-                            name={`${name}.upahHarian`}
-                            control={control}
-                            C={C}
-                            rules={{
-                                required: "Wajib diisi",
-                                validate: (v: string) => parseFloat((v || "0").replace(",", ".")) >= 0 || "Harus ≥ 0",
-                            }}
-                        />
-                    </View>
-
-                    <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                        Subtotal ≈ <Text style={{ color: C.success, fontWeight: "900" }}>{currency(subtotal || 0)}</Text>
-                    </Text>
-                </View>
-            )}
-        </>
-    );
-}
-
-function ToolPanel({
-    C,
-    tools,
-    setTools,
-}: {
-    C: any;
-    tools: ToolForm[];
-    setTools: React.Dispatch<React.SetStateAction<ToolForm[]>>;
-}) {
-    const [nama, setNama] = useState("");
-    const [jumlah, setJumlah] = useState("");
-    const [hargaBeli, setHargaBeli] = useState("");
-    const [umurThn, setUmurThn] = useState("");
-    const [nilaiSisa, setNilaiSisa] = useState("");
-
-    const add = () => {
-        setTools((prev) => [
-            ...prev,
-            {
-                id: String(Date.now() + Math.random()),
-                nama: nama.trim(),
-                jumlah,
-                hargaBeli,
-                umurThn,
-                nilaiSisa,
-            },
-        ]);
-        setNama("");
-        setJumlah("");
-        setHargaBeli("");
-        setUmurThn("");
-        setNilaiSisa("");
-    };
-
-    return (
-        <View style={{ marginTop: 8, gap: 8 }}>
-            <TextInput
-                placeholder="Nama alat"
-                placeholderTextColor={C.icon}
-                value={nama}
-                onChangeText={setNama}
-                style={{ borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
-            />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                    placeholder="Jumlah"
-                    placeholderTextColor={C.icon}
-                    keyboardType="numeric"
-                    value={jumlah}
-                    onChangeText={setJumlah}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
-                />
-                <TextInput
-                    placeholder="Harga beli"
-                    placeholderTextColor={C.icon}
-                    keyboardType="numeric"
-                    value={hargaBeli}
-                    onChangeText={setHargaBeli}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
-                />
-            </View>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                    placeholder="Umur ekonomis (tahun) — opsional"
-                    placeholderTextColor={C.icon}
-                    keyboardType="numeric"
-                    value={umurThn}
-                    onChangeText={setUmurThn}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
-                />
-                <TextInput
-                    placeholder="Nilai sisa — opsional"
-                    placeholderTextColor={C.icon}
-                    keyboardType="numeric"
-                    value={nilaiSisa}
-                    onChangeText={setNilaiSisa}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
-                />
-            </View>
-            <Pressable
-                onPress={add}
-                style={({ pressed }) => [
-                    { backgroundColor: C.tint + "33", borderWidth: 1, borderColor: C.tint, paddingVertical: 10, borderRadius: 999, alignItems: "center", opacity: pressed ? 0.96 : 1 },
-                ]}
-            >
-                <Text style={{ color: C.tint, fontWeight: "900" }}>Tambah Alat</Text>
-            </Pressable>
-
-            {(tools || []).map((r) => (
-                <View key={r.id} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 10, marginTop: 8 }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                        <Text style={{ color: C.text, fontWeight: "800" }}>{r.nama || "(tanpa nama)"}</Text>
-                        <Pressable onPress={() => setTools((prev) => prev.filter((x) => x.id !== r.id))}>
-                            <Ionicons name="trash-outline" size={18} color={C.danger} />
-                        </Pressable>
-                    </View>
-                    <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>
-                        {r.jumlah} unit • {currency(parseFloat(r.hargaBeli || "0") || 0)}
-                        {r.umurThn ? ` • umur ${r.umurThn} th` : ""}
-                        {r.nilaiSisa ? ` • nilai sisa ${currency(parseFloat(r.nilaiSisa || "0") || 0)}` : ""}
-                    </Text>
-                </View>
-            ))}
-        </View>
     );
 }
 

@@ -59,7 +59,7 @@ export default function HeaderLogoutButton({
             accessibilityLabel="Logout"
         >
             {loading ? (
-                <ActivityIndicator />
+                <ActivityIndicator color={"#fff"} />
             ) : (
                 <Ionicons
                     style={{ marginLeft: 4 }}

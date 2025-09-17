@@ -173,7 +173,7 @@ export default function HomeScreen() {
           >
             {loading ? (
               <View style={{ paddingVertical: 12, alignItems: "center" }}>
-                <ActivityIndicator />
+                <ActivityIndicator color={C.tint} size={"large"} />
               </View>
             ) : (
               <>

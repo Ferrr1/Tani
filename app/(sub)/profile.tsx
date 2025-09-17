@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { CROP_OPTIONS, RegisterForm } from "@/types/profile";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,31 +22,13 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type ProfileForm = {
-    fullName: string;
-    email: string;          // read-only (ditarik dari auth)
-    village: string;
-    cropType: string;       // pilihan utama
-    cropTypeOther?: string; // diisi saat pilih "Lainnya"
-    landAreaHa: string;     // string -> diparse number
-};
-
-const CROP_OPTIONS = [
-    "Padi", "Jagung", "Kedelai", "Cabai", "Bawang Merah",
-    "Kopi", "Kakao", "Tebu", "Sawit", "Tembakau",
-    "Lainnya",
-];
-
 export default function ProfileScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const router = useRouter();
     const C = Colors[scheme];
     const S = Tokens;
-
     const { profile, updateProfile, loading } = useAuth();
-
     const [showCrop, setShowCrop] = useState(false);
-
     const {
         control,
         handleSubmit,
@@ -53,7 +36,7 @@ export default function ProfileScreen() {
         watch,
         reset,
         formState: { errors, isDirty },
-    } = useForm<ProfileForm>({
+    } = useForm<RegisterForm>({
         defaultValues: {
             fullName: "",
             email: "",
@@ -81,31 +64,9 @@ export default function ProfileScreen() {
     const cropTypeValue = watch("cropType");
     const isOther = cropTypeValue === "Lainnya";
 
-    const saving = loading; // pakai loading global saat submit
-
-    const onSave = async (v: ProfileForm) => {
-        // finalisasi jenis tanaman
+    const onSave = async (v: RegisterForm) => {
         const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
-
-        // parse luas lahan
         const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
-        if (Number.isNaN(ha) || ha < 0) {
-            Alert.alert("Validasi", "Luas lahan (ha) harus berupa angka ≥ 0.");
-            return;
-        }
-        if (!v.fullName.trim()) {
-            Alert.alert("Validasi", "Nama lengkap wajib diisi.");
-            return;
-        }
-        if (!v.village.trim()) {
-            Alert.alert("Validasi", "Desa/Kelurahan wajib diisi.");
-            return;
-        }
-        if (!finalCrop) {
-            Alert.alert("Validasi", "Jenis tanaman wajib dipilih/diisi.");
-            return;
-        }
-
         try {
             await updateProfile({
                 full_name: v.fullName.trim(),
@@ -407,11 +368,11 @@ export default function ProfileScreen() {
                 {/* Tombol simpan */}
                 <Pressable
                     onPress={handleSubmit(onSave)}
-                    disabled={saving || !isDirty}
+                    disabled={loading || !isDirty}
                     style={({ pressed }) => [
                         styles.saveBtn,
                         {
-                            backgroundColor: saving ? C.tint + "CC" : C.tint,
+                            backgroundColor: loading ? C.tint + "CC" : C.tint,
                             borderRadius: S.radius.lg,
                             opacity: pressed ? 0.98 : 1,
                             shadowColor: "#000",
@@ -419,7 +380,7 @@ export default function ProfileScreen() {
                         scheme === "light" ? S.shadow.light : S.shadow.dark,
                     ]}
                 >
-                    {saving ? (
+                    {loading ? (
                         <ActivityIndicator color="#fff" />
                     ) : (
                         <>
@@ -444,8 +405,6 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 12, marginTop: 2 },
 
     card: { padding: 16, borderWidth: 1 },
-
-    // avatar
     avatarRow: { flexDirection: "row", gap: 14, alignItems: "center", marginBottom: 6 },
     avatarWrap: {
         justifyContent: "center", alignItems: "center",
@@ -459,8 +418,6 @@ const styles = StyleSheet.create({
         backgroundColor: "transparent",
     },
     err: { marginTop: 6, fontSize: 12 },
-
-    // select styles
     selectInput: {
         borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     },

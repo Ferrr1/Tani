@@ -1,6 +1,7 @@
-// app/(auth)/register.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { CROP_OPTIONS, RegisterForm } from "@/types/profile";
+import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -19,24 +20,6 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type RegisterForm = {
-    fullName: string;
-    email: string;
-    password: string;
-    village: string;
-    cropType: string;
-    landAreaHa: string;
-};
-
-const CROP_OPTIONS = [
-    "Padi", "Jagung", "Kedelai", "Cabai", "Bawang Merah",
-    "Kopi", "Kakao", "Tebu", "Sawit", "Tembakau",
-];
-
-// Validasi email sederhana
-const EMAIL_REGEX =
-    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
-
 export default function RegisterScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
@@ -50,6 +33,7 @@ export default function RegisterScreen() {
         control,
         handleSubmit,
         setValue,
+        watch,
         formState: { errors },
     } = useForm<RegisterForm>({
         defaultValues: {
@@ -58,39 +42,18 @@ export default function RegisterScreen() {
             password: "",
             village: "",
             cropType: "",
+            cropTypeOther: "",
             landAreaHa: "",
         },
         mode: "onChange",
     });
 
-    const onSubmit = async (v: RegisterForm) => {
-        // Validasi manual tambahan
-        if (!EMAIL_REGEX.test(v.email.trim())) {
-            Alert.alert("Email tidak valid", "Masukkan email yang benar, contoh: nama@domain.com");
-            return;
-        }
-        const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
-        if (Number.isNaN(ha) || ha <= 0) {
-            Alert.alert("Validasi", "Luas lahan (hektar) harus angka > 0");
-            return;
-        }
-        if (!v.fullName.trim()) {
-            Alert.alert("Validasi", "Nama lengkap wajib diisi");
-            return;
-        }
-        if (!v.village.trim()) {
-            Alert.alert("Validasi", "Nama Desa/Kelurahan wajib diisi");
-            return;
-        }
-        if (!v.cropType) {
-            Alert.alert("Validasi", "Pilih jenis tanaman terlebih dahulu");
-            return;
-        }
-        if (!v.password || v.password.length < 6) {
-            Alert.alert("Validasi", "Password minimal 6 karakter.");
-            return;
-        }
+    const cropTypeValue = watch("cropType");
+    const isOther = cropTypeValue === "Lainnya";
 
+    const onSubmit = async (v: RegisterForm) => {
+        const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
+        const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
         try {
             await signUp({
                 email: v.email.trim(),
@@ -99,7 +62,7 @@ export default function RegisterScreen() {
                     // ini masuk ke raw_user_meta_data -> dipakai trigger handle_new_user
                     full_name: v.fullName.trim(),
                     nama_desa: v.village.trim(),
-                    jenis_tanaman: v.cropType,
+                    jenis_tanaman: finalCrop,
                     luas_lahan: ha, // simpan apa adanya dalam hektar (sesuai trigger kamu)
                 } as any,
             });
@@ -366,6 +329,40 @@ export default function RegisterScreen() {
                         />
                         {errors.cropType && (
                             <Text style={[styles.err, { color: C.danger }]}>{errors.cropType.message}</Text>
+                        )}
+                        {/* Input ‘Jenis Lainnya’ — jika pilih Lainnya */}
+                        {isOther && (
+                            <>
+                                <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
+                                <Controller
+                                    control={control}
+                                    name="cropTypeOther"
+                                    rules={{
+                                        required: "Sebutkan jenis tanaman lainnya",
+                                        validate: (v) => !!(v || "").trim() || "Sebutkan jenis tanaman lainnya",
+                                    }}
+                                    render={({ field: { onChange, onBlur, value } }) => (
+                                        <TextInput
+                                            placeholder="Contoh: Porang"
+                                            placeholderTextColor={C.icon}
+                                            onBlur={onBlur}
+                                            onChangeText={onChange}
+                                            value={value}
+                                            style={[
+                                                styles.input,
+                                                {
+                                                    color: C.text,
+                                                    borderColor: errors.cropTypeOther ? C.danger : C.border,
+                                                    borderRadius: S.radius.md,
+                                                },
+                                            ]}
+                                        />
+                                    )}
+                                />
+                                {errors.cropTypeOther && (
+                                    <Text style={[styles.err, { color: C.danger }]}>{errors.cropTypeOther.message as string}</Text>
+                                )}
+                            </>
                         )}
 
                         {/* Luas Lahan (ha) */}

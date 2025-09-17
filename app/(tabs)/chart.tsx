@@ -265,7 +265,7 @@ export default function ChartScreen() {
                     {/* Blocking loader (awal) */}
                     {showBlocking ? (
                         <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                            <ActivityIndicator color={C.tint} />
+                            <ActivityIndicator color={C.tint} size={"large"} />
                             <Text style={{ marginTop: 8, color: C.textMuted }}>Memuat grafik…</Text>
                         </View>
                     ) : (

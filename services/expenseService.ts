@@ -1,157 +1,16 @@
-// services/expenseService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import {
+  CreateCashExpenseInput,
+  CreateNonCashExpenseInput,
+  ExpenseItemKind,
+  ExpenseItemRow,
+  ExpenseRow,
+  ExpenseType,
+  ExtraKind,
+} from "@/types/expense";
+import { ensureMoneyNum, ensurePosNum, ensureText } from "@/utils/expense";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-/** ========= Types (mirror DB/view) ========= */
-export type ExpenseType = "cash" | "noncash";
-
-/** Sumber: view public.v_expenses_with_totals */
-export type ExpenseRow = {
-  id: string;
-  user_id: string;
-  season_id: string;
-  type: ExpenseType;
-  note: string | null;
-  expense_date: string; // (date di DB, string ISO di client)
-  created_at: string;
-  updated_at: string;
-
-  total_cash: number; // total baris kind='cash'
-  total_noncash_est: number; // total baris kind<>'cash'
-  total_all: number; // gabungan
-};
-
-/** Satu tabel detail serbaguna: public.expense_items */
-export type ExpenseItemKind = "cash" | "labor" | "tool" | "extra";
-export type ExtraKind = "tax" | "land_rent" | "other";
-
-export type ExpenseItemRow = {
-  id: string;
-  expense_id: string;
-  kind: ExpenseItemKind;
-  label: string | null;
-
-  // umum
-  quantity: number | null;
-  unit_price: number | null;
-
-  // labor
-  people_count: number | null;
-  days: number | null;
-  daily_wage: number | null;
-
-  // tool
-  purchase_price: number | null;
-  useful_life_years: number | null;
-  salvage_value: number | null;
-
-  // extra
-  extra_kind: ExtraKind | null;
-
-  // computed
-  amount_estimate: number;
-
-  metadata: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-};
-
-/** ========= Payload dari UI =========
- * Perlu kita LUASKAN supaya CashForm bisa kirim:
- * - kategori labor_* (disimpan sebagai item 'cash' + metadata)
- * - extras 'tax' | 'land_rent' | 'transport' (cash)
- * - serta _meta opsional (jamKerja, laborType, peopleCount, days, dsb)
- */
-export type CashCategory =
-  | "seed"
-  | "seedling"
-  | "fertilizer"
-  | "insecticide"
-  | "herbicide"
-  | "fungicide"
-  | "labor_nursery"
-  | "labor_land_prep"
-  | "labor_planting"
-  | "labor_fertilizing"
-  | "labor_irrigation"
-  | "labor_weeding"
-  | "labor_pest_ctrl"
-  | "labor_harvest"
-  | "labor_postharvest"
-  | "tax"
-  | "land_rent"
-  | "transport";
-
-export type Unit = "gram" | "kilogram" | "liter" | "bundle" | "service";
-
-export type CashItemInput = {
-  category: CashCategory;
-  itemName?: string | null;
-  unit: Unit;
-  quantity: number; // > 0
-  unitPrice: number; // >= 0
-  /** passthrough metadata ke kolom JSONB */
-  _meta?: Record<string, any>;
-};
-
-export type CreateCashExpenseInput = {
-  seasonId: string;
-  items: CashItemInput[];
-  note?: string | null;
-  expenseDate?: string; // optional override (YYYY-MM-DD)
-};
-
-/** ====== Non-cash types (tetap) ====== */
-export type NonCashLaborInput = {
-  laborType: "contract" | "daily";
-  peopleCount: number; // > 0
-  days: number; // > 0
-  dailyWage: number; // >= 0
-  note?: string | null;
-  stageLabel?: string | null; // contoh: "Pesemaian"
-};
-
-export type NonCashToolInput = {
-  toolName: string;
-  quantity: number; // > 0
-  purchasePrice: number; // >= 0
-  usefulLifeYears?: number | null; // > 0 jika diisi
-  salvageValue?: number | null; // >= 0 jika diisi
-  note?: string | null;
-};
-
-export type NonCashExtraInput = {
-  type: "tax" | "land_rent";
-  amount: number; // > 0
-  note?: string | null;
-};
-
-export type CreateNonCashExpenseInput = {
-  seasonId: string;
-  labors: NonCashLaborInput[];
-  tools: NonCashToolInput[];
-  extras?: NonCashExtraInput[];
-  note?: string | null;
-  expenseDate?: string; // optional override (YYYY-MM-DD)
-};
-
-/** ========= Helpers ========= */
-const ensurePosNum = (n: unknown, name: string) => {
-  if (typeof n !== "number" || Number.isNaN(n) || n <= 0) {
-    throw new Error(`${name} harus angka > 0.`);
-  }
-};
-const ensureMoneyNum = (n: unknown, name: string) => {
-  if (typeof n !== "number" || Number.isNaN(n) || n < 0) {
-    throw new Error(`${name} harus angka ≥ 0.`);
-  }
-};
-const ensureText = (s: unknown, name: string) => {
-  if (typeof s !== "string" || s.trim().length === 0) {
-    throw new Error(`${name} wajib diisi.`);
-  }
-};
 
 async function assertSeasonOwnership(userId: string, seasonId: string) {
   const { data, error } = await supabase
@@ -165,9 +24,7 @@ async function assertSeasonOwnership(userId: string, seasonId: string) {
   if (data.user_id !== userId) throw new Error("Season bukan milik user ini.");
 }
 
-/** ========= Repo (raw) ========= */
 export const expenseRepo = {
-  /** List (all or by season) – dari view v_expenses_with_totals */
   async list(
     userId: string,
     opts?: { seasonId?: string | "all" }
@@ -187,7 +44,6 @@ export const expenseRepo = {
     return (data || []) as ExpenseRow[];
   },
 
-  /** Get single (pakai view biar ada total-*) */
   async getById(userId: string, id: string): Promise<ExpenseRow | null> {
     const { data, error } = await supabase
       .from("v_expenses_with_totals")
@@ -199,7 +55,6 @@ export const expenseRepo = {
     return (data as ExpenseRow) ?? null;
   },
 
-  /** Detail semua item (opsional filter by kind) */
   async listItems(
     userId: string,
     expenseId: string,
@@ -227,7 +82,6 @@ export const expenseRepo = {
     return (data || []) as ExpenseItemRow[];
   },
 
-  /** Create CASH (header + bulk items) */
   async createCash(
     userId: string,
     input: CreateCashExpenseInput
@@ -255,7 +109,6 @@ export const expenseRepo = {
         useful_life_years: null,
         salvage_value: null,
         extra_kind: null,
-        // PENTING: simpan metadata dari _meta (jamKerja, laborType, peopleCount, days, dll)
         metadata: {
           category: x.category,
           unit: x.unit,
@@ -280,7 +133,6 @@ export const expenseRepo = {
 
     const expenseId = head.id as string;
 
-    // 2) bulk insert items; rollback header jika gagal
     const { error: eItems } = await supabase
       .from("expense_items")
       .insert(items.map((it) => ({ ...it, expense_id: expenseId })));
@@ -295,7 +147,6 @@ export const expenseRepo = {
     return created;
   },
 
-  /** Create NON-CASH (header + bulk items: labor/tool/extra) — tetap */
   async createNonCash(
     userId: string,
     input: CreateNonCashExpenseInput
@@ -402,8 +253,6 @@ export const expenseRepo = {
     if (eHead) throw eHead;
 
     const expenseId = head.id as string;
-
-    // 2) bulk items + rollback jika gagal
     const { error: eItems } = await supabase
       .from("expense_items")
       .insert(items.map((it) => ({ ...it, expense_id: expenseId })));
@@ -599,9 +448,7 @@ export const expenseRepo = {
     if (eIns) throw eIns;
   },
 
-  /** Delete satu expense (cascade ke child via FK) */
   async remove(userId: string, id: string): Promise<void> {
-    // Ownership check (optional – RLS mestinya cukup)
     const { data: row, error: e0 } = await supabase
       .from("expenses")
       .select("id,user_id")
@@ -616,7 +463,6 @@ export const expenseRepo = {
   },
 };
 
-/** ========= Hook (Auth aware) ========= */
 export function useExpenseService() {
   const { user, loading } = useAuth();
 

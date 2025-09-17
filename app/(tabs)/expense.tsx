@@ -162,7 +162,7 @@ export default function ExpenseScreen() {
 
             {showBlocking ? (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                    <ActivityIndicator color={C.tint} />
+                    <ActivityIndicator color={C.tint} size={"large"} />
                     <Text style={{ marginTop: 8, color: C.textMuted }}>Menyiapkan data…</Text>
                 </View>
             ) : (

@@ -1,12 +1,15 @@
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePathname, useRouter } from "expo-router";
 import React, { JSX, useEffect, useMemo, useRef } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, useColorScheme, View } from "react-native";
 
 function Loading() {
+    const scheme = (useColorScheme() ?? "light") as "light" | "dark";
+    const C = Colors[scheme];
     return (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator />
+        <View style={{ backgroundColor: C.background, flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator color={C.tint} size={"large"} />
         </View>
     );
 }

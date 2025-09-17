@@ -18,13 +18,11 @@ export default function TypeCostScreen() {
     React.useEffect(() => {
         let alive = true;
         (async () => {
-            // CREATE flow (tanpa expenseId)
             if (!expenseId) {
                 const isCash = (type ?? "tunai") === "tunai";
                 if (alive) setResolved({ isCash, seasonId: qsSeasonId ?? "" });
                 return;
             }
-            // EDIT flow: ambil dari DB
             const row = await getExpenseById(String(expenseId));
             if (!alive) return;
 
