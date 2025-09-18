@@ -54,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const role: Role | null = profile?.role ?? null;
     const isAdmin = role === "admin";
+    console.log({ role, isAdmin });
 
     const fetchProfile = useCallback(async (u?: User | null) => {
         // ✅ Ambil via service (RLS aman; hanya tabel public.profiles)

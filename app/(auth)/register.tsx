@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { CROP_OPTIONS, RegisterForm } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import React, { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -24,7 +24,6 @@ export default function RegisterScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
-    const router = useRouter();
     const { signUp, loading } = useAuth(); // pakai loading dari AuthContext
     const [showPwd, setShowPwd] = useState(false);
     const [showCrop, setShowCrop] = useState(false);
@@ -66,7 +65,6 @@ export default function RegisterScreen() {
                     luas_lahan: ha, // simpan apa adanya dalam hektar (sesuai trigger kamu)
                 } as any,
             });
-            router.push("/(tabs)");
         } catch (e: any) {
             console.warn("register error", e);
             const msg = e?.message || "Terjadi kesalahan saat pendaftaran";

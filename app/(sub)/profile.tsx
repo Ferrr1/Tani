@@ -93,7 +93,7 @@ export default function ProfileScreen() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.push("/(tabs)")}
+                        onPress={() => router.replace("/(tabs)")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },

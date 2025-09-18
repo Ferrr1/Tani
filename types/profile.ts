@@ -1,16 +1,23 @@
 export type Role = "user" | "admin";
 
 export const CROP_OPTIONS: string[] = [
-  "Padi",
-  "Jagung",
-  "Kedelai",
-  "Cabai",
-  "Bawang Merah",
-  "Kopi",
-  "Kakao",
-  "Tebu",
-  "Sawit",
-  "Tembakau",
+  "popcoi",
+  "selada air",
+  "sawi",
+  "kangkong",
+  "jagung",
+  "bayam",
+  "terong",
+  "cabai",
+  "labusiam",
+  "timun",
+  "buncis",
+  "kacang Panjang",
+  "ubijalar",
+  "seledri",
+  "daun bawang",
+  "kacang merah",
+  "edamame",
   "Lainnya",
 ];
 

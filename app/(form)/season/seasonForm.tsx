@@ -78,7 +78,7 @@ export default function SeasonForm() {
                 if (!alive) return;
                 if (!row) {
                     Alert.alert("Tidak ditemukan", "Data musim tidak ditemukan.");
-                    router.push("/(sub)/season");
+                    router.replace("/(sub)/season");
                     return;
                 }
                 reset({
@@ -89,7 +89,7 @@ export default function SeasonForm() {
             } catch (e: any) {
                 if (!alive) return;
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat memuat data musim.");
-                router.push("/(sub)/season");
+                router.replace("/(sub)/season");
             } finally {
                 if (alive) setInitialLoading(false);
             }
@@ -149,7 +149,7 @@ export default function SeasonForm() {
                     endDate: toISO(d2),
                 });
             }
-            router.push("/(sub)/season");
+            router.replace("/(sub)/season");
         } catch (e: any) {
             Alert.alert(
                 "Gagal",
@@ -202,7 +202,7 @@ export default function SeasonForm() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.push("/(sub)/season")}
+                        onPress={() => router.replace("/(sub)/season")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },

@@ -123,7 +123,7 @@ export default function IncomeForm() {
 
                 if (!row) {
                     Alert.alert("Tidak ditemukan", "Data penerimaan tidak ditemukan.");
-                    router.push("/(tabs)/income");
+                    router.replace("/(tabs)/income");
                     return;
                 }
 
@@ -141,7 +141,7 @@ export default function IncomeForm() {
             } catch (e: any) {
                 if (!alive) return;
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat memuat data.");
-                router.push("/(tabs)/income");
+                router.replaceace("/(tabs)/income");
             } finally {
                 if (alive) setInitialLoading(false);
             }
@@ -198,7 +198,7 @@ export default function IncomeForm() {
                     unitPrice: p,
                 });
             }
-            router.push("/(tabs)/income");
+            router.replace("/(tabs)/income");
         } catch (e: any) {
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan data.");
         } finally {
@@ -220,7 +220,7 @@ export default function IncomeForm() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.push("/(tabs)/income")}
+                        onPress={() => router.replace("/(tabs)/income")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
