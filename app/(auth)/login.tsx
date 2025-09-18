@@ -3,28 +3,27 @@ import { useAuth } from "@/context/AuthContext";
 import { LoginForm } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import React, { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
     Platform,
     Pressable,
     StyleSheet,
     Text,
     TextInput,
     View,
-    useColorScheme,
+    useColorScheme
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
-    const router = useRouter();
     const { signIn, loading, booting } = useAuth();
 
     const [showPwd, setShowPwd] = useState(false);
@@ -41,7 +40,6 @@ export default function LoginScreen() {
     const onSubmit = async (v: LoginForm) => {
         try {
             await signIn({ email: v.email.trim(), password: v.password });
-            router.push("/(tabs)");
         } catch (error: any) {
             Alert.alert("Gagal", error?.message ?? "Tidak dapat login.");
         }
@@ -49,9 +47,12 @@ export default function LoginScreen() {
 
     return (
         <SafeAreaView style={[styles.safe, { backgroundColor: C.background }]}>
-            <KeyboardAvoidingView
-                style={styles.flex}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
+            <KeyboardAwareScrollView
+                contentContainerStyle={{ flexGrow: 1 }}
+                enableOnAndroid
+                enableAutomaticScroll
+                extraScrollHeight={Platform.select({ ios: 80, android: 120 })}
+                keyboardShouldPersistTaps="handled"
             >
                 <View style={[styles.container, { padding: S.spacing.lg }]}>
                     <Text style={[styles.title, { color: C.text, fontFamily: Fonts.sans as any }]}>
@@ -197,7 +198,7 @@ export default function LoginScreen() {
                         </Text>
                     </View>
                 </View>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }

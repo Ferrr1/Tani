@@ -24,7 +24,7 @@ export default function HeaderLogoutButton({
             try {
                 await signOut();
             } finally {
-                router.push("/(auth)/login");
+                router.replace("/(auth)/login");
             }
         };
 

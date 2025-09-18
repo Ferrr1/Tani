@@ -1,21 +1,14 @@
 // services/chartService.ts
 import { useAuth } from "@/context/AuthContext";
 import { ExpenseRow } from "@/types/expense";
+import { ReceiptRow } from "@/types/receipt";
+import { SeasonRow } from "@/types/season";
+import { yearOf } from "@/utils/date";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { expenseRepo } from "./expenseService";
-import { receiptRepo, ReceiptRow } from "./receiptService";
-import { seasonRepo, SeasonRow } from "./seasonService";
+import { receiptRepo } from "./receiptService";
+import { seasonRepo } from "./seasonService";
 
-/** Util */
-const getYear = (iso: string) => new Date(iso).getFullYear();
-
-/**
- * Service gabungan khusus Chart:
- * - Memuat daftar musim user
- * - Menjaga state filter seasonId ATAU year (UI sebaiknya buat eksklusif)
- * - Mengambil receipts & expenses terfilter by seasonId (atau "all")
- * - Menyediakan filtering by year (jika year !== "all")
- */
 export function useChartData(initialSeasonId: string | "all" = "all") {
   const { user, loading: authLoading } = useAuth();
 
@@ -113,9 +106,9 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
 
   /** ===== Year options (dibangun dari data yang sedang aktif) ===== */
   const yearOptions = useMemo(() => {
-    const yearsFromReceipts = receipts.map((r) => getYear(r.created_at));
+    const yearsFromReceipts = receipts.map((r) => yearOf(r.created_at));
     const yearsFromExpenses = expenses.map((e) =>
-      e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)
+      e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)
     );
     return Array.from(
       new Set([...yearsFromReceipts, ...yearsFromExpenses])
@@ -125,14 +118,14 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
   /** ===== Filter by year (opsional; UI: eksklusif dgn season) ===== */
   const filteredReceipts = useMemo(() => {
     if (year === "all") return receipts;
-    return receipts.filter((r) => getYear(r.created_at) === year);
+    return receipts.filter((r) => yearOf(r.created_at) === year);
   }, [receipts, year]);
 
   const filteredExpenses = useMemo(() => {
     if (year === "all") return expenses;
     return expenses.filter(
       (e) =>
-        (e.expense_date ? getYear(e.expense_date) : getYear(e.created_at)) ===
+        (e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)) ===
         year
     );
   }, [expenses, year]);

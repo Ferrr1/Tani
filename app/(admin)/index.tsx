@@ -1,12 +1,18 @@
+// app/(admin)/index.tsx (atau path screen kamu)
+import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useAdminUserList } from "@/services/adminUserService"; // <— service baru
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+    ActivityIndicator,
     FlatList,
     Image,
     Pressable,
+    RefreshControl,
     StyleSheet,
     Text,
     TextInput,
@@ -15,23 +21,16 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ===== Dummy data user (bisa ganti dari API) =====
-export type AppUser = {
+// Bentuk data untuk UI list
+type AppUser = {
     id: string;
     fullName: string;
-    phone: string;
-    email?: string;
-    village: string;
-    cropType: string;
-    landAreaHa: number;
-    avatar?: string;
+    email?: string | null;
+    village?: string | null;
+    cropType?: string | null;
+    landAreaHa?: number | null;
+    avatar?: string | null;
 };
-const FAKE_USERS: AppUser[] = [
-    { id: "u1", fullName: "Fersetya Putra", phone: "+6281234567890", email: "fer@example.com", village: "Medangan", cropType: "Padi", landAreaHa: 1.8 },
-    { id: "u2", fullName: "Siti Rahma", phone: "+6281122233344", email: "siti@example.com", village: "Sukamaju", cropType: "Kopi", landAreaHa: 0.7 },
-    { id: "u3", fullName: "Budi Santoso", phone: "+6281399988877", email: "budi@example.com", village: "Karangrejo", cropType: "Cabai", landAreaHa: 1.2 },
-    { id: "u4", fullName: "Wayan Adi", phone: "+6285647382910", email: "wayan@example.com", village: "Tegalrejo", cropType: "Jagung", landAreaHa: 2.4 },
-];
 
 export default function HomeAdminScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -39,26 +38,66 @@ export default function HomeAdminScreen() {
     const S = Tokens;
     const router = useRouter();
 
-    const [q, setQ] = useState("");
+    // ====== Service fetch ======
+    const { rows, loading, refreshing, fetchOnce, refresh } = useAdminUserList();
 
-    const data = useMemo(() => {
+    // Mapping row -> AppUser untuk tampilan
+    const users: AppUser[] = useMemo(
+        () =>
+            rows.map((r) => ({
+                id: r.id,
+                fullName: r.full_name ?? "—",
+                email: r.email ?? null,
+                village: r.nama_desa ?? null,
+                cropType: r.jenis_tanaman ?? null,
+                landAreaHa: r.luas_lahan ?? null,
+                avatar: (r as any).avatar_url ?? null, // kalau ada kolom avatar_url
+            })),
+        [rows]
+    );
+
+    // ====== Search ======
+    const [q, setQ] = useState("");
+    const filtered = useMemo(() => {
         const key = q.trim().toLowerCase();
-        if (!key) return FAKE_USERS;
-        return FAKE_USERS.filter(
-            (u) =>
-                u.fullName.toLowerCase().includes(key) ||
-                u.phone.toLowerCase().includes(key) ||
-                u.village.toLowerCase().includes(key) ||
-                u.cropType.toLowerCase().includes(key)
-        );
-    }, [q]);
+        if (!key) return users;
+        return users.filter((u) => {
+            const bag = [
+                u.fullName,
+                u.email ?? "",
+                u.village ?? "",
+                u.cropType ?? "",
+                (u.landAreaHa ?? "").toString(),
+            ]
+                .join(" ")
+                .toLowerCase();
+            return bag.includes(key);
+        });
+    }, [q, users]);
+
+    // ====== Refresh controls ======
+    const onRefresh = useCallback(async () => {
+        await refresh();
+    }, [refresh]);
+
+    // Refetch setiap kali screen difokuskan
+    useFocusEffect(
+        useCallback(() => {
+            fetchOnce();
+        }, [fetchOnce])
+    );
 
     const renderItem = ({ item }: { item: AppUser }) => (
         <Pressable
-            onPress={() => router.push({ pathname: "/(admin)/[detail]", params: { id: item.id } })}
+            onPress={() => router.push({ pathname: "/(admin)/[detail]", params: { detail: item.id } })}
             style={({ pressed }) => [
                 styles.row,
-                { backgroundColor: C.surface, borderColor: C.border, borderRadius: S.radius.lg, opacity: pressed ? 0.96 : 1 },
+                {
+                    backgroundColor: C.surface,
+                    borderColor: C.border,
+                    borderRadius: S.radius.lg,
+                    opacity: pressed ? 0.96 : 1,
+                },
                 scheme === "light" ? S.shadow.light : S.shadow.dark,
             ]}
         >
@@ -68,26 +107,37 @@ export default function HomeAdminScreen() {
                     <Image source={{ uri: item.avatar }} style={styles.avatar} />
                 ) : (
                     <Text style={{ color: C.text, fontWeight: "900" }}>
-                        {item.fullName.split(" ").slice(0, 2).map(s => s[0]).join("").toUpperCase()}
+                        {item.fullName
+                            .split(" ")
+                            .slice(0, 2)
+                            .map((s) => s[0])
+                            .join("")
+                            .toUpperCase()}
                     </Text>
                 )}
             </View>
 
             <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>{item.fullName}</Text>
+                <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
+                    {item.fullName}
+                </Text>
                 <Text style={{ color: C.textMuted, fontSize: 12 }} numberOfLines={1}>
-                    {item.phone} | {item.village}
+                    {item.village}
                 </Text>
 
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-                    <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
-                        <Ionicons name="leaf-outline" size={12} color={C.tint} />
-                        <Text style={[styles.badgeText, { color: C.text }]}>{item.cropType}</Text>
-                    </View>
-                    <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
-                        <Ionicons name="map-outline" size={12} color={C.info} />
-                        <Text style={[styles.badgeText, { color: C.text }]}>{item.landAreaHa} ha</Text>
-                    </View>
+                    {!!item.cropType && (
+                        <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
+                            <Ionicons name="leaf-outline" size={12} color={C.tint} />
+                            <Text style={[styles.badgeText, { color: C.text }]}>{item.cropType}</Text>
+                        </View>
+                    )}
+                    {item.landAreaHa != null && (
+                        <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
+                            <Ionicons name="map-outline" size={12} color={C.info} />
+                            <Text style={[styles.badgeText, { color: C.text }]}>{item.landAreaHa} ha</Text>
+                        </View>
+                    )}
                 </View>
             </View>
 
@@ -105,8 +155,10 @@ export default function HomeAdminScreen() {
                 style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
             >
                 <View style={styles.headerRow}>
-                    <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>Kelola Pengguna</Text>
-                    <View style={{ width: 36 }} />
+                    <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>
+                        Kelola Pengguna
+                    </Text>
+                    <HeaderLogoutButton size={28} confirm={true} />
                 </View>
 
                 {/* search */}
@@ -122,12 +174,25 @@ export default function HomeAdminScreen() {
                 </View>
             </LinearGradient>
 
-            <FlatList
-                data={data}
-                keyExtractor={(u) => u.id}
-                contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl, gap: S.spacing.md }}
-                renderItem={renderItem}
-            />
+            {loading && users.length === 0 ? (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                    <ActivityIndicator size="large" color={C.tint} />
+                    <Text style={{ marginTop: 8, color: C.textMuted }}>Memuat data…</Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={filtered}
+                    keyExtractor={(u) => u.id}
+                    contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl, gap: S.spacing.md }}
+                    renderItem={renderItem}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    ListEmptyComponent={
+                        <View style={{ padding: 24, alignItems: "center" }}>
+                            <Text style={{ color: C.textMuted }}>Tidak ada pengguna.</Text>
+                        </View>
+                    }
+                />
+            )}
         </SafeAreaView>
     );
 }

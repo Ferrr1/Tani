@@ -57,7 +57,7 @@ export default function SeasonScreen() {
 
   const handleEdit = useCallback(
     (item: SeasonRow) => {
-      router.push(`/(form)/season/seasonForm?seasonId=${item.id}`);
+      router.replace(`/(form)/season/seasonForm?seasonId=${item.id}`);
     },
     [router]
   );
@@ -167,7 +167,7 @@ export default function SeasonScreen() {
       >
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.push("/(tabs)")}
+            onPress={() => router.replace("/(tabs)")}
             style={({ pressed }) => [
               styles.iconBtn,
               { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
@@ -182,7 +182,7 @@ export default function SeasonScreen() {
         </View>
 
         <Pressable
-          onPress={() => router.push("/(form)/season/seasonForm")}
+          onPress={() => router.replace("/(form)/season/seasonForm")}
           style={({ pressed }) => [
             styles.addBtn,
             { backgroundColor: C.tint, borderRadius: S.radius.xl, opacity: pressed ? 0.98 : 1 },

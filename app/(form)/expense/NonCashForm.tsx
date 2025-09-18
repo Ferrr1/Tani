@@ -349,7 +349,7 @@ export default function NonCashForm({
             } else {
                 await createNonCashExpense({ seasonId, labors, tools: toolItems, extras });
             }
-            router.push("/(tabs)/expense");
+            router.replace("/(tabs)/expense");
         } catch (e: any) {
             console.warn("NONCASHFORM", e);
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan pengeluaran non tunai.");

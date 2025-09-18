@@ -426,7 +426,7 @@ export default function CashForm({
             } else {
                 await createCashExpense({ seasonId, items });
             }
-            router.push("/(tabs)/expense");
+            router.replace("/(tabs)/expense");
         } catch (e: any) {
             console.warn("CASHFORM", e);
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan pengeluaran.");

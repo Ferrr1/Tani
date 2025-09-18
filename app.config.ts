@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   slug: "tani",
   version: "1.0.0",
   orientation: "portrait",
-  icon: "./assets/images/icon.png",
+  icon: "./assets/images/logo-bg.png",
   scheme: "tani",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -17,14 +17,11 @@ const config: ExpoConfig = {
 
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/images/logo.png",
-      backgroundColor: "#ffffffff",
+      foregroundImage: "./assets/images/logo-bg.png",
+      backgroundColor: "#FFFFFF",
     },
     edgeToEdgeEnabled: true,
     package: "com.fersetya.tani",
-    config: {
-      googleMaps: { apiKey: process.env.GOOGLE_MAPS_API_KEY ?? "" },
-    },
   },
 
   web: {
@@ -41,7 +38,7 @@ const config: ExpoConfig = {
         image: "./assets/images/logo.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffffff",
+        backgroundColor: "#FFFFFF",
       },
     ],
   ],
@@ -50,14 +47,16 @@ const config: ExpoConfig = {
 
   extra: {
     eas: {
-      projectId: "499aeff3-9c75-4fd4-9478-5955b8faada4",
+      projectId: "7eee7067-17a8-424f-ac84-5f330582810c",
     },
-    SUPABASE_URL:
-      process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "",
-    SUPABASE_ANON_KEY:
-      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
-      process.env.SUPABASE_ANON_KEY ??
-      "",
+    SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
+    SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+  },
+  updates: {
+    url: "https://u.expo.dev/7eee7067-17a8-424f-ac84-5f330582810c",
+  },
+  runtimeVersion: {
+    policy: "appVersion",
   },
 };
 

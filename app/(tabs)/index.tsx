@@ -182,15 +182,15 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.chipsRow}>
-                  <View style={[styles.chip, { borderColor: C.border, backgroundColor: C.surface }]}>
+                  <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>{dateText}</Text>
                   </View>
-                  <View style={[styles.chip, { borderColor: C.border, backgroundColor: C.surface }]}>
+                  <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="time-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>{tzAbbr}</Text>
                   </View>
-                  <View style={[styles.chip, { borderColor: C.border, backgroundColor: C.surface }]}>
+                  <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="location-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>
                       {wx?.location?.name ?? ""}{wx?.location?.region ? `, ${wx.location.region}` : ""}

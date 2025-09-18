@@ -4,7 +4,6 @@ export const fmtDate = (iso: string) =>
     month: "short",
     year: "numeric",
   });
-
 export const yearOf = (iso: string) => new Date(iso).getFullYear();
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
