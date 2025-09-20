@@ -27,7 +27,8 @@ export default function ProfileScreen() {
     const router = useRouter();
     const C = Colors[scheme];
     const S = Tokens;
-    const { profile, updateProfile, loading } = useAuth();
+    const { profile, updateProfile } = useAuth();
+    const [loading, setLoading] = useState(false);
     const [showCrop, setShowCrop] = useState(false);
     const {
         control,
@@ -48,7 +49,6 @@ export default function ProfileScreen() {
         mode: "onChange",
     });
 
-    // Hydrate form dari AuthContext.profile
     useEffect(() => {
         if (!profile) return;
         reset({
@@ -68,6 +68,7 @@ export default function ProfileScreen() {
         const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
         const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
         try {
+            setLoading(true);
             await updateProfile({
                 full_name: v.fullName.trim(),
                 nama_desa: v.village.trim(),
@@ -79,6 +80,8 @@ export default function ProfileScreen() {
         } catch (e: any) {
             console.warn(e)
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan profil.");
+        } finally {
+            setLoading(false);
         }
     };
 

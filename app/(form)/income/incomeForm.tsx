@@ -1,4 +1,3 @@
-// app/finance/income/form.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useReceiptService } from "@/services/receiptService";
 import { useSeasonList } from "@/services/seasonService";
@@ -36,7 +35,6 @@ export default function IncomeForm() {
     const isEdit = !!receiptId;
 
     const {
-        loading: authLoading,
         createReceipt,
         updateReceipt,
         getReceiptById,
@@ -69,7 +67,6 @@ export default function IncomeForm() {
     const price = watch("price");
     const selSeasonId = watch("seasonId");
 
-    // ===== seasons (terbaru di atas)
     const seasons = useMemo(
         () =>
             [...seasonRows].sort(
@@ -79,7 +76,6 @@ export default function IncomeForm() {
         [seasonRows]
     );
 
-    // ===== total (display only; DB hitung sendiri)
     const total = useMemo(() => {
         const q = parseFloat((quantity || "0").replace(",", "."));
         const p = parseFloat((price || "0").replace(",", "."));
@@ -97,21 +93,17 @@ export default function IncomeForm() {
         [total]
     );
 
-    // ===== guards untuk mencegah overwrite
     const didHydrateEdit = useRef(false);
     const didSetDefaultSeason = useRef(false);
 
-    // fetch seasons sekali
     useEffect(() => {
         fetchSeasons();
     }, [fetchSeasons]);
 
-    // Hydrate EDIT — hanya setelah seasons tersedia
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
             if (!isEdit || !receiptId) {
-                // bukan edit → jangan set flag ini, biarkan default season yang jalan
                 return;
             }
             if (!seasons.length || didHydrateEdit.current) return;
@@ -135,13 +127,12 @@ export default function IncomeForm() {
                     seasonId: row.season_id ?? seasons[0]?.id ?? "",
                 });
 
-                // Setelah edit ter-hydrate, kunci supaya efek default season tidak menimpa
                 didHydrateEdit.current = true;
-                didSetDefaultSeason.current = true; // pastikan efek default tidak jalan kemudian
+                didSetDefaultSeason.current = true;
             } catch (e: any) {
                 if (!alive) return;
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat memuat data.");
-                router.replaceace("/(tabs)/income");
+                router.replace("/(tabs)/income");
             } finally {
                 if (alive) setInitialLoading(false);
             }
@@ -155,7 +146,7 @@ export default function IncomeForm() {
     // Set DEFAULT season (CREATE only) — sekali saja
     useEffect(() => {
         if (!seasons.length) return;
-        if (isEdit) return; // jangan set default saat edit
+        if (isEdit) return;
         if (didSetDefaultSeason.current) return;
 
         const defaultSeasonId =
@@ -168,7 +159,6 @@ export default function IncomeForm() {
         }
     }, [seasons, isEdit, seasonIdFromQuery, setValue]);
 
-    // ===== Submit
     const onSubmit = async (v: IncomeFormValues) => {
         const q = parseFloat((v.quantity || "").replace(",", "."));
         const p = parseFloat((v.price || "").replace(",", "."));
@@ -207,7 +197,7 @@ export default function IncomeForm() {
     };
 
     const showBlocking =
-        initialLoading || (seasonLoading && seasons.length === 0) || authLoading;
+        initialLoading || (seasonLoading && seasons.length === 0);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -478,7 +468,7 @@ export default function IncomeForm() {
                     {/* Tombol simpan (gaya profile) */}
                     <Pressable
                         onPress={handleSubmit(onSubmit)}
-                        disabled={saving || authLoading}
+                        disabled={saving}
                         style={({ pressed }) => [
                             styles.saveBtn,
                             {

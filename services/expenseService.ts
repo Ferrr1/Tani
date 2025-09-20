@@ -117,7 +117,6 @@ export const expenseRepo = {
       };
     });
 
-    // 1) insert header -> ambil id
     const { data: head, error: eHead } = await supabase
       .from("expenses")
       .insert({
@@ -283,7 +282,6 @@ export const expenseRepo = {
     if (row.user_id !== userId) throw new Error("Data bukan milik user ini.");
     if (row.type !== "cash") throw new Error("Jenis expense bukan cash.");
 
-    // optional update header (note/expense_date)
     const updates: any = {};
     if (input.note !== undefined) updates.note = input.note;
     if (input.expenseDate) updates.expense_date = input.expenseDate;
@@ -468,14 +466,13 @@ export const expenseRepo = {
 };
 
 export function useExpenseService() {
-  const { user, loading } = useAuth();
+  const { user, authReady } = useAuth();
 
-  // STABILKAN referensi fungsi agar tak memicu spam fetch
   const ensureUser = useCallback(() => {
-    if (loading) throw new Error("Auth masih loading.");
+    if (!authReady) throw new Error("Auth masih loading.");
     if (!user) throw new Error("Tidak ada sesi login.");
     return user;
-  }, [loading, user]);
+  }, [authReady, user]);
 
   const listExpenses = useCallback(
     (opts?: { seasonId?: string | "all" }) => {
@@ -569,7 +566,6 @@ export function useExpenseService() {
 
   return useMemo(
     () => ({
-      loading,
       listExpenses,
       getExpenseById,
       listCashItems,
@@ -583,7 +579,6 @@ export function useExpenseService() {
       deleteExpense,
     }),
     [
-      loading,
       listExpenses,
       getExpenseById,
       listCashItems,
@@ -601,7 +596,7 @@ export function useExpenseService() {
 
 /** ========= List hook (anti spam, filterable) ========= */
 export function useExpenseList(initialSeasonId: string | "all" = "all") {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -618,7 +613,7 @@ export function useExpenseList(initialSeasonId: string | "all" = "all") {
   }, []);
 
   const fetchOnce = useCallback(async () => {
-    if (loading || !user) return;
+    if (!user) return;
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -632,14 +627,14 @@ export function useExpenseList(initialSeasonId: string | "all" = "all") {
       inFlight.current = false;
       if (mounted.current) setLoadingList(false);
     }
-  }, [loading, user, seasonId]);
+  }, [user, seasonId]);
 
   useEffect(() => {
     fetchOnce();
   }, [fetchOnce]);
 
   const refresh = useCallback(async () => {
-    if (loading || !user) return;
+    if (!user) return;
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -653,7 +648,7 @@ export function useExpenseList(initialSeasonId: string | "all" = "all") {
       inFlight.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  }, [loading, user, seasonId]);
+  }, [user, seasonId]);
 
   const data = useMemo(() => rows, [rows]);
 
@@ -672,7 +667,7 @@ export function useExpenseList(initialSeasonId: string | "all" = "all") {
       : { label: "Non Tunai", icon: "cube-outline" as const };
 
   return {
-    loading: loadingList || loading,
+    loading: loadingList,
     refreshing,
     rows,
     data,

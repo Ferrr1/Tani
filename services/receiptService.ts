@@ -1,4 +1,3 @@
-// services/receiptService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -10,7 +9,6 @@ import { ensureMoneyNum, ensureText } from "@/utils/expense";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 async function assertSeasonOwnership(userId: string, seasonId: string) {
-  // Optional preflight (lebih ramah pesan error). Bisa dihapus jika mau hemat query.
   const { data, error } = await supabase
     .from("seasons")
     .select("id,user_id")
@@ -24,7 +22,6 @@ async function assertSeasonOwnership(userId: string, seasonId: string) {
   }
 }
 
-/** ===== Repo ===== */
 export const receiptRepo = {
   async list(
     userId: string,
@@ -131,17 +128,15 @@ export const receiptRepo = {
 };
 
 export function useReceiptService() {
-  const { user, loading } = useAuth(); // dari AuthContext
+  const { user, authReady } = useAuth(); // dari AuthContext
 
-  const ensureUser = () => {
-    if (loading) throw new Error("Auth masih loading.");
+  const ensureUser = useCallback(() => {
+    if (!authReady) throw new Error("Auth masih loading.");
     if (!user) throw new Error("Tidak ada sesi login.");
     return user;
-  };
+  }, [authReady, user]);
 
   return {
-    loading,
-
     listReceipts: async (opts?: { seasonId?: string | "all" }) => {
       const u = ensureUser();
       return receiptRepo.list(u.id, opts);
@@ -170,7 +165,7 @@ export function useReceiptService() {
 }
 
 export function useReceiptList(initialSeasonId: string | "all" = "all") {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   const [rows, setRows] = useState<ReceiptRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -190,7 +185,7 @@ export function useReceiptList(initialSeasonId: string | "all" = "all") {
   }, []);
 
   const fetchOnce = useCallback(async () => {
-    if (loading || !user) return;
+    if (!user) return;
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -204,14 +199,14 @@ export function useReceiptList(initialSeasonId: string | "all" = "all") {
       inFlight.current = false;
       if (mounted.current) setLoadingList(false);
     }
-  }, [loading, user, seasonId]);
+  }, [user, seasonId]);
 
   useEffect(() => {
     fetchOnce();
   }, [fetchOnce]);
 
   const refresh = useCallback(async () => {
-    if (loading || !user) return;
+    if (!user) return;
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -225,7 +220,7 @@ export function useReceiptList(initialSeasonId: string | "all" = "all") {
       inFlight.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  }, [loading, user, seasonId]);
+  }, [user, seasonId]);
 
   const data = useMemo(() => rows, [rows]);
 
@@ -235,7 +230,7 @@ export function useReceiptList(initialSeasonId: string | "all" = "all") {
   );
 
   return {
-    loading: loadingList || loading,
+    loading: loadingList,
     refreshing,
     rows,
     data,

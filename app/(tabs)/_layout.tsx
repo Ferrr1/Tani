@@ -1,12 +1,19 @@
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs, useRootNavigationState } from 'expo-router';
 import React from 'react';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const navReady = !!useRootNavigationState()?.key;
+  const { authReady, session, profileReady, role } = useAuth();
+  const deciding = !navReady || !authReady || (session && !profileReady);
+  if (deciding) return null;
+  if (!session) return <Redirect href="/(auth)" />;
+  if (role === "admin") return <Redirect href="/(admin)" />;
 
   return (
     <Tabs

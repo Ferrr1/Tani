@@ -1,4 +1,3 @@
-// app/(form)/expense/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonList } from "@/services/seasonService";
 import Ionicons from "@expo/vector-icons/Ionicons";

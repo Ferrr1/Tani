@@ -1,4 +1,3 @@
-// services/chartService.ts
 import { useAuth } from "@/context/AuthContext";
 import { ExpenseRow } from "@/types/expense";
 import { ReceiptRow } from "@/types/receipt";
@@ -10,23 +9,19 @@ import { receiptRepo } from "./receiptService";
 import { seasonRepo } from "./seasonService";
 
 export function useChartData(initialSeasonId: string | "all" = "all") {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
 
-  // ===== State sumber data =====
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
 
-  // ===== State filter =====
   const [seasonId, setSeasonId] = useState<string | "all">(initialSeasonId);
   const [year, setYear] = useState<number | "all">("all");
 
-  // ===== Loading flags =====
   const [loadingSeasons, setLoadingSeasons] = useState(true);
   const [loadingReceipts, setLoadingReceipts] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
-  // guards
   const mounted = useRef(true);
   const inFlightSeasons = useRef(false);
   const inFlightReceipts = useRef(false);
@@ -39,9 +34,8 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     };
   }, []);
 
-  /** ===== Fetch Seasons ===== */
   const fetchSeasons = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlightSeasons.current) return;
     inFlightSeasons.current = true;
     try {
@@ -55,11 +49,10 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
       inFlightSeasons.current = false;
       if (mounted.current) setLoadingSeasons(false);
     }
-  }, [authLoading, user]);
+  }, [user]);
 
-  /** ===== Fetch Receipts (by season filter) ===== */
   const fetchReceipts = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlightReceipts.current) return;
     inFlightReceipts.current = true;
     try {
@@ -73,11 +66,10 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
       inFlightReceipts.current = false;
       if (mounted.current) setLoadingReceipts(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
-  /** ===== Fetch Expenses (by season filter) ===== */
   const fetchExpenses = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlightExpenses.current) return;
     inFlightExpenses.current = true;
     try {
@@ -91,20 +83,17 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
       inFlightExpenses.current = false;
       if (mounted.current) setLoadingExpenses(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
-  /** ===== Initial loads ===== */
   useEffect(() => {
     fetchSeasons();
   }, [fetchSeasons]);
 
   useEffect(() => {
-    // muat data setiap seasonId berubah
     fetchReceipts();
     fetchExpenses();
   }, [seasonId, fetchReceipts, fetchExpenses]);
 
-  /** ===== Year options (dibangun dari data yang sedang aktif) ===== */
   const yearOptions = useMemo(() => {
     const yearsFromReceipts = receipts.map((r) => yearOf(r.created_at));
     const yearsFromExpenses = expenses.map((e) =>
@@ -115,7 +104,6 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     ).sort((a, b) => a - b);
   }, [receipts, expenses]);
 
-  /** ===== Filter by year (opsional; UI: eksklusif dgn season) ===== */
   const filteredReceipts = useMemo(() => {
     if (year === "all") return receipts;
     return receipts.filter((r) => yearOf(r.created_at) === year);
@@ -130,7 +118,6 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     );
   }, [expenses, year]);
 
-  /** ===== Aggregates ===== */
   const totalIn = useMemo(
     () => filteredReceipts.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
     [filteredReceipts]
@@ -142,38 +129,26 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     [filteredExpenses]
   );
 
-  const loading =
-    authLoading || loadingSeasons || loadingReceipts || loadingExpenses;
+  const loading = loadingSeasons || loadingReceipts || loadingExpenses;
 
-  /** ===== API ===== */
   return {
-    // data sumber
     seasons,
     receipts,
     expenses,
-
-    // data terfilter
     filteredReceipts,
     filteredExpenses,
-
-    // filter state
     seasonId,
     setSeasonId,
     year,
     setYear,
     yearOptions,
-
-    // aggregate
     totalIn,
     totalOut,
-
-    // loading
     loading,
     loadingSeasons,
     loadingReceipts,
     loadingExpenses,
 
-    // actions
     fetchAll: () => {
       fetchSeasons();
       fetchReceipts();

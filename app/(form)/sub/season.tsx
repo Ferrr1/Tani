@@ -1,6 +1,7 @@
 // app/season/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
-import { SeasonRow, useSeasonList, useSeasonService } from "@/services/seasonService";
+import { useSeasonList, useSeasonService } from "@/services/seasonService";
+import { SeasonRow } from "@/types/season";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";

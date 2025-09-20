@@ -24,9 +24,10 @@ export default function RegisterScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
-    const { signUp, loading } = useAuth(); // pakai loading dari AuthContext
+    const { signUp, authReady } = useAuth();
     const [showPwd, setShowPwd] = useState(false);
     const [showCrop, setShowCrop] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
 
     const {
         control,
@@ -54,21 +55,23 @@ export default function RegisterScreen() {
         const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
         const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
         try {
+            setSubmitting(true);
             await signUp({
                 email: v.email.trim(),
                 password: v.password,
                 meta: {
-                    // ini masuk ke raw_user_meta_data -> dipakai trigger handle_new_user
                     full_name: v.fullName.trim(),
                     nama_desa: v.village.trim(),
                     jenis_tanaman: finalCrop,
-                    luas_lahan: ha, // simpan apa adanya dalam hektar (sesuai trigger kamu)
+                    luas_lahan: ha,
                 } as any,
             });
         } catch (e: any) {
             console.warn("register error", e);
             const msg = e?.message || "Terjadi kesalahan saat pendaftaran";
             Alert.alert("Gagal Daftar", msg);
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -195,7 +198,7 @@ export default function RegisterScreen() {
                                                 borderRadius: S.radius.md,
                                                 paddingHorizontal: S.spacing.md,
                                                 paddingVertical: 10,
-                                                paddingRight: 42, // space for eye icon
+                                                paddingRight: 42,
                                             },
                                         ]}
                                     />
@@ -406,18 +409,18 @@ export default function RegisterScreen() {
                         {/* Submit */}
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
-                            disabled={loading}
+                            disabled={!authReady || submitting}
                             style={({ pressed }) => [
                                 styles.button,
                                 {
-                                    backgroundColor: loading ? C.tint + "CC" : C.tint,
+                                    backgroundColor: !authReady || submitting ? C.tint + "CC" : C.tint,
                                     borderRadius: S.radius.md,
                                     opacity: pressed ? 0.95 : 1,
                                     marginTop: S.spacing.lg,
                                 },
                             ]}
                         >
-                            {loading ? (
+                            {submitting ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
@@ -428,7 +431,7 @@ export default function RegisterScreen() {
 
                         <Text style={[styles.info, { color: C.textMuted }]}>
                             Sudah punya akun?{" "}
-                            <Link href="/login" style={[styles.link, { color: C.tint }]}>
+                            <Link href="/" style={[styles.link, { color: C.tint }]}>
                                 Masuk
                             </Link>
                         </Text>

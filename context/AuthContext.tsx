@@ -1,264 +1,252 @@
-// src/context/AuthContext.tsx
 import { supabase } from "@/lib/supabase";
-import {
-    changeMyPassword,
-    getMyProfile,
-    updateMyProfile,
-} from "@/services/profileService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { AuthTokenResponsePassword, Session, User } from "@supabase/supabase-js";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+
+import { getMyProfile, updateMyProfile } from "@/services/profileService";
 import type { Profile, Role } from "@/types/profile";
-import type { Session, User } from "@supabase/supabase-js";
-import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
 
-type AuthState = {
-    loading: boolean;
-    booting: boolean;
+const REMEMBER_KEY = "auth:remember";
+const TAG = "[Auth]";
 
+export type AuthState = {
     session: Session | null;
     user: User | null;
+
+    authReady: boolean;
     profile: Profile | null;
+    profileReady: boolean;
     role: Role | null;
-    isAdmin: boolean;
 
+    // ⬇️ dikembalikan seperti sebelumnya
     signUp: (params: { email: string; password: string; meta?: Partial<Profile> }) => Promise<void>;
-    signIn: (params: { email: string; password: string }) => Promise<void>;
-    sendPasswordReset: (email: string) => Promise<void>;
-    signOut: () => Promise<void>;
-    refreshProfile: () => Promise<void>;
 
+    signIn: (email: string, password: string, remember?: boolean) => Promise<AuthTokenResponsePassword>;
+    signOut: () => Promise<void>;
+    reloadProfile: () => Promise<void>;
     updateProfile: (
         patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>
     ) => Promise<void>;
-    changePassword: (newPassword: string) => Promise<void>;
-    // changeEmail?: (newEmail: string) => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState | undefined>(undefined);
+const AuthCtx = createContext<AuthState | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [booting, setBooting] = useState(true);
-    const [loading, setLoading] = useState(true);
-
+export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
-    const [user, setUser] = useState<User | null>(null);
+    const [authReady, setAuthReady] = useState(false);
+
     const [profile, setProfile] = useState<Profile | null>(null);
-
-    const initializing = useRef(true);
-
-    const role: Role | null = profile?.role ?? null;
-    const isAdmin = role === "admin";
-    console.log({ role, isAdmin });
-
-    const fetchProfile = useCallback(async (u?: User | null) => {
-        // ✅ Ambil via service (RLS aman; hanya tabel public.profiles)
-        const p = await getMyProfile();
-        setProfile(p);
-    }, []);
-
-    const bootstrap = useCallback(async () => {
-        try {
-            const { data, error } = await supabase.auth.getSession();
-            if (error) throw error;
-
-            setSession(data.session ?? null);
-            setUser(data.session?.user ?? null);
-
-            if (data.session?.user) {
-                await fetchProfile(data.session.user);
-            } else {
-                setProfile(null);
-            }
-        } finally {
-            setLoading(false);
-            setBooting(false);
-            initializing.current = false;
-        }
-    }, [fetchProfile]);
+    const [profileReady, setProfileReady] = useState(false);
 
     useEffect(() => {
-        bootstrap();
+        let alive = true;
+        console.log(TAG, "mount: start bootstrap");
 
-        const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-            setSession(newSession);
-            setUser(newSession?.user ?? null);
+        (async () => {
+            try {
+                const remember = await AsyncStorage.getItem(REMEMBER_KEY);
+                console.log(TAG, "bootstrap: remember =", remember);
 
-            if (newSession?.user) {
-                try {
-                    await fetchProfile(newSession.user);
-                } catch {
-                    // swallow
+                if (remember !== "1") {
+                    console.log(TAG, "bootstrap: non-remember mode → signOut to clear persisted session");
+                    await supabase.auth.signOut().catch((e) => {
+                        console.log(TAG, "bootstrap: signOut (non-remember) catch:", e?.message);
+                    });
+                    if (!alive) return;
+                    setSession(null);
+                    setAuthReady(true);
+                    console.log(TAG, "bootstrap: done (non-remember)");
+                } else {
+                    console.log(TAG, "bootstrap: remember mode → getSession()");
+                    const { data, error } = await supabase.auth.getSession();
+                    if (error) console.log(TAG, "getSession error:", error.message);
+                    if (!alive) return;
+                    setSession(data.session ?? null);
+                    setAuthReady(true);
+                    console.log(TAG, "bootstrap: done (remember), session.user.id =", data.session?.user?.id ?? null);
                 }
-            } else {
-                setProfile(null);
+            } catch (e: any) {
+                console.log(TAG, "bootstrap error:", e?.message);
+                if (!alive) return;
+                setSession(null);
+                setAuthReady(true);
             }
+        })();
 
-            if (!initializing.current) setLoading(false);
+        const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+            console.log(TAG, "onAuthStateChange:", event, "user.id =", sess?.user?.id ?? null);
+            setSession(sess ?? null);
+            setAuthReady(true);
+            if (event === "SIGNED_OUT") {
+                console.log(TAG, "onAuthStateChange: SIGNED_OUT → clear profile state");
+                setProfile(null);
+                setProfileReady(false);
+            }
         });
 
         return () => {
+            alive = false;
+            console.log(TAG, "unmount: unsubscribe auth listener");
             sub.subscription.unsubscribe();
         };
-    }, [bootstrap, fetchProfile]);
+    }, []);
 
-    // === Actions ===
+    useEffect(() => {
+        let alive = true;
+
+        async function loadProfileOnce() {
+            setProfileReady(false);
+            const uid = session?.user?.id ?? null;
+            console.log(TAG, "loadProfileOnce: start for user.id =", uid);
+
+            try {
+                const p = await getMyProfile();
+                if (!alive) return;
+                setProfile(p ?? null);
+                console.log(TAG, "loadProfileOnce: success, role =", p?.role ?? null);
+            } catch (e: any) {
+                console.log(TAG, "loadProfileOnce error:", e?.message);
+                if (!alive) return;
+                setProfile(null);
+            } finally {
+                if (alive) {
+                    setProfileReady(true);
+                    console.log(TAG, "loadProfileOnce: done (profileReady=true)");
+                }
+            }
+        }
+
+        const userId = session?.user?.id ?? null;
+        if (!userId) {
+            console.log(TAG, "session changed: no user → clear profile, profileReady=false");
+            setProfile(null);
+            setProfileReady(false);
+            return;
+        }
+
+        loadProfileOnce();
+        return () => {
+            alive = false;
+            console.log(TAG, "loadProfileOnce: cancel (effect cleanup)");
+        };
+    }, [session?.user?.id]);
+
     const signUp = useCallback(
         async ({ email, password, meta }: { email: string; password: string; meta?: Partial<Profile> }) => {
-            setLoading(true);
-            try {
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: { data: meta ?? {} },
-                });
-                if (error) throw error;
-
-                if (data.session?.user) {
-                    setSession(data.session);
-                    setUser(data.session.user);
-                    await fetchProfile(data.session.user);
-                }
-            } finally {
-                setLoading(false);
+            console.log(TAG, "signUp: start for", email);
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: { data: meta ?? {} },
+            });
+            if (error) {
+                console.log(TAG, "signUp: error:", error.message);
+                throw error;
             }
+            try {
+                await AsyncStorage.setItem(REMEMBER_KEY, "1");
+                console.log(TAG, "signUp: REMEMBER_KEY set to 1");
+            } catch (e: any) {
+                console.log(TAG, "signUp: set REMEMBER_KEY error:", e?.message);
+            }
+
+            console.log(TAG, "signUp: done, user.id =", data.session?.user?.id ?? null);
         },
-        [fetchProfile]
+        []
     );
 
     const signIn = useCallback(
-        async ({ email, password }: { email: string; password: string }) => {
-            setLoading(true);
+        async (email: string, _password: string, remember: boolean = false) => {
+            console.log(TAG, "signIn: start for", email, "remember =", remember);
+            const res = await supabase.auth.signInWithPassword({ email, password: _password });
+            console.log(TAG, "signIn: supabase response: error =", res.error?.message ?? null, "user.id =", res.data?.user?.id ?? null);
+            if (res.error) throw res.error?.message;
             try {
-                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                if (error) throw error;
-
-                setSession(data.session!);
-                setUser(data.session!.user);
-                await fetchProfile(data.session!.user);
-            } finally {
-                setLoading(false);
+                await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+                console.log(TAG, "signIn: REMEMBER_KEY set to", remember ? "1" : "0");
+            } catch (e: any) {
+                console.log(TAG, "signIn: set REMEMBER_KEY error:", e?.message);
             }
+
+            return res;
         },
-        [fetchProfile]
+        []
     );
 
-    const sendPasswordReset = useCallback(async (email: string) => {
-        setLoading(true);
+    const signOut = useCallback(async () => {
+        console.log(TAG, "signOut: start");
+        await supabase.auth.signOut().catch((e) => {
+            console.log(TAG, "signOut: supabase error:", e?.message);
+        });
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: "tani://reset-password",
-            });
-            if (error) throw error;
-        } finally {
-            setLoading(false);
+            await AsyncStorage.setItem(REMEMBER_KEY, "0");
+            console.log(TAG, "signOut: REMEMBER_KEY set to 0");
+        } catch (e: any) {
+            console.log(TAG, "signOut: set REMEMBER_KEY error:", e?.message);
         }
+        setProfile(null);
+        setProfileReady(false);
+        console.log(TAG, "signOut: done, profile cleared");
     }, []);
 
-    const signOut = useCallback(async () => {
-        setLoading(true);
-        try {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
+    const reloadProfile = useCallback(async () => {
+        const userId = session?.user?.id;
+        if (!userId) {
+            console.log(TAG, "reloadProfile: skipped (no user)");
+            return;
+        }
 
-            setSession(null);
-            setUser(null);
+        console.log(TAG, "reloadProfile: start for user.id =", userId);
+        try {
+            setProfileReady(false);
+            const p = await getMyProfile();
+            setProfile(p ?? null);
+            console.log(TAG, "reloadProfile: success, role =", p?.role ?? null);
+        } catch (e: any) {
+            console.log(TAG, "reloadProfile error:", e?.message);
             setProfile(null);
         } finally {
-            setLoading(false);
+            setProfileReady(true);
+            console.log(TAG, "reloadProfile: done (profileReady=true)");
         }
-    }, []);
-
-    const refreshProfile = useCallback(async () => {
-        setLoading(true);
-        try {
-            const p = await getMyProfile();
-            setProfile(p);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    }, [session?.user?.id]);
 
     const updateProfile = useCallback(
         async (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>) => {
-            setLoading(true);
             try {
                 const updated = await updateMyProfile(patch);
                 setProfile(updated);
-            } finally {
-                setLoading(false);
+            } catch (e) {
+                console.log("updateProfile error:", e);
             }
         },
         []
     );
 
-    const changePassword = useCallback(async (newPassword: string) => {
-        setLoading(true);
-        try {
-            await changeMyPassword(newPassword);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Optional kalau mau expose ganti email dari Context:
-    // const changeEmail = useCallback(async (newEmail: string) => {
-    //   setLoading(true);
-    //   try {
-    //     await changeMyEmail(newEmail);
-    //     await refreshProfile();
-    //   } finally {
-    //     setLoading(false);
-    //   }
-    // }, [refreshProfile]);
-
     const value = useMemo<AuthState>(
         () => ({
-            loading,
-            booting,
             session,
-            user,
+            user: session?.user ?? null,
+            authReady,
             profile,
-            role,
-            isAdmin,
+            profileReady,
+            role: profile?.role ?? null,
             signUp,
             signIn,
-            sendPasswordReset,
             signOut,
-            refreshProfile,
+            reloadProfile,
             updateProfile,
-            changePassword,
-            // changeEmail,
         }),
-        [
-            loading,
-            booting,
-            session,
-            user,
-            profile,
-            role,
-            isAdmin,
-            signUp,
-            signIn,
-            sendPasswordReset,
-            signOut,
-            refreshProfile,
-            updateProfile,
-            changePassword,
-            // changeEmail,
-        ]
+        [session, authReady, profile, profileReady, signUp, signIn, signOut, reloadProfile, updateProfile]
     );
 
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+    console.log(TAG, "render provider: authReady=", authReady, "profileReady=", profileReady, "user.id=", session?.user?.id ?? null);
 
-export function useAuth() {
-    const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+    return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}
+
+export function useAuth(): AuthState {
+    const ctx = useContext(AuthCtx);
+    if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
     return ctx;
 }

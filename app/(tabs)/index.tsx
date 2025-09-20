@@ -2,8 +2,10 @@ import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { getInitialsName } from "@/utils/getInitialsName";
+import { codeToText } from "@/utils/weather";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import { Link, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -17,9 +19,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type WeatherApi = {
-  location: { name: string; region: string; country: string; tz_id: string; localtime: string };
-  current: { temp_c: number; condition: { text: string; icon: string } };
+type WeatherNow = {
+  tempC: number | null;
+  weatherCode: number | null;
+  conditionText: string;
+  tzId: string;               // e.g. "Asia/Jakarta"
+  localIso: string;           // ISO string like "2025-09-19T10:30"
+  city?: string;
+  region?: string;
 };
 
 const TZ_ABBR: Record<string, string> = {
@@ -27,6 +34,9 @@ const TZ_ABBR: Record<string, string> = {
   "Asia/Makassar": "WITA",
   "Asia/Jayapura": "WIT",
 };
+
+// map kode Open-Meteo → teks sederhana (ID)
+
 
 export default function HomeScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -45,71 +55,120 @@ export default function HomeScreen() {
     return "Selamat malam";
   }, []);
 
-  // ====== WeatherAPI (ambil suhu, kondisi, tanggal, tz)
-  const [wx, setWx] = useState<WeatherApi | null>(null);
+  // ====== Cuaca (tanpa API key, pakai Open-Meteo + lokasi perangkat)
+  const [wx, setWx] = useState<WeatherNow | null>(null);
   const [loading, setLoading] = useState(true);
-  const API_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY as string;
-  const QUERY = (process.env.EXPO_PUBLIC_WEATHER_QUERY as string) || "auto:ip";
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+
+    async function loadWeather() {
       try {
         setLoading(true);
-        const url = `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${encodeURIComponent(
-          QUERY
-        )}&aqi=no`;
+
+        // 1) Minta izin lokasi
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") throw new Error("Izin lokasi ditolak.");
+
+        // 2) Ambil posisi & reverse geocode untuk nama kota/region
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const { latitude: lat, longitude: lon } = pos.coords;
+
+        let city: string | undefined;
+        let region: string | undefined;
+        try {
+          const rg = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+          if (rg?.[0]) {
+            city = rg[0].city || rg[0].subregion || rg[0].district || rg[0].name || undefined;
+            region = rg[0].region || rg[0].subregion || undefined;
+          }
+        } catch {
+          // abaikan kesalahan reverse geocode
+        }
+
+        const params = new URLSearchParams({
+          latitude: String(lat),
+          longitude: String(lon),
+          current: "temperature_2m,weather_code",
+          timezone: "auto",
+        });
+        const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
         const res = await fetch(url);
-        const data: WeatherApi = await res.json();
-        if (!cancelled) setWx(data);
-      } catch {
-        if (!cancelled)
+        if (!res.ok) throw new Error(`Weather fetch failed: ${res.status}`);
+        const json = await res.json();
+
+        const tempC = json?.current?.temperature_2m ?? null;
+        const code = json?.current?.weather_code ?? null;
+        const timeIso = json?.current?.time ?? new Date().toISOString();
+        const tzId = json?.timezone ?? "Asia/Jakarta";
+
+        if (!cancelled) {
           setWx({
-            location: {
-              name: "Malang",
-              region: "Jawa Timur",
-              country: "Indonesia",
-              tz_id: "Asia/Jakarta",
-              localtime: new Date()
-                .toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" })
-                .replace("T", " "),
-            },
-            current: { temp_c: 28, condition: { text: "Cerah berawan", icon: "" } },
+            tempC,
+            weatherCode: code,
+            conditionText: codeToText(code),
+            tzId,
+            localIso: timeIso,
+            city,
+            region,
           });
+        }
+      } catch {
+        if (!cancelled) {
+          const tz = "Asia/Jakarta";
+          const nowJakarta = new Date().toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
+          setWx({
+            tempC: 28,
+            weatherCode: 2,
+            conditionText: "Cerah berawan",
+            tzId: tz,
+            localIso: nowJakarta,
+            city: "Malang",
+            region: "Jawa Timur",
+          });
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
-    load();
+    }
+
+    loadWeather();
     return () => {
       cancelled = true;
     };
   }, []);
 
   const dateText = useMemo(() => {
-    if (!wx) return "";
-    const d = new Date(wx.location.localtime.replace(" ", "T"));
+    const iso = wx?.localIso;
+    if (!iso) return "";
+    const d = new Date(iso);
     return d.toLocaleDateString("id-ID", {
       weekday: "long",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
-  }, [wx]);
+  }, [wx?.localIso]);
 
   const tzAbbr = useMemo(() => {
-    if (!wx) return "WIB";
-    return TZ_ABBR[wx.location.tz_id] ?? (wx.location.tz_id.split("/").pop() || "WIB");
-  }, [wx]);
+    const tz = wx?.tzId;
+    if (!tz || typeof tz !== "string") return "WIB";
+    const mapped = TZ_ABBR[tz];
+    if (mapped) return mapped;
+    const last = tz.includes("/") ? tz.split("/").pop() : tz;
+    return last || "WIB";
+  }, [wx?.tzId]);
 
   const menus = [
-    { key: "season", label: "Musim", icon: "calendar-outline", color: C.success, href: "/season" },
+    { key: "season", label: "Musim", icon: "calendar-outline", color: C.success, href: "/sub/season" },
     { key: "income", label: "Penerimaan", icon: "arrow-down-circle-outline", color: C.success, href: "/income" },
     { key: "expense", label: "Pengeluaran", icon: "arrow-up-circle-outline", color: C.danger, href: "/expense" },
     { key: "chart", label: "Chart", icon: "stats-chart-outline", color: C.info, href: "/chart" },
     { key: "report", label: "Report", icon: "document-text-outline", color: C.tint, href: "/report" },
   ] as const;
-  console.log(profile)
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: C.background }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: S.spacing.xl }} showsVerticalScrollIndicator={false}>
@@ -132,7 +191,7 @@ export default function HomeScreen() {
             <HeaderLogoutButton size={28} confirm={true} />
 
             <Pressable
-              onPress={() => router.push("/(sub)/profile")}
+              onPress={() => router.push("/(form)/sub/profile")}
               style={[
                 styles.avatarWrap,
                 { borderColor: C.success, backgroundColor: C.surface },
@@ -171,11 +230,18 @@ export default function HomeScreen() {
               <>
                 <View style={styles.mainRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.mainTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
-                      {wx?.current?.temp_c ?? "-"}°
+                    {/* Weight cuaca: suhu sangat tebal, deskripsi medium */}
+                    <Text style={[
+                      styles.mainTitle,
+                      { color: C.text, fontFamily: Fonts.rounded as any, fontWeight: "900" }
+                    ]}>
+                      {wx?.tempC != null ? Math.round(wx.tempC) : "-"}°
                     </Text>
-                    <Text style={[styles.mainSub, { color: C.text, fontFamily: Fonts.sans as any }]}>
-                      {wx?.current?.condition?.text ?? "-"}
+                    <Text style={[
+                      styles.mainSub,
+                      { color: C.text, fontFamily: Fonts.sans as any, fontWeight: "700" }
+                    ]}>
+                      {wx?.conditionText ?? "-"}
                     </Text>
                   </View>
                   <Ionicons name="leaf-outline" size={44} color={C.tint} />
@@ -193,7 +259,7 @@ export default function HomeScreen() {
                   <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="location-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>
-                      {wx?.location?.name ?? ""}{wx?.location?.region ? `, ${wx.location.region}` : ""}
+                      {(wx?.city ?? "") + (wx?.region ? `, ${wx.region}` : "")}
                     </Text>
                   </View>
                 </View>
@@ -202,7 +268,7 @@ export default function HomeScreen() {
           </LinearGradient>
 
           <View style={{ marginTop: S.spacing.lg, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
-            {menus.map((m, i) => (
+            {menus.map((m) => (
               <Link style={{ justifyContent: "center", alignItems: "center" }} key={m.key} href={m.href} asChild>
                 <Pressable
                   style={({ pressed }) => [
@@ -250,7 +316,6 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
     width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
   },
-  avatar: { width: "100%", height: "100%" },
 
   // Main card (gradient sama dengan header)
   mainCard: { marginTop: 16, padding: 16, borderWidth: 1 },
@@ -270,7 +335,7 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 12, fontWeight: "700" },
 
-  // Square menu (2 per baris)
+  // Square menu
   square: {
     borderWidth: 1,
     alignItems: "center",
