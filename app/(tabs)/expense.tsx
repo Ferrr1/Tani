@@ -1,4 +1,5 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useSeasonFilter } from "@/context/SeasonFilterContext";
 import { useExpenseList, useExpenseService } from "@/services/expenseService";
 import { useSeasonList } from "@/services/seasonService";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -25,19 +26,11 @@ export default function ExpenseScreen() {
 
     // Seasons
     const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
-    const [seasonId, setSeasonId] = useState<string | "all">("all");
+    console.log("EXPENSE SCREEN: seasonRows", seasonRows);
+    const { seasonId, setSeasonId, ready } = useSeasonFilter();
     const [openSeasonList, setOpenSeasonList] = useState(false);
 
-    // default pilih season terbaru
-    useEffect(() => {
-        if (seasonRows.length && (seasonId === "all" || !seasonId)) {
-            const sorted = [...seasonRows].sort(
-                (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-            );
-            setSeasonId(sorted[0].id);
-        }
-    }, [seasonRows, seasonId]);
-
+    // Urutkan: terbaru di atas
     const seasons = useMemo(
         () =>
             [...seasonRows].sort(
@@ -45,36 +38,45 @@ export default function ExpenseScreen() {
             ),
         [seasonRows]
     );
-    const currentSeason = useMemo(
-        () => seasons.find((s) => s.id === seasonId),
+
+    // Inisialisasi default sekali saat filter belum ada & data sudah siap
+    useEffect(() => {
+        if (!ready) return;
+        if (seasonId != null) return;
+        if (!seasons.length) return;
+        setSeasonId(seasons[0].id);
+    }, [ready, seasonId, seasons, setSeasonId]);
+
+    const currentIdx = useMemo(
+        () => (seasonId ? seasons.findIndex((s) => s.id === seasonId) : -1),
         [seasons, seasonId]
     );
+    const currentSeason = currentIdx >= 0 ? seasons[currentIdx] : undefined;
 
-    // Expenses
+    // Expenses — filter hanya dari argumen (no setter internal)
     const {
         loading: expenseLoading,
         refreshing,
         data: expenses,
-        setSeasonId: setExpenseSeasonId,
-        fetchOnce: fetchExpenses,
         refresh: refreshExpenses,
         grandTotalCash,
         grandTotalNonCash,
         typeInfo,
-    } = useExpenseList(seasonId);
+    } = useExpenseList(seasonId ?? undefined);
 
     const { deleteExpense } = useExpenseService();
 
+    // Fetch seasons saat fokus + paksa refresh data sesuai filter aktif
     useFocusEffect(
         useCallback(() => {
             fetchSeasons();
-            fetchExpenses();
-        }, [fetchSeasons, fetchExpenses])
+            setOpenSeasonList(false);
+            if (ready && seasonId) {
+                refreshExpenses({ force: true });
+            }
+            return () => setOpenSeasonList(false);
+        }, [fetchSeasons, ready, seasonId, refreshExpenses])
     );
-
-    useEffect(() => {
-        setExpenseSeasonId(seasonId);
-    }, [seasonId, setExpenseSeasonId]);
 
     const formatDate = (iso: string) =>
         new Date(iso).toLocaleDateString("id-ID", {
@@ -100,7 +102,7 @@ export default function ExpenseScreen() {
                     onPress: async () => {
                         try {
                             await deleteExpense(id);
-                            await refreshExpenses();
+                            await refreshExpenses({ force: true });
                         } catch (e: any) {
                             Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus data.");
                         }
@@ -111,13 +113,28 @@ export default function ExpenseScreen() {
         [deleteExpense, refreshExpenses]
     );
 
-    const showBlocking = (seasonLoading || expenseLoading) && expenses.length === 0;
-
-
     const goEdit = (expenseId: string) => {
-        const qs = seasonId && seasonId !== "all" ? `?expenseId=${expenseId}&seasonId=${seasonId}` : `?expenseId=${expenseId}`;
+        const qs = seasonId ? `?expenseId=${expenseId}&seasonId=${seasonId}` : `?expenseId=${expenseId}`;
         router.push(`/(form)/expense/costType${qs}`);
     };
+
+    // Tahan render sampai filter siap
+    if (!ready) {
+        return (
+            <SafeAreaView style={{ flex: 1, backgroundColor: C.background, alignItems: "center", justifyContent: "center" }}>
+                <ActivityIndicator color={C.tint} size="large" />
+                <Text style={{ marginTop: 8, color: C.textMuted }}>Menyiapkan filter…</Text>
+            </SafeAreaView>
+        );
+    }
+
+    const showBlocking = (seasonLoading || expenseLoading) && (expenses?.length ?? 0) === 0;
+
+    // Navigasi prev/next season (sama seperti IncomeScreen)
+    const canPrev = currentIdx >= 0 && currentIdx < seasons.length - 1;
+    const canNext = currentIdx > 0;
+    const goPrev = () => { if (canPrev) setSeasonId(seasons[currentIdx + 1].id); };
+    const goNext = () => { if (canNext) setSeasonId(seasons[currentIdx - 1].id); };
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -138,10 +155,7 @@ export default function ExpenseScreen() {
                 <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                     <Pressable
                         onPress={() =>
-                            router.push(
-                                // sesuaikan path form “expense” kamu
-                                `/(form)/expense/expenseType${seasonId && seasonId !== "all" ? `?seasonId=${seasonId}` : ""}`
-                            )
+                            router.push(`/(form)/expense/expenseType${seasonId ? `?seasonId=${seasonId}` : ""}`)
                         }
                         style={({ pressed }) => [
                             styles.addBtn,
@@ -156,6 +170,110 @@ export default function ExpenseScreen() {
                 </View>
             </LinearGradient>
 
+            {/* FILTER SEASON (di luar FlatList, sama seperti IncomeScreen) */}
+            <View
+                style={[
+                    styles.selectorCard,
+                    {
+                        backgroundColor: C.surface,
+                        borderColor: C.border,
+                        borderRadius: S.radius.lg,
+                        marginHorizontal: S.spacing.lg,
+                        marginTop: S.spacing.lg,
+                    },
+                    scheme === "light" ? S.shadow.light : S.shadow.dark,
+                ]}
+            >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Pressable
+                        onPress={goPrev}
+                        disabled={!canPrev}
+                        style={({ pressed }) => [
+                            styles.navBtn,
+                            {
+                                borderColor: C.border,
+                                backgroundColor: canPrev ? C.surfaceSoft : C.surface,
+                                opacity: pressed ? 0.9 : 1,
+                            },
+                        ]}
+                    >
+                        <Ionicons name="chevron-back" size={16} color={canPrev ? C.text : C.textMuted} />
+                    </Pressable>
+
+                    <Pressable
+                        onPress={() => setOpenSeasonList((v) => !v)}
+                        style={({ pressed }) => [
+                            styles.seasonRow,
+                            { borderColor: C.border, opacity: pressed ? 0.96 : 1, flex: 1 },
+                        ]}
+                    >
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.seasonTitle, { color: C.text }]}>
+                                {currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
+                            </Text>
+                            {currentSeason && (
+                                <Text style={[styles.seasonRange, { color: C.textMuted }]}>
+                                    {formatDate(currentSeason.start_date)} — {formatDate(currentSeason.end_date)}
+                                </Text>
+                            )}
+                        </View>
+                        <Ionicons name={openSeasonList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+                    </Pressable>
+
+                    <Pressable
+                        onPress={goNext}
+                        disabled={!canNext}
+                        style={({ pressed }) => [
+                            styles.navBtn,
+                            {
+                                borderColor: C.border,
+                                backgroundColor: canNext ? C.surfaceSoft : C.surface,
+                                opacity: pressed ? 0.9 : 1,
+                            },
+                        ]}
+                    >
+                        <Ionicons name="chevron-forward" size={16} color={canNext ? C.text : C.textMuted} />
+                    </Pressable>
+                </View>
+
+                {openSeasonList && (
+                    <View style={[styles.seasonList, { borderColor: C.border }]}>
+                        {seasons.map((s) => (
+                            <Pressable
+                                key={s.id}
+                                onPress={() => {
+                                    setSeasonId(s.id);     // simpan global + persist
+                                    setOpenSeasonList(false);
+                                }}
+                                style={({ pressed }) => [
+                                    styles.seasonItem,
+                                    {
+                                        backgroundColor:
+                                            s.id === seasonId
+                                                ? (scheme === "light" ? C.surfaceSoft : C.surface)
+                                                : "transparent",
+                                        opacity: pressed ? 0.96 : 1,
+                                    },
+                                ]}
+                            >
+                                <Text
+                                    style={{
+                                        color: C.text,
+                                        fontWeight: (s.id === seasonId ? "800" : "600") as any,
+                                    }}
+                                >
+                                    Musim Ke-{s.season_no}
+                                </Text>
+                                <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                    {formatDate(s.start_date)} — {formatDate(s.end_date)}
+                                </Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                )}
+            </View>
+
+            {/* LIST */}
             {showBlocking ? (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                     <ActivityIndicator color={C.tint} size={"large"} />
@@ -163,95 +281,14 @@ export default function ExpenseScreen() {
                 </View>
             ) : (
                 <FlatList
+                    key={seasonId ?? "none"} // remount list ketika filter berubah
                     data={expenses}
                     keyExtractor={(it) => it.id}
-                    contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
+                    contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl, paddingTop: S.spacing.md }}
                     ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
                     refreshing={refreshing}
-                    onRefresh={refreshExpenses}
-                    ListHeaderComponent={
-                        <View
-                            style={[
-                                styles.selectorCard,
-                                {
-                                    backgroundColor: C.surface,
-                                    borderColor: C.border,
-                                    borderRadius: S.radius.lg,
-                                    marginBottom: S.spacing.md,
-                                },
-                                scheme === "light" ? S.shadow.light : S.shadow.dark,
-                            ]}
-                        >
-                            {/* Season selector */}
-                            <Pressable
-                                onPress={() => setOpenSeasonList((v) => !v)}
-                                style={({ pressed }) => [
-                                    styles.seasonRow,
-                                    { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
-                                ]}
-                            >
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.seasonTitle, { color: C.text }]}>
-                                        {currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
-                                    </Text>
-                                    {currentSeason && (
-                                        <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                                            {formatDate(currentSeason.start_date)} — {formatDate(currentSeason.end_date)}
-                                        </Text>
-                                    )}
-                                </View>
-                                <Ionicons name={openSeasonList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-                            </Pressable>
-
-                            {openSeasonList && (
-                                <View style={[styles.seasonList, { borderColor: C.border }]}>
-                                    {seasons.map((s) => (
-                                        <Pressable
-                                            key={s.id}
-                                            onPress={() => {
-                                                setSeasonId(s.id);
-                                                setOpenSeasonList(false);
-                                            }}
-                                            style={({ pressed }) => [
-                                                styles.seasonItem,
-                                                {
-                                                    backgroundColor:
-                                                        s.id === seasonId
-                                                            ? scheme === "light"
-                                                                ? C.surfaceSoft
-                                                                : C.surface
-                                                            : "transparent",
-                                                    opacity: pressed ? 0.96 : 1,
-                                                },
-                                            ]}
-                                        >
-                                            <Text
-                                                style={{
-                                                    color: C.text,
-                                                    fontWeight: (s.id === seasonId ? "800" : "600") as any,
-                                                }}
-                                            >
-                                                Musim Ke-{s.season_no}
-                                            </Text>
-                                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                                {formatDate(s.start_date)} — {formatDate(s.end_date)}
-                                            </Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-                    }
-                    ListFooterComponent={
-                        expenses.length > 0 ? (
-                            <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                                <Text style={{ color: C.textMuted, fontSize: 12 }}>Total Pengeluaran</Text>
-                                <Text style={{ color: C.danger, fontSize: 16, fontWeight: "900" }}>
-                                    {formatMoney(grandTotalCash + grandTotalNonCash)}
-                                </Text>
-                            </View>
-                        ) : null
-                    }
+                    onRefresh={() => refreshExpenses({ force: true })}
+                    onScrollBeginDrag={() => setOpenSeasonList(false)}
                     renderItem={({ item }) => {
                         const info = typeInfo(item.type);
                         const isCash = item.type === "cash";
@@ -332,10 +369,39 @@ export default function ExpenseScreen() {
                             </View>
                         );
                     }}
+                    ListFooterComponent={
+                        (expenses?.length ?? 0) > 0 ? (
+                            <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                                <Text style={{ color: C.textMuted, fontSize: 12 }}>Total Pengeluaran</Text>
+                                <Text style={{ color: C.danger, fontSize: 16, fontWeight: "900" }}>
+                                    {formatMoney(grandTotalCash + grandTotalNonCash)}
+                                </Text>
+                            </View>
+                        ) : null
+                    }
                     ListEmptyComponent={
                         !(seasonLoading || expenseLoading) ? (
-                            <View style={{ alignItems: "center", marginTop: 24 }}>
-                                <Text style={{ color: C.textMuted }}>Belum ada data pengeluaran.</Text>
+                            <View
+                                style={[
+                                    styles.emptyWrap,
+                                    { backgroundColor: C.surface, borderColor: C.border, borderRadius: S.radius.lg },
+                                    scheme === "light" ? S.shadow.light : S.shadow.dark,
+                                ]}
+                            >
+                                <Ionicons name="document-text-outline" size={24} color={C.icon} />
+                                <Text style={{ color: C.textMuted, marginTop: 6 }}>Belum ada data pengeluaran.</Text>
+                                <Pressable
+                                    onPress={() =>
+                                        router.push(`/(form)/expense/expenseType${seasonId ? `?seasonId=${seasonId}` : ""}`)
+                                    }
+                                    style={({ pressed }) => [
+                                        styles.ctaEmpty,
+                                        { backgroundColor: C.tint, opacity: pressed ? 0.95 : 1 },
+                                    ]}
+                                >
+                                    <Ionicons name="add" size={16} color="#fff" />
+                                    <Text style={{ color: "#fff", fontWeight: "800" }}>Tambah Data</Text>
+                                </Pressable>
                             </View>
                         ) : null
                     }
@@ -360,7 +426,7 @@ const styles = StyleSheet.create({
     },
     addText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 
-    // Season selector card
+    // Season selector
     selectorCard: { padding: 12, borderWidth: 1 },
     seasonRow: {
         flexDirection: "row",
@@ -375,8 +441,16 @@ const styles = StyleSheet.create({
     seasonRange: { fontSize: 12, marginTop: 2 },
     seasonList: { borderTopWidth: 1, borderRadius: 10, overflow: "hidden", marginTop: 10 },
     seasonItem: { paddingHorizontal: 12, paddingVertical: 10 },
+    navBtn: {
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+        alignItems: "center",
+        justifyContent: "center",
+    },
 
-    // List item row card
+    // List rows
     rowCard: {
         padding: 12,
         borderWidth: 1,
@@ -395,7 +469,7 @@ const styles = StyleSheet.create({
         justifyContent: "flex-start",
         gap: 6,
     },
-    actions: { flexDirection: "row", gap: 8, marginLeft: 8 },
+    actions: { flexDirection: "column", gap: 8, marginLeft: 8 },
     actionBtn: {
         borderWidth: 1,
         borderRadius: 10,
@@ -406,4 +480,22 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     actionText: { fontSize: 11, fontWeight: "800" },
+
+    // Empty state
+    emptyWrap: {
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        borderWidth: 1,
+        marginTop: 12,
+    },
+    ctaEmpty: {
+        marginTop: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 12,
+        flexDirection: "row",
+        gap: 6,
+        alignItems: "center",
+    },
 });

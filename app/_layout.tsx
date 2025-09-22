@@ -1,5 +1,7 @@
 import { AuthProvider } from '@/context/AuthContext';
+import { SeasonFilterProvider } from '@/context/SeasonFilterContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { STACK_ANIM } from '@/navigation/stackAnim';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -14,9 +16,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="auto" />
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade_from_bottom', statusBarAnimation: 'fade' }} />
+          <SeasonFilterProvider>
+            <StatusBar style="auto" />
+            <Stack screenOptions={STACK_ANIM} />
+          </SeasonFilterProvider>
         </ThemeProvider>
       </AuthProvider>
     </SafeAreaProvider>

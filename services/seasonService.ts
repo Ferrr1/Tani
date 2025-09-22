@@ -229,33 +229,15 @@ export function useSeasonList() {
 
   const years = useMemo(() => computeYears(rows), [rows, computeYears]);
 
-  const data = useMemo(() => {
-    const filtered =
-      year === "all"
-        ? rows
-        : rows.filter((r) => {
-            const y1 = new Date(r.start_date).getFullYear();
-            const y2 = new Date(r.end_date).getFullYear();
-            return y1 === year || y2 === year;
-          });
-
-    return filtered.sort(
-      (a, b) =>
-        new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-    );
-  }, [rows, year]);
-
   return {
     // state untuk UI
     loading: loadingList, // gabungan
     refreshing,
     rows, // full rows kalau kamu butuh mentahnya
-    data, // rows yang sudah terfilter & tersort untuk FlatList
     years, // daftar tahun tersedia
     year,
     setYear, // kontrol filter tahun
 
-    // action siap pakai
     fetchOnce, // panggil di useEffect awal (idempotent)
     refresh, // pasang ke onRefresh FlatList
   };

@@ -182,7 +182,9 @@ export default function HomeScreen() {
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.greet, { color: C.text, fontFamily: Fonts.rounded as any }]}>{greet}</Text>
-              <Text style={[styles.greetName, { color: C.text, fontFamily: Fonts.sans as any }]}>{displayName}</Text>
+              <Text style={[styles.greetName, { color: C.text, fontFamily: Fonts.sans as any }]}
+                numberOfLines={1}
+              >{displayName}</Text>
               <Text style={[styles.greetSub, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
                 Semoga panenmu subur dan melimpah.
               </Text>

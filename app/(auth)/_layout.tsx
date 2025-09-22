@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import { STACK_ANIM } from "@/navigation/stackAnim";
 import { Redirect, SplashScreen, Stack, useRootNavigationState } from "expo-router";
 import { useEffect } from "react";
 
@@ -20,7 +21,7 @@ const AuthLayout = () => {
         return <Redirect href={role === "admin" ? "/(admin)" : "/(tabs)"} />;
     }
 
-    return <Stack screenOptions={{ headerShown: false }} />;
+    return <Stack screenOptions={STACK_ANIM} />;
 };
 
 export default AuthLayout;

@@ -8,14 +8,23 @@ import { expenseRepo } from "./expenseService";
 import { receiptRepo } from "./receiptService";
 import { seasonRepo } from "./seasonService";
 
-export function useChartData(initialSeasonId: string | "all" = "all") {
+/**
+ * Versi sinkron dengan service terbaru:
+ * - seasonId optional (undefined = semua season)
+ * - Anti-race untuk setiap fetch (seasons/receipts/expenses)
+ * - Refetch kuat ketika seasonId berubah
+ * - Tetap sediakan year filter
+ */
+export function useChartData(initialSeasonId?: string | "all") {
   const { user } = useAuth();
 
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
 
-  const [seasonId, setSeasonId] = useState<string | "all">(initialSeasonId);
+  // Peta "all" -> undefined agar service mengambil semua season
+  const initial = initialSeasonId === "all" ? undefined : initialSeasonId;
+  const [seasonId, setSeasonId] = useState<string | undefined>(initial);
   const [year, setYear] = useState<number | "all">("all");
 
   const [loadingSeasons, setLoadingSeasons] = useState(true);
@@ -23,9 +32,9 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
   const mounted = useRef(true);
-  const inFlightSeasons = useRef(false);
-  const inFlightReceipts = useRef(false);
-  const inFlightExpenses = useRef(false);
+  const reqSeasonsRef = useRef(0);
+  const reqReceiptsRef = useRef(0);
+  const reqExpensesRef = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -34,66 +43,73 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     };
   }, []);
 
+  /** ====== FETCHERS (anti-race) ====== */
   const fetchSeasons = useCallback(async () => {
     if (!user) return;
-    if (inFlightSeasons.current) return;
-    inFlightSeasons.current = true;
+    setLoadingSeasons(true);
+    const myReq = ++reqSeasonsRef.current;
     try {
-      if (mounted.current) setLoadingSeasons(true);
       const data = await seasonRepo.list(user.id);
-      if (!mounted.current) return;
+      if (!mounted.current || myReq !== reqSeasonsRef.current) return;
       setSeasons(data);
     } catch (e) {
       console.warn("chartService.fetchSeasons", e);
     } finally {
-      inFlightSeasons.current = false;
-      if (mounted.current) setLoadingSeasons(false);
+      if (!mounted.current || myReq !== reqSeasonsRef.current) return;
+      setLoadingSeasons(false);
     }
   }, [user]);
 
   const fetchReceipts = useCallback(async () => {
     if (!user) return;
-    if (inFlightReceipts.current) return;
-    inFlightReceipts.current = true;
+    setLoadingReceipts(true);
+    const myReq = ++reqReceiptsRef.current;
     try {
-      if (mounted.current) setLoadingReceipts(true);
-      const data = await receiptRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
+      const data = await receiptRepo.list(user.id, { seasonId }); // seasonId undefined => semua
+      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
       setReceipts(data);
     } catch (e) {
       console.warn("chartService.fetchReceipts", e);
     } finally {
-      inFlightReceipts.current = false;
-      if (mounted.current) setLoadingReceipts(false);
+      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
+      setLoadingReceipts(false);
     }
   }, [user, seasonId]);
 
   const fetchExpenses = useCallback(async () => {
     if (!user) return;
-    if (inFlightExpenses.current) return;
-    inFlightExpenses.current = true;
+    setLoadingExpenses(true);
+    const myReq = ++reqExpensesRef.current;
     try {
-      if (mounted.current) setLoadingExpenses(true);
-      const data = await expenseRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
+      const data = await expenseRepo.list(user.id, { seasonId }); // seasonId undefined => semua
+      if (!mounted.current || myReq !== reqExpensesRef.current) return;
       setExpenses(data);
     } catch (e) {
       console.warn("chartService.fetchExpenses", e);
     } finally {
-      inFlightExpenses.current = false;
-      if (mounted.current) setLoadingExpenses(false);
+      if (!mounted.current || myReq !== reqExpensesRef.current) return;
+      setLoadingExpenses(false);
     }
   }, [user, seasonId]);
 
+  /** ====== EFFECTS ====== */
+  // Sekali saat mount: ambil seasons
   useEffect(() => {
     fetchSeasons();
   }, [fetchSeasons]);
 
+  // Setiap kali seasonId berubah → reset data & refetch kuat (menang lawan respons lama)
   useEffect(() => {
-    fetchReceipts();
-    fetchExpenses();
-  }, [seasonId, fetchReceipts, fetchExpenses]);
+    setReceipts([]);
+    setExpenses([]);
+    if (user) {
+      // dengan menaikkan reqId di masing-masing fetch, respons lama tidak bisa override
+      fetchReceipts();
+      fetchExpenses();
+    }
+  }, [user?.id, seasonId, fetchReceipts, fetchExpenses]);
 
+  /** ====== DERIVATIVES ====== */
   const yearOptions = useMemo(() => {
     const yearsFromReceipts = receipts.map((r) => yearOf(r.created_at));
     const yearsFromExpenses = expenses.map((e) =>
@@ -131,28 +147,40 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
 
   const loading = loadingSeasons || loadingReceipts || loadingExpenses;
 
+  /** ====== API ====== */
+  const refreshAll = useCallback(() => {
+    // Paksa request baru (req id naik) agar mengalahkan respons lama
+    fetchSeasons();
+    fetchReceipts();
+    fetchExpenses();
+  }, [fetchSeasons, fetchReceipts, fetchExpenses]);
+
   return {
+    // data
     seasons,
     receipts,
     expenses,
     filteredReceipts,
     filteredExpenses,
+
+    // filter
     seasonId,
-    setSeasonId,
+    setSeasonId, // kirim string | undefined; undefined = semua season
     year,
     setYear,
     yearOptions,
+
+    // aggregates
     totalIn,
     totalOut,
+
+    // loading flags
     loading,
     loadingSeasons,
     loadingReceipts,
     loadingExpenses,
 
-    fetchAll: () => {
-      fetchSeasons();
-      fetchReceipts();
-      fetchExpenses();
-    },
+    // actions
+    fetchAll: refreshAll,
   };
 }

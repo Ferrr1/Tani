@@ -229,7 +229,7 @@ export default function LoginScreen() {
                             </Link>
                         </Text>
 
-                        <Text style={[styles.info, { color: C.textMuted, marginTop: 6 }]}>
+                        <Text style={[styles.info, { color: C.textMuted }]}>
                             Lupa password?{" "}
                             <Pressable
                                 style={{ marginTop: 6 }}
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     err: { marginTop: 6, fontSize: 12 },
     button: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
     btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-    info: { marginTop: 14, textAlign: "center", fontSize: 13 },
+    info: { marginTop: 14, textAlign: "center", fontSize: 13, alignItems: "center" },
     link: { fontWeight: "700", textDecorationLine: "underline" },
     helper: { marginTop: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 },
 });

@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import { STACK_ANIM } from "@/navigation/stackAnim";
 import { Redirect, Stack, useRootNavigationState } from "expo-router";
 
 const AdminLayout = () => {
@@ -9,7 +10,7 @@ const AdminLayout = () => {
     if (!profileReady) return null;
     if (role !== "admin") return <Redirect href="/(tabs)" />;
 
-    return <Stack screenOptions={{ headerShown: false }} />;
+    return <Stack screenOptions={STACK_ANIM} />;
 };
 
 export default AdminLayout;
