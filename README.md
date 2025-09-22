@@ -1,30 +1,37 @@
 # Welcome to Tani Apps 👋
 
+Aplikasi mobile untuk manajemen pertanian berbasis **Expo** (React Native).
+
 ## Get started
 
-1. Konfigurasi Environment Variable seperti contoh pada .env.example
+1. **Konfigurasikan Environment Variables** (lihat contoh di `.env.example`)
 
-```bash
-   EXPO_PUBLIC_SUPABASE_URL
-   EXPO_PUBLIC_SUPABASE_ANON_KEY
-```
+   Tambahkan nilai berikut ke file `.env` di root proyek:
 
-2. Install dependencies
-
-   ```bash
-   npm install
+   ```env
+   EXPO_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+   ``
    ```
 
-3. Start the app
+2. **Install dependencies**
+   `bash
+npm install
+`
+3. **Start Aplikasi**
+   `bash
+npx expo start
+`
 
-   ```bash
-   npx expo start
-   ```
+Setelah perintah di atas berjalan, pilih target untuk membuka aplikasi:
 
-Pada output start anda bisa memilih menjalankan aplikasi menggunakan emulator atau expo go
-aplikasi yang di install pada perangkat anda.
+Development build
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Android emulator
+
+iOS simulator
+
+Expo Go
+— sandbox ringan untuk mencoba aplikasi Expo
+
+Catatan: Anda juga bisa membuka aplikasi di perangkat fisik menggunakan Expo Go yang sudah terpasang.
