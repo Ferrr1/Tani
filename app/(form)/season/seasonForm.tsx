@@ -1,4 +1,3 @@
-// app/(form)/season/seasonForm.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonService } from "@/services/seasonService";
 import { SeasonFormValues } from "@/types/season";
@@ -30,14 +29,10 @@ export default function SeasonForm() {
     const router = useRouter();
     const { seasonId } = useLocalSearchParams<{ seasonId?: string }>();
     const isEdit = !!seasonId;
-
-    // Service
-    const { loading: authLoading, getSeasonById, createSeason, updateSeason } = useSeasonService();
-
+    const { getSeasonById, createSeason, updateSeason } = useSeasonService();
     const [initialLoading, setInitialLoading] = useState<boolean>(isEdit);
     const [saving, setSaving] = useState(false);
 
-    // DatePicker toggles (mutually exclusive)
     const [openStart, setOpenStart] = useState(false);
     const [openEnd, setOpenEnd] = useState(false);
 
@@ -58,7 +53,6 @@ export default function SeasonForm() {
     const dStart = parseDMY(start);
     const dEnd = parseDMY(end);
 
-    // Anti infinite-fetch saat edit
     const hasFetchedRef = useRef(false);
 
     useEffect(() => {
@@ -68,7 +62,6 @@ export default function SeasonForm() {
                 setInitialLoading(false);
                 return;
             }
-            if (authLoading) return;
             if (hasFetchedRef.current) return;
 
             hasFetchedRef.current = true;
@@ -78,7 +71,7 @@ export default function SeasonForm() {
                 if (!alive) return;
                 if (!row) {
                     Alert.alert("Tidak ditemukan", "Data musim tidak ditemukan.");
-                    router.replace("/(sub)/season");
+                    router.replace("/(form)/sub/season");
                     return;
                 }
                 reset({
@@ -89,7 +82,7 @@ export default function SeasonForm() {
             } catch (e: any) {
                 if (!alive) return;
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat memuat data musim.");
-                router.replace("/(sub)/season");
+                router.replace("/(form)/sub/season");
             } finally {
                 if (alive) setInitialLoading(false);
             }
@@ -100,7 +93,7 @@ export default function SeasonForm() {
             alive = false;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authLoading, isEdit, seasonId, reset]);
+    }, [isEdit, seasonId, reset]);
 
     const durationText = useMemo(() => {
         if (!dStart || !dEnd) return "";
@@ -111,7 +104,6 @@ export default function SeasonForm() {
     }, [dStart, dEnd]);
 
     const onSubmit = async (v: SeasonFormValues) => {
-        if (authLoading) return;
         const d1 = parseDMY(v.startDate);
         const d2 = parseDMY(v.endDate);
         const n = parseInt((v.seasonNo || "").toString().replace(",", "."), 10);
@@ -149,12 +141,18 @@ export default function SeasonForm() {
                     endDate: toISO(d2),
                 });
             }
-            router.replace("/(sub)/season");
+            router.replace("/(form)/sub/season");
         } catch (e: any) {
-            Alert.alert(
-                "Gagal",
-                e?.message ?? (isEdit ? "Tidak dapat memperbarui musim." : "Tidak dapat membuat musim.")
-            );
+            console.warn("SEASONFORM", e.code);
+            if (e.code === "23505") {
+                Alert.alert("Validasi", "Musim ke-" + n + " sudah ada.");
+            } else {
+                Alert.alert(
+                    "Gagal",
+                    (isEdit ? "Tidak dapat memperbarui musim." : "Tidak dapat membuat musim.")
+                );
+            }
+
         } finally {
             setSaving(false);
         }
@@ -190,7 +188,7 @@ export default function SeasonForm() {
         setValue("endDate", fmtDMY(finalDate), { shouldValidate: true, shouldDirty: true });
     };
 
-    const showBlockingLoader = authLoading || initialLoading;
+    const showBlockingLoader = initialLoading;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -202,7 +200,7 @@ export default function SeasonForm() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.replace("/(sub)/season")}
+                        onPress={() => router.replace("/(form)/sub/season")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
@@ -225,7 +223,7 @@ export default function SeasonForm() {
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                     <ActivityIndicator color={C.tint} size={"large"} />
                     <Text style={{ marginTop: 8, color: C.textMuted }}>
-                        {authLoading ? "Menyiapkan sesi..." : "Memuat data…"}
+                        {"Memuat musim…"}
                     </Text>
                 </View>
             ) : (

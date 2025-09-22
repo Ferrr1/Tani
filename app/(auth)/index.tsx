@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { openWhatsApp } from "@/services/openWhatsApp";
 import { LoginForm } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -15,7 +16,7 @@ import {
     Text,
     TextInput,
     View,
-    useColorScheme
+    useColorScheme,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,9 +25,12 @@ export default function LoginScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
-    const { signIn, loading, booting } = useAuth();
+
+    const { signIn, authReady } = useAuth();
 
     const [showPwd, setShowPwd] = useState(false);
+    const [remember, setRemember] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
 
     const {
         control,
@@ -39,9 +43,12 @@ export default function LoginScreen() {
 
     const onSubmit = async (v: LoginForm) => {
         try {
-            await signIn({ email: v.email.trim(), password: v.password });
+            setSubmitting(true);
+            await signIn(v.email.trim(), v.password, remember);
         } catch (error: any) {
             Alert.alert("Gagal", error?.message ?? "Tidak dapat login.");
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -137,14 +144,22 @@ export default function LoginScreen() {
                                                 borderRadius: S.radius.md,
                                                 paddingHorizontal: S.spacing.md,
                                                 paddingVertical: 10,
-                                                paddingRight: 42, // space for eye icon
+                                                paddingRight: 42,
                                             },
                                         ]}
                                     />
                                     <Pressable
                                         onPress={() => setShowPwd((s) => !s)}
                                         hitSlop={10}
-                                        style={{ position: "absolute", right: 10, top: 10, height: 24, width: 24, alignItems: "center", justifyContent: "center" }}
+                                        style={{
+                                            position: "absolute",
+                                            right: 10,
+                                            top: 10,
+                                            height: 24,
+                                            width: 24,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                        }}
                                     >
                                         <Ionicons
                                             name={showPwd ? "eye-off-outline" : "eye-outline"}
@@ -159,20 +174,48 @@ export default function LoginScreen() {
                             <Text style={[styles.err, { color: C.danger }]}>{errors.password.message}</Text>
                         )}
 
+                        {/* Remember me */}
+                        <Pressable
+                            onPress={() => setRemember((r) => !r)}
+                            style={{
+                                marginTop: S.spacing.md,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 10,
+                            }}
+                            hitSlop={10}
+                        >
+                            <Ionicons
+                                name={remember ? "checkbox-outline" : "square-outline"}
+                                size={22}
+                                color={remember ? C.tint : C.icon}
+                            />
+                            <Text
+                                style={{
+                                    color: C.text,
+                                    fontFamily: Fonts.sans as any,
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                }}
+                            >
+                                Ingat saya
+                            </Text>
+                        </Pressable>
+
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
-                            disabled={loading || booting}
+                            disabled={!authReady || submitting}
                             style={({ pressed }) => [
                                 styles.button,
                                 {
-                                    backgroundColor: (loading || booting) ? C.tint + "CC" : C.tint,
+                                    backgroundColor: !authReady || submitting ? C.tint + "CC" : C.tint,
                                     borderRadius: S.radius.md,
                                     opacity: pressed ? 0.95 : 1,
                                     marginTop: S.spacing.lg,
                                 },
                             ]}
                         >
-                            {loading || booting ? (
+                            {submitting ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>Masuk</Text>
@@ -186,8 +229,19 @@ export default function LoginScreen() {
                             </Link>
                         </Text>
 
-                        <Text style={[styles.info, { color: C.textMuted, marginTop: 6 }]}>
-                            Lupa password?{" "} Hubungi admin
+                        <Text style={[styles.info, { color: C.textMuted }]}>
+                            Lupa password?{" "}
+                            <Pressable
+                                style={{ marginTop: 6 }}
+                                onPress={() =>
+                                    openWhatsApp({
+                                        phone: "6282244882045",
+                                        text: "Halo Admin, saya lupa password.",
+                                    })
+                                }
+                            >
+                                <Text style={[styles.link, { color: C.tint }]}>Hubungi via WhatsApp</Text>
+                            </Pressable>
                         </Text>
                     </View>
 
@@ -215,7 +269,7 @@ const styles = StyleSheet.create({
     err: { marginTop: 6, fontSize: 12 },
     button: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
     btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-    info: { marginTop: 14, textAlign: "center", fontSize: 13 },
+    info: { marginTop: 14, textAlign: "center", fontSize: 13, alignItems: "center" },
     link: { fontWeight: "700", textDecorationLine: "underline" },
     helper: { marginTop: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 },
 });

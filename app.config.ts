@@ -12,6 +12,10 @@ const config: ExpoConfig = {
   newArchEnabled: true,
 
   ios: {
+    infoPlist: {
+      NSLocationWhenInUseUsageDescription:
+        "Aplikasi butuh akses lokasi untuk menampilkan cuaca di sekitar Anda.",
+    },
     supportsTablet: true,
   },
 
@@ -49,8 +53,8 @@ const config: ExpoConfig = {
     eas: {
       projectId: "7eee7067-17a8-424f-ac84-5f330582810c",
     },
-    SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
-    SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   },
   updates: {
     url: "https://u.expo.dev/7eee7067-17a8-424f-ac84-5f330582810c",

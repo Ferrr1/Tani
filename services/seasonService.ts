@@ -1,4 +1,3 @@
-// services/seasonService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -108,17 +107,15 @@ export const seasonRepo = {
   },
 };
 export function useSeasonService() {
-  const { user, loading } = useAuth(); // dari AuthContext
+  const { user, authReady } = useAuth(); // dari AuthContext
 
-  const ensureUser = () => {
-    if (loading) throw new Error("Auth masih loading.");
+  const ensureUser = useCallback(() => {
+    if (!authReady) throw new Error("Auth masih loading.");
     if (!user) throw new Error("Tidak ada sesi login.");
     return user;
-  };
+  }, [authReady, user]);
 
   return {
-    loading,
-
     listSeasons: async () => {
       const u = ensureUser();
       return seasonRepo.list(u.id);
@@ -146,7 +143,7 @@ export function useSeasonService() {
   };
 }
 export function useSeasonList() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const [rows, setRows] = useState<SeasonRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -180,7 +177,7 @@ export function useSeasonList() {
   }, []);
 
   const fetchOnce = useCallback(async () => {
-    if (loading || !user) {
+    if (!user) {
       // auth belum siap → tunda tanpa fetch
       return;
     }
@@ -203,7 +200,7 @@ export function useSeasonList() {
       inFlight.current = false;
       if (mounted.current) setLoadingList(false);
     }
-  }, [loading, user, computeYears]);
+  }, [user, computeYears]);
 
   // initial fetch, & setiap kali user berubah
   useEffect(() => {
@@ -213,7 +210,7 @@ export function useSeasonList() {
   }, [user, fetchOnce]);
 
   const refresh = useCallback(async () => {
-    if (loading || !user) return;
+    if (!user) return;
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -228,37 +225,19 @@ export function useSeasonList() {
       inFlight.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  }, [loading, user]);
+  }, [user]);
 
   const years = useMemo(() => computeYears(rows), [rows, computeYears]);
 
-  const data = useMemo(() => {
-    const filtered =
-      year === "all"
-        ? rows
-        : rows.filter((r) => {
-            const y1 = new Date(r.start_date).getFullYear();
-            const y2 = new Date(r.end_date).getFullYear();
-            return y1 === year || y2 === year;
-          });
-
-    return filtered.sort(
-      (a, b) =>
-        new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-    );
-  }, [rows, year]);
-
   return {
     // state untuk UI
-    loading: loadingList || loading, // gabungan
+    loading: loadingList, // gabungan
     refreshing,
     rows, // full rows kalau kamu butuh mentahnya
-    data, // rows yang sudah terfilter & tersort untuk FlatList
     years, // daftar tahun tersedia
     year,
     setYear, // kontrol filter tahun
 
-    // action siap pakai
     fetchOnce, // panggil di useEffect awal (idempotent)
     refresh, // pasang ke onRefresh FlatList
   };

@@ -2,7 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from "react-native";
 
 type Props = {
@@ -16,15 +16,18 @@ export default function HeaderLogoutButton({
     color,
     size = 18,
 }: Props) {
-    const { signOut, loading } = useAuth();
+    const { signOut } = useAuth();
+    const [isLogout, setLogoutting] = useState(false);
     const router = useRouter();
 
     const onLogout = async () => {
         const doLogout = async () => {
             try {
+                setLogoutting(true);
                 await signOut();
+                router.replace("/(auth)");
             } finally {
-                router.replace("/(auth)/login");
+                setLogoutting(false);
             }
         };
 
@@ -45,21 +48,21 @@ export default function HeaderLogoutButton({
     return (
         <Pressable
             onPress={onLogout}
-            disabled={loading}
+            disabled={isLogout}
             style={({ pressed }) => [
                 styles.btn,
                 {
                     borderColor: C.border,
                     backgroundColor: C.danger + "45",
-                    opacity: loading ? 0.6 : pressed ? 0.9 : 1,
+                    opacity: isLogout ? 0.6 : pressed ? 0.9 : 1,
                 },
             ]}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Logout"
         >
-            {loading ? (
-                <ActivityIndicator color={"#fff"} />
+            {isLogout ? (
+                <ActivityIndicator color={"#fff"} size={size} />
             ) : (
                 <Ionicons
                     style={{ marginLeft: 4 }}

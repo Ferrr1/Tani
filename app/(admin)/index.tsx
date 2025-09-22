@@ -1,7 +1,6 @@
-// app/(admin)/index.tsx (atau path screen kamu)
 import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
-import { useAdminUserList } from "@/services/adminUserService"; // <— service baru
+import { useAdminUserList } from "@/services/adminUserService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,7 +20,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Bentuk data untuk UI list
 type AppUser = {
     id: string;
     fullName: string;
@@ -38,10 +36,7 @@ export default function HomeAdminScreen() {
     const S = Tokens;
     const router = useRouter();
 
-    // ====== Service fetch ======
     const { rows, loading, refreshing, fetchOnce, refresh } = useAdminUserList();
-
-    // Mapping row -> AppUser untuk tampilan
     const users: AppUser[] = useMemo(
         () =>
             rows.map((r) => ({
@@ -51,12 +46,11 @@ export default function HomeAdminScreen() {
                 village: r.nama_desa ?? null,
                 cropType: r.jenis_tanaman ?? null,
                 landAreaHa: r.luas_lahan ?? null,
-                avatar: (r as any).avatar_url ?? null, // kalau ada kolom avatar_url
+                avatar: (r as any).avatar_url ?? null,
             })),
         [rows]
     );
 
-    // ====== Search ======
     const [q, setQ] = useState("");
     const filtered = useMemo(() => {
         const key = q.trim().toLowerCase();
@@ -75,12 +69,10 @@ export default function HomeAdminScreen() {
         });
     }, [q, users]);
 
-    // ====== Refresh controls ======
     const onRefresh = useCallback(async () => {
         await refresh();
     }, [refresh]);
 
-    // Refetch setiap kali screen difokuskan
     useFocusEffect(
         useCallback(() => {
             fetchOnce();
@@ -165,7 +157,7 @@ export default function HomeAdminScreen() {
                 <View style={[styles.search, { borderColor: C.border, backgroundColor: C.surface }]}>
                     <Ionicons name="search-outline" size={16} color={C.icon} />
                     <TextInput
-                        placeholder="Cari nama, HP, desa, atau komoditas…"
+                        placeholder="Cari nama, desa, atau komoditas…"
                         placeholderTextColor={C.icon}
                         value={q}
                         onChangeText={setQ}

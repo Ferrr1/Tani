@@ -1,4 +1,3 @@
-// services/reportService.ts
 import { useAuth } from "@/context/AuthContext";
 import { expenseRepo } from "@/services/expenseService";
 import { receiptRepo } from "@/services/receiptService";
@@ -49,7 +48,6 @@ export type ReportExtraItem = {
 };
 
 export type ReportDataset = {
-  /** master */
   seasons: SeasonRow[];
   yearOptions: number[];
   receipts: ReceiptRow[];
@@ -90,7 +88,7 @@ async function fetchAllExpenseItemsFor(userId: string, expenseIds: string[]) {
 
 /** ===== Hook utama: gunakan di halaman Report ===== */
 export function useReportData(initialSeasonId: string | "all" = "all") {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
 
   // sumber
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
@@ -119,7 +117,7 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
 
   /** fetchers */
   const fetchSeasons = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlight.current.seasons) return;
     inFlight.current.seasons = true;
     try {
@@ -133,10 +131,10 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
       inFlight.current.seasons = false;
       if (mounted.current) setLoadingSeasons(false);
     }
-  }, [authLoading, user]);
+  }, [user]);
 
   const fetchReceipts = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlight.current.receipts) return;
     inFlight.current.receipts = true;
     try {
@@ -150,10 +148,10 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
       inFlight.current.receipts = false;
       if (mounted.current) setLoadingReceipts(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
   const fetchExpenses = useCallback(async () => {
-    if (authLoading || !user) return;
+    if (!user) return;
     if (inFlight.current.expenses) return;
     inFlight.current.expenses = true;
     try {
@@ -167,7 +165,7 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
       inFlight.current.expenses = false;
       if (mounted.current) setLoadingExpenses(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
   // initial
   useEffect(() => {
@@ -284,7 +282,7 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
           stageLabel,
           laborType,
           peopleCount: people * landFactor,
-          days, // days tidak dikali faktor luas karena sudah multiplikatif via peopleCount jika butuh (tergantung interpretasi)
+          days,
           dailyWage: wage,
           value: value * landFactor,
           hok: hok * landFactor,
@@ -312,7 +310,7 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
             : it.extra_kind === "land_rent"
             ? "land_rent"
             : "other";
-        const amount = Number(it.unit_price) || 0; // di service input dibuat quantity=1, unit_price=amount
+        const amount = Number(it.unit_price) || 0;
         return {
           kind,
           label:
@@ -357,8 +355,7 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
     [filteredReceipts, filteredExpenses, seasons, yearOptions, user]
   );
 
-  const loading =
-    authLoading || loadingSeasons || loadingReceipts || loadingExpenses;
+  const loading = loadingSeasons || loadingReceipts || loadingExpenses;
 
   return {
     // filters

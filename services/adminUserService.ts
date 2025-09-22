@@ -1,4 +1,3 @@
-// services/adminUserService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { FunctionsHttpError } from "@supabase/supabase-js";
@@ -25,7 +24,7 @@ export type UpdateUserInput = {
   newNamaDesa?: string;
   newJenisTanaman?: string;
   newLuasLahan?: number;
-  newRole?: "user" | "admin";
+  newRole: "user" | "admin";
 };
 
 export type ListUsersOpts = {
@@ -84,7 +83,6 @@ export const adminUserRepo = {
       newRole,
     } = input;
 
-    // 1) Ubah email/password via Edge Function (kalau diisi)
     if (newEmail || newPassword) {
       const { error } = await supabase.functions.invoke("admin-update-user", {
         body: { targetUserId, newEmail, newPassword },
@@ -100,20 +98,18 @@ export const adminUserRepo = {
       }
     }
 
-    // 2) Ubah kolom profile via RPC (selalu boleh dipanggil; hanya nilai yang tidak null yang di-set)
     const { error: eRpc } = await supabase.rpc("admin_update_profile_only", {
       target_user_id: targetUserId,
       new_full_name: newFullName ?? null,
       new_nama_desa: newNamaDesa ?? null,
       new_jenis_tanaman: newJenisTanaman ?? null,
       new_luas_lahan: newLuasLahan ?? null,
-      new_role: newRole ?? null,
+      new_role: newRole,
     });
     if (eRpc) throw eRpc;
   },
 
   async remove(targetUserId: string): Promise<void> {
-    // (opsional) punya function admin-delete-user sendiri
     const { error } = await supabase.functions.invoke("admin-delete-user", {
       body: { targetUserId },
     });
@@ -129,15 +125,14 @@ export const adminUserRepo = {
   },
 };
 
-/** ===== Service (auth-aware) ===== */
 export function useAdminUserService() {
-  const { user, loading } = useAuth();
+  const { user, authReady } = useAuth();
 
   const ensureAdmin = useCallback(() => {
-    if (loading) throw new Error("Auth masih loading.");
+    if (!authReady) throw new Error("Auth masih authReady.");
     if (!user) throw new Error("Tidak ada sesi login.");
     return user;
-  }, [loading, user]);
+  }, [authReady, user]);
 
   const listUsers = useCallback(
     (opts?: ListUsersOpts) => {
@@ -173,17 +168,16 @@ export function useAdminUserService() {
 
   return useMemo(
     () => ({
-      loading,
+      authReady,
       listUsers,
       getUserById,
       updateUser,
       deleteUser,
     }),
-    [loading, listUsers, getUserById, updateUser, deleteUser]
+    [authReady, listUsers, getUserById, updateUser, deleteUser]
   );
 }
 
-/** ===== List hook ===== */
 export function useAdminUserList(initialQ = "", initialLimit = 50) {
   const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -249,7 +243,6 @@ export function useAdminUserList(initialQ = "", initialLimit = 50) {
   };
 }
 
-/** ===== Detail hook ===== */
 export function useAdminUserDetail(targetUserId?: string) {
   const [row, setRow] = useState<AdminUserRow | null>(null);
   const [loading, setLoading] = useState(true);

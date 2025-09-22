@@ -1,10 +1,10 @@
-// app/season/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
-import { SeasonRow, useSeasonList, useSeasonService } from "@/services/seasonService";
+import { useSeasonList, useSeasonService } from "@/services/seasonService";
+import { SeasonRow } from "@/types/season";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,29 +22,44 @@ export default function SeasonScreen() {
   const router = useRouter();
   const C = Colors[scheme];
   const S = Tokens;
-
-  // Data list anti-spam (fetchOnce, refresh, filter tahun)
   const {
     loading,
     refreshing,
-    data,
-    years,
-    year,
-    setYear,
+    rows,
     fetchOnce,
     refresh,
   } = useSeasonList();
-
-  // CRUD (hapus)
   const { deleteSeason } = useSeasonService();
 
-  // buka/utup dropdown tahun
   const [openYearList, setOpenYearList] = useState(false);
+  const [yearUI, setYearUI] = useState<number | "all">("all");
+  const yearsUI = useMemo(() => {
+    const ys = new Set<number>();
+    for (const s of rows) {
+      const a = new Date(s.start_date).getFullYear();
+      const b = new Date(s.end_date).getFullYear();
+      const minY = Math.min(a, b);
+      const maxY = Math.max(a, b);
+      for (let y = minY; y <= maxY; y++) ys.add(y);
+    }
+    return Array.from(ys).sort((a, b) => b - a); // desc
+  }, [rows]);
 
-  // initial fetch (idempotent)
+  const filteredRows = useMemo(() => {
+    if (yearUI === "all") return rows;
+    const Y = yearUI as number;
+    return rows.filter((s) => {
+      const yStart = new Date(s.start_date).getFullYear();
+      const yEnd = new Date(s.end_date).getFullYear();
+      return yStart === Y || yEnd === Y || (yStart < Y && yEnd > Y);
+    });
+  }, [rows, yearUI]);
+
   useFocusEffect(
     useCallback(() => {
       fetchOnce();
+      setOpenYearList(false);
+      return () => setOpenYearList(false);
     }, [fetchOnce])
   );
 
@@ -75,7 +90,7 @@ export default function SeasonScreen() {
             onPress: async () => {
               try {
                 await deleteSeason(item.id);
-                await refresh(); // sinkron ulang tanpa ubah filter tahun user
+                await refresh(); // re-sync, tidak mengubah yearUI
               } catch (e: any) {
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus musim.");
               }
@@ -153,8 +168,7 @@ export default function SeasonScreen() {
     [C, S, scheme, handleEdit, handleDelete]
   );
 
-  // loader blok awal
-  const showBlockingLoader = loading && data.length === 0;
+  const showBlockingLoader = loading && rows.length === 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -195,6 +209,82 @@ export default function SeasonScreen() {
         </Pressable>
       </LinearGradient>
 
+      {/* === FILTER TAHUN (DI LUAR FLATLIST) === */}
+      <View
+        style={[
+          styles.selectorCard,
+          {
+            backgroundColor: C.surface,
+            borderColor: C.border,
+            borderRadius: S.radius.lg,
+            marginHorizontal: S.spacing.lg,
+            marginTop: S.spacing.lg,
+          },
+          scheme === "light" ? S.shadow.light : S.shadow.dark,
+        ]}
+      >
+        <Pressable
+          onPress={() => setOpenYearList((v) => !v)}
+          style={({ pressed }) => [
+            styles.yearRow,
+            { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.yearTitle, { color: C.text }]}>Tahun</Text>
+            <Text style={[styles.yearValue, { color: C.textMuted }]}>
+              {yearUI === "all" ? "Semua" : yearUI}
+            </Text>
+          </View>
+          <Ionicons name={openYearList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+        </Pressable>
+
+        {openYearList && (
+          <View style={[styles.yearList, { borderColor: C.border }]}>
+            <Pressable
+              onPress={() => {
+                setYearUI("all");
+                setOpenYearList(false);
+              }}
+              style={({ pressed }) => [
+                styles.yearItem,
+                {
+                  backgroundColor:
+                    yearUI === "all" ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                  opacity: pressed ? 0.96 : 1,
+                },
+              ]}
+            >
+              <Text style={{ color: C.text, fontWeight: (yearUI === "all" ? "800" : "600") as any }}>
+                Semua
+              </Text>
+            </Pressable>
+
+            {yearsUI.map((y) => (
+              <Pressable
+                key={y}
+                onPress={() => {
+                  setYearUI(y);
+                  setOpenYearList(false);
+                }}
+                style={({ pressed }) => [
+                  styles.yearItem,
+                  {
+                    backgroundColor:
+                      y === yearUI ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                    opacity: pressed ? 0.96 : 1,
+                  },
+                ]}
+              >
+                <Text style={{ color: C.text, fontWeight: (y === yearUI ? "800" : "600") as any }}>
+                  {y}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+
       {showBlockingLoader ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator color={C.tint} size={"large"} />
@@ -202,78 +292,18 @@ export default function SeasonScreen() {
         </View>
       ) : (
         <FlatList
-          data={data}
+          data={filteredRows} // <- pakai hasil filter UI
           keyExtractor={(it) => it.id}
-          contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl }}
+          contentContainerStyle={{
+            padding: S.spacing.lg,
+            paddingBottom: S.spacing.xl,
+            paddingTop: S.spacing.md,
+          }}
           ItemSeparatorComponent={() => <View style={{ height: S.spacing.md }} />}
           refreshing={refreshing}
           onRefresh={refresh}
-          ListHeaderComponent={
-            <View
-              style={[
-                styles.selectorCard,
-                { backgroundColor: C.surface, borderColor: C.border, borderRadius: S.radius.lg },
-                scheme === "light" ? S.shadow.light : S.shadow.dark,
-              ]}
-            >
-              <Pressable
-                onPress={() => setOpenYearList((v) => !v)}
-                style={({ pressed }) => [
-                  styles.yearRow,
-                  { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.yearTitle, { color: C.text }]}>Tahun</Text>
-                  <Text style={[styles.yearValue, { color: C.textMuted }]}>
-                    {year === "all" ? "Semua" : year}
-                  </Text>
-                </View>
-                <Ionicons name={openYearList ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-              </Pressable>
-
-              {openYearList && (
-                <View style={[styles.yearList, { borderColor: C.border }]}>
-                  <Pressable
-                    onPress={() => {
-                      setYear("all"); // tidak akan di-override lagi oleh service
-                      setOpenYearList(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.yearItem,
-                      {
-                        backgroundColor: year === "all" ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
-                        opacity: pressed ? 0.96 : 1,
-                      },
-                    ]}
-                  >
-                    <Text style={{ color: C.text, fontWeight: (year === "all" ? "800" : "600") as any }}>
-                      Semua
-                    </Text>
-                  </Pressable>
-
-                  {years.map((y) => (
-                    <Pressable
-                      key={y}
-                      onPress={() => {
-                        setYear(y);
-                        setOpenYearList(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.yearItem,
-                        {
-                          backgroundColor: y === year ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
-                          opacity: pressed ? 0.96 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: C.text, fontWeight: (y === year ? "800" : "600") as any }}>{y}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-          }
+          onScrollBeginDrag={() => setOpenYearList(false)}
+          renderItem={renderItem}
           ListEmptyComponent={
             !loading ? (
               <View style={{ alignItems: "center", marginTop: 32 }}>
@@ -281,7 +311,6 @@ export default function SeasonScreen() {
               </View>
             ) : null
           }
-          renderItem={renderItem}
         />
       )}
     </SafeAreaView>
@@ -312,7 +341,7 @@ const styles = StyleSheet.create({
   addText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 
   // Year selector
-  selectorCard: { padding: 12, borderWidth: 1, marginBottom: 12 },
+  selectorCard: { padding: 12, borderWidth: 1 },
   yearRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -344,7 +373,7 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: "center",
   },
-  actions: { flexDirection: "row", gap: 8, marginLeft: 8 },
+  actions: { flexDirection: "column", gap: 8, marginLeft: 8 },
   actionBtn: {
     borderWidth: 1,
     borderRadius: 10,

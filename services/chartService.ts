@@ -1,4 +1,3 @@
-// services/chartService.ts
 import { useAuth } from "@/context/AuthContext";
 import { ExpenseRow } from "@/types/expense";
 import { ReceiptRow } from "@/types/receipt";
@@ -9,28 +8,33 @@ import { expenseRepo } from "./expenseService";
 import { receiptRepo } from "./receiptService";
 import { seasonRepo } from "./seasonService";
 
-export function useChartData(initialSeasonId: string | "all" = "all") {
-  const { user, loading: authLoading } = useAuth();
+/**
+ * Versi sinkron dengan service terbaru:
+ * - seasonId optional (undefined = semua season)
+ * - Anti-race untuk setiap fetch (seasons/receipts/expenses)
+ * - Refetch kuat ketika seasonId berubah
+ * - Tetap sediakan year filter
+ */
+export function useChartData(initialSeasonId?: string | "all") {
+  const { user } = useAuth();
 
-  // ===== State sumber data =====
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
 
-  // ===== State filter =====
-  const [seasonId, setSeasonId] = useState<string | "all">(initialSeasonId);
+  // Peta "all" -> undefined agar service mengambil semua season
+  const initial = initialSeasonId === "all" ? undefined : initialSeasonId;
+  const [seasonId, setSeasonId] = useState<string | undefined>(initial);
   const [year, setYear] = useState<number | "all">("all");
 
-  // ===== Loading flags =====
   const [loadingSeasons, setLoadingSeasons] = useState(true);
   const [loadingReceipts, setLoadingReceipts] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
-  // guards
   const mounted = useRef(true);
-  const inFlightSeasons = useRef(false);
-  const inFlightReceipts = useRef(false);
-  const inFlightExpenses = useRef(false);
+  const reqSeasonsRef = useRef(0);
+  const reqReceiptsRef = useRef(0);
+  const reqExpensesRef = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -39,72 +43,73 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     };
   }, []);
 
-  /** ===== Fetch Seasons ===== */
+  /** ====== FETCHERS (anti-race) ====== */
   const fetchSeasons = useCallback(async () => {
-    if (authLoading || !user) return;
-    if (inFlightSeasons.current) return;
-    inFlightSeasons.current = true;
+    if (!user) return;
+    setLoadingSeasons(true);
+    const myReq = ++reqSeasonsRef.current;
     try {
-      if (mounted.current) setLoadingSeasons(true);
       const data = await seasonRepo.list(user.id);
-      if (!mounted.current) return;
+      if (!mounted.current || myReq !== reqSeasonsRef.current) return;
       setSeasons(data);
     } catch (e) {
       console.warn("chartService.fetchSeasons", e);
     } finally {
-      inFlightSeasons.current = false;
-      if (mounted.current) setLoadingSeasons(false);
+      if (!mounted.current || myReq !== reqSeasonsRef.current) return;
+      setLoadingSeasons(false);
     }
-  }, [authLoading, user]);
+  }, [user]);
 
-  /** ===== Fetch Receipts (by season filter) ===== */
   const fetchReceipts = useCallback(async () => {
-    if (authLoading || !user) return;
-    if (inFlightReceipts.current) return;
-    inFlightReceipts.current = true;
+    if (!user) return;
+    setLoadingReceipts(true);
+    const myReq = ++reqReceiptsRef.current;
     try {
-      if (mounted.current) setLoadingReceipts(true);
-      const data = await receiptRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
+      const data = await receiptRepo.list(user.id, { seasonId }); // seasonId undefined => semua
+      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
       setReceipts(data);
     } catch (e) {
       console.warn("chartService.fetchReceipts", e);
     } finally {
-      inFlightReceipts.current = false;
-      if (mounted.current) setLoadingReceipts(false);
+      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
+      setLoadingReceipts(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
-  /** ===== Fetch Expenses (by season filter) ===== */
   const fetchExpenses = useCallback(async () => {
-    if (authLoading || !user) return;
-    if (inFlightExpenses.current) return;
-    inFlightExpenses.current = true;
+    if (!user) return;
+    setLoadingExpenses(true);
+    const myReq = ++reqExpensesRef.current;
     try {
-      if (mounted.current) setLoadingExpenses(true);
-      const data = await expenseRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
+      const data = await expenseRepo.list(user.id, { seasonId }); // seasonId undefined => semua
+      if (!mounted.current || myReq !== reqExpensesRef.current) return;
       setExpenses(data);
     } catch (e) {
       console.warn("chartService.fetchExpenses", e);
     } finally {
-      inFlightExpenses.current = false;
-      if (mounted.current) setLoadingExpenses(false);
+      if (!mounted.current || myReq !== reqExpensesRef.current) return;
+      setLoadingExpenses(false);
     }
-  }, [authLoading, user, seasonId]);
+  }, [user, seasonId]);
 
-  /** ===== Initial loads ===== */
+  /** ====== EFFECTS ====== */
+  // Sekali saat mount: ambil seasons
   useEffect(() => {
     fetchSeasons();
   }, [fetchSeasons]);
 
+  // Setiap kali seasonId berubah → reset data & refetch kuat (menang lawan respons lama)
   useEffect(() => {
-    // muat data setiap seasonId berubah
-    fetchReceipts();
-    fetchExpenses();
-  }, [seasonId, fetchReceipts, fetchExpenses]);
+    setReceipts([]);
+    setExpenses([]);
+    if (user) {
+      // dengan menaikkan reqId di masing-masing fetch, respons lama tidak bisa override
+      fetchReceipts();
+      fetchExpenses();
+    }
+  }, [user?.id, seasonId, fetchReceipts, fetchExpenses]);
 
-  /** ===== Year options (dibangun dari data yang sedang aktif) ===== */
+  /** ====== DERIVATIVES ====== */
   const yearOptions = useMemo(() => {
     const yearsFromReceipts = receipts.map((r) => yearOf(r.created_at));
     const yearsFromExpenses = expenses.map((e) =>
@@ -115,7 +120,6 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     ).sort((a, b) => a - b);
   }, [receipts, expenses]);
 
-  /** ===== Filter by year (opsional; UI: eksklusif dgn season) ===== */
   const filteredReceipts = useMemo(() => {
     if (year === "all") return receipts;
     return receipts.filter((r) => yearOf(r.created_at) === year);
@@ -130,7 +134,6 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     );
   }, [expenses, year]);
 
-  /** ===== Aggregates ===== */
   const totalIn = useMemo(
     () => filteredReceipts.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
     [filteredReceipts]
@@ -142,42 +145,42 @@ export function useChartData(initialSeasonId: string | "all" = "all") {
     [filteredExpenses]
   );
 
-  const loading =
-    authLoading || loadingSeasons || loadingReceipts || loadingExpenses;
+  const loading = loadingSeasons || loadingReceipts || loadingExpenses;
 
-  /** ===== API ===== */
+  /** ====== API ====== */
+  const refreshAll = useCallback(() => {
+    // Paksa request baru (req id naik) agar mengalahkan respons lama
+    fetchSeasons();
+    fetchReceipts();
+    fetchExpenses();
+  }, [fetchSeasons, fetchReceipts, fetchExpenses]);
+
   return {
-    // data sumber
+    // data
     seasons,
     receipts,
     expenses,
-
-    // data terfilter
     filteredReceipts,
     filteredExpenses,
 
-    // filter state
+    // filter
     seasonId,
-    setSeasonId,
+    setSeasonId, // kirim string | undefined; undefined = semua season
     year,
     setYear,
     yearOptions,
 
-    // aggregate
+    // aggregates
     totalIn,
     totalOut,
 
-    // loading
+    // loading flags
     loading,
     loadingSeasons,
     loadingReceipts,
     loadingExpenses,
 
     // actions
-    fetchAll: () => {
-      fetchSeasons();
-      fetchReceipts();
-      fetchExpenses();
-    },
+    fetchAll: refreshAll,
   };
 }

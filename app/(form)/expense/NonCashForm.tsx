@@ -44,7 +44,6 @@ export default function NonCashForm({
         listNonCashLabor,
         listNonCashTools,
         listNonCashExtras,
-        loading: svcLoading,
     } = useExpenseService();
 
     // expanders
@@ -255,7 +254,7 @@ export default function NonCashForm({
             return sum + (qty > 0 && price >= 0 ? qty * price : 0);
         }, 0);
 
-        const extrasTotal = toNum(extrasW.tax) + toNum(extrasW.landRent);
+        const extrasTotal = toNum(extrasW.tax) * toNum(extrasW.landRent);
         return laborTotal + toolsTotal + extrasTotal;
     }, [calcLaborSubtotal, laborW, tools, extrasW]);
 
@@ -276,7 +275,6 @@ export default function NonCashForm({
                 dailyWage: wage,
                 jamKerja: r.jamKerja !== "" ? Math.max(0, toNum(r.jamKerja)) : null,
                 stageLabel,               // contoh: "Pesemaian"
-                // metadata tambahan akan disimpan oleh repo sebagai { labor_type, note } — cukup isi fields utama
             };
         };
 
@@ -358,7 +356,7 @@ export default function NonCashForm({
         }
     };
 
-    const showBlocking = initialLoading || svcLoading === true;
+    const showBlocking = initialLoading;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -559,7 +557,7 @@ export default function NonCashForm({
                         </Text>
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
-                            disabled={saving || svcLoading}
+                            disabled={saving}
                             style={({ pressed }) => [
                                 styles.saveBtn,
                                 { backgroundColor: C.tint, opacity: pressed ? 0.98 : 1, borderRadius: S.radius.xl },
@@ -567,7 +565,7 @@ export default function NonCashForm({
                         >
                             <Ionicons name="save-outline" size={18} color="#fff" />
                             <Text style={{ color: "#fff", fontWeight: "900" }}>
-                                {saving || svcLoading ? "Menyimpan…" : "Simpan"}
+                                {saving ? "Menyimpan…" : "Simpan"}
                             </Text>
                         </Pressable>
                     </View>

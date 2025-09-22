@@ -44,10 +44,8 @@ export default function CashForm({
         createCashExpense,
         updateCashExpense,
         listCashItems,
-        loading: svcLoading,
     } = useExpenseService();
 
-    // expand flags
     const [openSeed, setOpenSeed] = useState(false);
     const [openSeedling, setOpenSeedling] = useState(false);
     const [openFertilizer, setOpenFertilizer] = useState(false);
@@ -65,7 +63,6 @@ export default function CashForm({
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openExtras, setOpenExtras] = useState(false);
 
-    // data buckets
     const [seedItems, setSeedItems] = useState<ChemItem[]>([]);
     const [seedlingItems, setSeedlingItems] = useState<ChemItem[]>([]);
     const [fertilizerItems, setFertilizerItems] = useState<ChemItem[]>([]);
@@ -78,7 +75,6 @@ export default function CashForm({
         item: Omit<ChemItem, "id">
     ) => setter((prev) => [...prev, { ...item, id: String(Date.now() + Math.random()) }]);
 
-    /** ===== react-hook-form setup ===== */
     const defaultLabor = (): LaborForm => ({
         tipe: "harian",
         jumlahOrang: "",
@@ -222,7 +218,6 @@ export default function CashForm({
                         const days = Number(it?.metadata?.days ?? 0);
                         const wage = Number(it?.unit_price ?? 0);
 
-                        // fallback metadata lama
                         const qty = Number(it?.quantity ?? 0);
                         const jumlahOrang = people > 0 ? people : qty > 0 ? qty : 0;
                         const jumlahHari = days > 0 ? days : 1;
@@ -237,7 +232,7 @@ export default function CashForm({
                     }
                 });
 
-                didHydrateEdit.current = true; // lock
+                didHydrateEdit.current = true;
             } catch (e) {
                 if (!alive) return;
                 console.warn("CashForm prefill error", e);
@@ -278,7 +273,7 @@ export default function CashForm({
     const extrasW = watch("extras");
 
     const total = useMemo(() => {
-        const extras = toNum(extrasW.tax) + toNum(extrasW.landRent) + toNum(extrasW.transport);
+        const extras = toNum(extrasW.tax) * (toNum(extrasW.landRent) + toNum(extrasW.transport));
 
         const chem =
             sumChem(seedItems) +
@@ -313,7 +308,6 @@ export default function CashForm({
         extrasW,
     ]);
 
-    // payload mapping → service.create/updateCashExpense (camelCase)
     const buildPayload = (fv: CashFormValues) => {
         const chemToRows = (rows: ChemItem[]) =>
             rows.map((r) => ({
@@ -435,8 +429,7 @@ export default function CashForm({
         }
     };
 
-    // blocking state mengikuti pola income/form.tsx
-    const showBlocking = initialLoading || svcLoading === true;
+    const showBlocking = initialLoading;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -727,7 +720,6 @@ export default function CashForm({
                     />
                     {openExtras && (
                         <View style={{ marginTop: 8, gap: 10 }}>
-                            <Text style={{ color: C.textMuted, fontWeight: "800" }}>Biaya Lain</Text>
                             <RHFLineInput
                                 label="Pajak"
                                 name="extras.tax"
@@ -768,7 +760,7 @@ export default function CashForm({
                         </Text>
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
-                            disabled={saving || svcLoading}
+                            disabled={saving}
                             style={({ pressed }) => [
                                 styles.saveBtn,
                                 { backgroundColor: C.tint, opacity: pressed ? 0.98 : 1, borderRadius: S.radius.xl },
@@ -776,7 +768,7 @@ export default function CashForm({
                         >
                             <Ionicons name="save-outline" size={18} color="#fff" />
                             <Text style={{ color: "#fff", fontWeight: "900" }}>
-                                {saving || svcLoading ? "Menyimpan…" : "Simpan"}
+                                {saving ? "Menyimpan…" : "Simpan"}
                             </Text>
                         </Pressable>
                     </View>

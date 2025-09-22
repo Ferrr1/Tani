@@ -1,6 +1,6 @@
-// app/report/index.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useReportData } from "@/services/reportService";
+import { currency } from "@/utils/currency";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo, useState } from "react";
@@ -17,26 +17,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/** ==== Theme typing fix (reusable) ==== */
 type Theme = typeof Colors["light"];
 
-/** ====== Types local utk rendering tabel ====== */
 type Row =
     | { label: string; qty?: number; unit?: string | null; price?: number; amount?: never }
     | { label: string; amount: number; qty?: never; unit?: never; price?: never };
 
-/** Format helpers */
-const money = (n: number) =>
-    n.toLocaleString("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        maximumFractionDigits: 0,
-    });
-
-/** Hitung nilai baris (pakai konversi dari service melalui amount/qty*price)
- *  - amount: sudah final -> langsung dipakai
- *  - qty & price: qty*price
- */
 const rowValue = (r: Row) => {
     if (typeof (r as any).amount === "number") return (r as any).amount;
     const rr = r as Exclude<Row, { amount: number }>;
@@ -47,10 +33,9 @@ const rowValue = (r: Row) => {
 
 export default function ReportScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
-    const C = Colors[scheme] as Theme; // <<< FIX typing
+    const C = Colors[scheme] as Theme;
     const S = Tokens;
 
-    /** Data/report service */
     const {
         loading,
         seasons,
@@ -67,13 +52,9 @@ export default function ReportScreen() {
         [seasons, seasonId]
     );
 
-    // dropdown UI
     const [openSeason, setOpenSeason] = useState(false);
     const [openYear, setOpenYear] = useState(false);
 
-    /** Luas lahan (Ha) & konversi
-     *  Konversi = (luas_target / luas_saat_ini)
-     */
     const [currentArea, setCurrentArea] = useState("1");
     const [targetArea, setTargetArea] = useState("1");
 
@@ -85,20 +66,8 @@ export default function ReportScreen() {
         return t / c;
     }, [currentArea, targetArea]);
 
-    // upah standar (opsional) untuk konversi HOK borongan
     const [standardDailyWage, setStandardDailyWage] = useState("0");
 
-    /** Build dataset dari service (sudah terkonversi pakai landFactor) */
-    const ds = useMemo(() => {
-        // NOTE: buildDataset async, tapi untuk UI langsung, kita bisa asumsikan sinkron jika data sudah fetched
-        // Untuk aman, panggil versi sync kecil di memo — atau gunakan state set hasilnya setelah await (kalau mau).
-        // Di sini kita pakai pattern sederhana: memanggil builder tanpa await — builder return Promise,
-        // namun kita tidak bisa await di render. Jadi sebagai kompromi ringan, kita bangun tombol share yang await.
-        // Untuk tampilan, kita butuh data sekarang -> buat fallback minimal.
-        return null as any;
-    }, []); // kita tidak gunakan di sini
-
-    // Karena buildDataset async, kita bikin helper untuk sekali hitung saat render share dan saat render tabel:
     const [dataset, setDataset] = useState<Awaited<ReturnType<typeof buildDataset>> | null>(null);
 
     React.useEffect(() => {
@@ -113,17 +82,13 @@ export default function ReportScreen() {
         return () => { alive = false; };
     }, [buildDataset, landFactor, standardDailyWage]);
 
-    // Map dataset ke rows
     const productionRows: Row[] = useMemo(() => {
         if (!dataset) return [];
-        // dataset.production sudah dalam bentuk qty, unitPrice, total terkonversi — kita tampilkan sebagai amount biar kolom Nilai benar
-        // tapi biarkan qty & price supaya tabel lengkap
         return dataset.production.map(p => ({
             label: p.label,
             qty: p.quantity,
             unit: p.unitType,
             price: p.unitPrice,
-            // Nilai akan dihitung dari qty*price di rowValue
         }));
     }, [dataset]);
 
@@ -139,7 +104,6 @@ export default function ReportScreen() {
 
     const laborRows: Row[] = useMemo(() => {
         if (!dataset) return [];
-        // Tampilkan sebagai amount (value) langsung di kolom Nilai
         return dataset.labor.map(l => ({
             label: l.stageLabel ?? (l.laborType === "contract" ? "Tenaga Kerja (Borongan)" : "Tenaga Kerja (Harian)"),
             amount: l.value,
@@ -178,7 +142,6 @@ export default function ReportScreen() {
     const rcCash = totalCash > 0 ? totalProduction / totalCash : 0;
     const rcTotal = totalCost > 0 ? totalProduction / totalCost : 0;
 
-    /** Share */
     const onShare = async () => {
         const d = await buildDataset({
             landFactor,
@@ -187,15 +150,15 @@ export default function ReportScreen() {
         const lines = [
             `Report Usahatani (${currentSeason ? `Musim Ke-${currentSeason.season_no}` : "–"}${year === "all" ? "" : ` | ${year}`})`,
             `Luas (konversi): ${targetArea} Ha | Luas saat ini: ${currentArea} Ha | Faktor: ${landFactor.toFixed(2)}`,
-            `Total Penerimaan: ${money(d.totalReceipts)}`,
-            `Total Biaya Tunai: ${money(d.totalCash)}`,
-            `Total Tenaga Kerja (Non Tunai): ${money(d.totalLabor)}`,
-            `Total Alat (Non Tunai): ${money(d.totalTools)}`,
-            `Total Biaya Lain (Non Tunai): ${money(d.totalExtras)}`,
-            `Total Biaya Non Tunai: ${money(d.totalNonCash)}`,
-            `Total Biaya: ${money(d.totalCost)}`,
-            `Pendapatan Atas Biaya Tunai: ${money(d.totalReceipts - d.totalCash)}`,
-            `Pendapatan Atas Biaya Total: ${money(d.totalReceipts - d.totalCost)}`,
+            `Total Penerimaan: ${currency(d.totalReceipts)}`,
+            `Total Biaya Tunai: ${currency(d.totalCash)}`,
+            `Total Tenaga Kerja (Non Tunai): ${currency(d.totalLabor)}`,
+            `Total Alat (Non Tunai): ${currency(d.totalTools)}`,
+            `Total Biaya Lain (Non Tunai): ${currency(d.totalExtras)}`,
+            `Total Biaya Non Tunai: ${currency(d.totalNonCash)}`,
+            `Total Biaya: ${currency(d.totalCost)}`,
+            `Pendapatan Atas Biaya Tunai: ${currency(d.totalReceipts - d.totalCash)}`,
+            `Pendapatan Atas Biaya Total: ${currency(d.totalReceipts - d.totalCost)}`,
             `R/C Tunai: ${(d.totalCash > 0 ? d.totalReceipts / d.totalCash : 0).toFixed(2)}`,
             `R/C Total: ${(d.totalCost > 0 ? d.totalReceipts / d.totalCost : 0).toFixed(2)}`,
         ].join("\n");
@@ -480,9 +443,9 @@ function Section({
                         <Text style={[styles.tdSmall, { color: C.text }]}>{isAmount ? "-" : (r as any).qty ?? "-"}</Text>
                         <Text style={[styles.tdSmall, { color: C.text }]}>{isAmount ? "-" : (r as any).unit ?? "-"}</Text>
                         <Text style={[styles.tdSmall, { color: C.text }]}>
-                            {isAmount ? "-" : (r as any).price != null ? money((r as any).price) : "-"}
+                            {isAmount ? "-" : (r as any).price != null ? currency((r as any).price) : "-"}
                         </Text>
-                        <Text style={[styles.tdRight, { color: C.text }]}>{money(v)}</Text>
+                        <Text style={[styles.tdRight, { color: C.text }]}>{currency(v)}</Text>
                     </View>
                 );
             })}
@@ -494,7 +457,7 @@ function TotalsRow({ label, value, C, bold }: { label: string; value: number; C:
     return (
         <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
             <Text style={{ color: C.text, fontWeight: (bold ? "900" : "800") as any }}>{label}</Text>
-            <Text style={{ color: C.text, fontWeight: (bold ? "900" : "800") as any }}>{money(value)}</Text>
+            <Text style={{ color: C.text, fontWeight: (bold ? "900" : "800") as any }}>{currency(value)}</Text>
         </View>
     );
 }
@@ -503,7 +466,7 @@ function SimpleRow({ label, value, valueStr, C }: { label: string; value?: numbe
     return (
         <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 }}>
             <Text style={{ color: C.text }}>{label}</Text>
-            <Text style={{ color: C.text, fontWeight: "800" as any }}>{valueStr ?? money(value || 0)}</Text>
+            <Text style={{ color: C.text, fontWeight: "800" as any }}>{valueStr ?? currency(value || 0)}</Text>
         </View>
     );
 }

@@ -1,6 +1,8 @@
+import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { AdminUserRow, useAdminUserService } from "@/services/adminUserService";
-import { CROP_OPTIONS } from "@/types/profile";
+import { DetailForm } from "@/types/detail-admin";
+import { CROP_OPTIONS, Role } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -22,16 +24,6 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type DetailForm = {
-    fullName: string;
-    email: string;
-    password?: string;        // opsional (hanya update jika diisi)
-    village: string;
-    cropType: string;
-    cropTypeOther?: string;
-    landAreaHa: string;       // string untuk input, dikonversi saat submit
-};
-
 export default function AdminUserDetail() {
     const { detail } = useLocalSearchParams<{ detail: string }>();
     const userId = detail;
@@ -45,6 +37,7 @@ export default function AdminUserDetail() {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
     const [showCrop, setShowCrop] = useState(false);
 
@@ -81,6 +74,8 @@ export default function AdminUserDetail() {
                 router.back();
                 return;
             }
+            const fetchedRole = row.role === "admin" ? "admin" : "user";
+            setRole(fetchedRole);
 
             reset({
                 fullName: row.full_name ?? "",
@@ -108,10 +103,8 @@ export default function AdminUserDetail() {
         if (!userId) return;
         setSaving(true);
         try {
-            // final crop
             const finalCrop =
                 v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
-            // luas
             const luas = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
             if (Number.isNaN(luas) || luas <= 0) {
                 Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
@@ -122,12 +115,12 @@ export default function AdminUserDetail() {
             await updateUser({
                 targetUserId: userId,
                 newEmail: v.email.trim(),
-                newPassword: (v.password || "").trim() ? v.password : undefined, // hanya update bila diisi
+                newPassword: (v.password || "").trim() ? v.password : undefined,
                 newFullName: v.fullName.trim(),
                 newNamaDesa: v.village.trim(),
                 newJenisTanaman: finalCrop,
                 newLuasLahan: luas,
-                // newRole: ... (jika mau ubah role, sediakan UI tambahan)
+                newRole: role
             });
 
             Alert.alert("Tersimpan", "Profil pengguna berhasil diperbarui.");
@@ -317,6 +310,14 @@ export default function AdminUserDetail() {
                         <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>
                     )}
 
+                    {/* Role */}
+                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
+                        Role
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
+                        <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
+                    </View>
                     {/* Nama Desa/Kelurahan */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
                         Nama Desa/Kelurahan
@@ -349,7 +350,7 @@ export default function AdminUserDetail() {
                         <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>
                     )}
 
-                    {/* Jenis Tanaman */}
+                    {/* Jenis Tanaman — Select */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
                         Jenis Tanaman
                     </Text>
@@ -382,24 +383,35 @@ export default function AdminUserDetail() {
                                     >
                                         {value || "Pilih jenis tanaman"}
                                     </Text>
-                                    <Ionicons name={showCrop ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+                                    <Ionicons
+                                        name={showCrop ? "chevron-up" : "chevron-down"}
+                                        size={18}
+                                        color={C.icon}
+                                    />
                                 </Pressable>
 
                                 {showCrop && (
-                                    <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 }]}>
+                                    <View
+                                        style={[
+                                            styles.dropdown,
+                                            { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 },
+                                        ]}
+                                    >
                                         {CROP_OPTIONS.map((item) => (
                                             <Pressable
                                                 key={item}
                                                 onPress={() => {
                                                     setValue("cropType", item, { shouldValidate: true });
-                                                    // reset other jika bukan "Lainnya"
-                                                    if (item !== "Lainnya") setValue("cropTypeOther", "");
                                                     setShowCrop(false);
                                                 }}
                                                 style={({ pressed }) => [
                                                     styles.dropdownItem,
                                                     {
-                                                        backgroundColor: pressed ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                                                        backgroundColor: pressed
+                                                            ? scheme === "light"
+                                                                ? C.surfaceSoft
+                                                                : C.surface
+                                                            : "transparent",
                                                         borderColor: C.border,
                                                     },
                                                 ]}
@@ -420,9 +432,7 @@ export default function AdminUserDetail() {
                     {/* Input ‘Jenis Lainnya’ — jika pilih Lainnya */}
                     {isOther && (
                         <>
-                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>
-                                Jenis tanaman lainnya
-                            </Text>
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
                             <Controller
                                 control={control}
                                 name="cropTypeOther"
@@ -440,9 +450,11 @@ export default function AdminUserDetail() {
                                         style={[
                                             styles.input,
                                             {
-                                                color: C.text,
                                                 borderColor: errors.cropTypeOther ? C.danger : C.border,
+                                                color: C.text,
                                                 borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
                                             },
                                         ]}
                                     />
@@ -453,7 +465,6 @@ export default function AdminUserDetail() {
                             )}
                         </>
                     )}
-
                     {/* Luas Lahan (ha) */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
                         Luas Lahan (hektar)
