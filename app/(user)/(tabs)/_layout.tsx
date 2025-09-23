@@ -13,7 +13,7 @@ export default function TabLayout() {
   const deciding = !navReady || !authReady || (session && !profileReady);
   if (deciding) return null;
   if (!session) return <Redirect href="/(auth)" />;
-  if (role === "admin") return <Redirect href="/(admin)" />;
+  if (role === "admin") return <Redirect href="/(admin)/(tabs)" />;
 
   return (
     <Tabs

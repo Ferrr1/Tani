@@ -150,7 +150,7 @@ export type ToolForm = {
   nilaiSisa: string; // optional
 };
 
-export type FormValues = {
+export type NonCashFormValues = {
   labor: {
     nursery: LaborForm;
     land_prep: LaborForm;

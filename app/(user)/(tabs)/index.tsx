@@ -167,6 +167,7 @@ export default function HomeScreen() {
     { key: "expense", label: "Pengeluaran", icon: "arrow-up-circle-outline", color: C.danger, href: "/expense" },
     { key: "chart", label: "Chart", icon: "stats-chart-outline", color: C.info, href: "/chart" },
     { key: "report", label: "Report", icon: "document-text-outline", color: C.tint, href: "/report" },
+    { key: "informasi", label: "Panduan", icon: "information-circle-outline", color: C.tint, href: "/sub/information" },
   ] as const;
 
   return (
@@ -269,9 +270,15 @@ export default function HomeScreen() {
             )}
           </LinearGradient>
 
-          <View style={{ marginTop: S.spacing.lg, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
+          {/* Ganti container grid-mu jadi pakai styles.grid */}
+          <View style={[styles.grid, { marginTop: S.spacing.lg }]}>
             {menus.map((m) => (
-              <Link style={{ justifyContent: "center", alignItems: "center" }} key={m.key} href={m.href} asChild>
+              <Link
+                key={m.key}
+                href={m.href}
+                asChild
+                style={{ justifyContent: "center", alignItems: "center" }}
+              >
                 <Pressable
                   style={({ pressed }) => [
                     styles.square,
@@ -337,15 +344,24 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 12, fontWeight: "700" },
 
-  // Square menu
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
+    gap: 12, // bikin 2 kolom dengan gap horizontal
+  },
   square: {
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    flexBasis: "48%",   // ~2 kolom
+    marginBottom: 12,   // jarak vertikal antar baris
+    aspectRatio: 1,     // kotak
+    padding: 12,        // ruang dalam item
   },
   squareIconWrap: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",

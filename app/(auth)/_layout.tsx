@@ -18,7 +18,7 @@ const AuthLayout = () => {
     if (deciding) return null;
 
     if (session) {
-        return <Redirect href={role === "admin" ? "/(admin)" : "/(tabs)"} />;
+        return <Redirect href={role === "admin" ? "/(admin)/(tabs)" : "/(tabs)"} />;
     }
 
     return <Stack screenOptions={STACK_ANIM} />;

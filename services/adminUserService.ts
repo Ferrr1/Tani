@@ -9,7 +9,6 @@ export type AdminUserRow = {
   email: string;
   full_name: string | null;
   nama_desa: string | null;
-  jenis_tanaman: string | null;
   luas_lahan: number | null;
   role: "user" | "admin";
   created_at: string;
@@ -22,7 +21,6 @@ export type UpdateUserInput = {
   newPassword?: string;
   newFullName?: string;
   newNamaDesa?: string;
-  newJenisTanaman?: string;
   newLuasLahan?: number;
   newRole: "user" | "admin";
 };
@@ -51,7 +49,6 @@ export const adminUserRepo = {
           `full_name.ilike.${key}`,
           `email.ilike.${key}`,
           `nama_desa.ilike.${key}`,
-          `jenis_tanaman.ilike.${key}`,
         ].join(",")
       );
     }
@@ -78,7 +75,6 @@ export const adminUserRepo = {
       newPassword,
       newFullName,
       newNamaDesa,
-      newJenisTanaman,
       newLuasLahan,
       newRole,
     } = input;
@@ -102,7 +98,6 @@ export const adminUserRepo = {
       target_user_id: targetUserId,
       new_full_name: newFullName ?? null,
       new_nama_desa: newNamaDesa ?? null,
-      new_jenis_tanaman: newJenisTanaman ?? null,
       new_luas_lahan: newLuasLahan ?? null,
       new_role: newRole,
     });

@@ -1,6 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonService } from "@/services/seasonService";
-import { SeasonFormValues } from "@/types/season";
+import { CROP_OPTIONS, SeasonFormValues } from "@/types/season";
 import { fmtDMY, fromISOtoDMY, parseDMY, toISO } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
@@ -34,6 +34,7 @@ export default function SeasonForm() {
     const [saving, setSaving] = useState(false);
 
     const [openStart, setOpenStart] = useState(false);
+    const [showCrop, setShowCrop] = useState(false);
     const [openEnd, setOpenEnd] = useState(false);
 
     const {
@@ -44,7 +45,7 @@ export default function SeasonForm() {
         reset,
         formState: { errors },
     } = useForm<SeasonFormValues>({
-        defaultValues: { seasonNo: "", startDate: "", endDate: "" },
+        defaultValues: { seasonNo: "", cropType: "", cropTypeOther: "", startDate: "", endDate: "" },
         mode: "onChange",
     });
 
@@ -76,6 +77,7 @@ export default function SeasonForm() {
                 }
                 reset({
                     seasonNo: String(row.season_no),
+                    cropType: row.crop_type ?? "",
                     startDate: fromISOtoDMY(row.start_date),
                     endDate: fromISOtoDMY(row.end_date),
                 });
@@ -104,46 +106,32 @@ export default function SeasonForm() {
     }, [dStart, dEnd]);
 
     const onSubmit = async (v: SeasonFormValues) => {
+        const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
         const d1 = parseDMY(v.startDate);
         const d2 = parseDMY(v.endDate);
         const n = parseInt((v.seasonNo || "").toString().replace(",", "."), 10);
-
-        if (!Number.isFinite(n) || n < 1) {
-            Alert.alert("Validasi", "Musim ke- harus angka ≥ 1.");
-            return;
-        }
-        if (!d1) {
-            Alert.alert("Validasi", "Tanggal mulai tidak valid (format dd/mm/yyyy).");
-            return;
-        }
-        if (!d2) {
-            Alert.alert("Validasi", "Tanggal selesai tidak valid (format dd/mm/yyyy).");
-            return;
-        }
-        if (d2.getTime() < d1.getTime()) {
-            Alert.alert("Validasi", "Tanggal selesai harus setelah/sama dengan tanggal mulai.");
-            return;
-        }
-
+        if (d1 === null || d2 === null || n <= 0) return;
         try {
             setSaving(true);
             if (isEdit && seasonId) {
                 await updateSeason({
                     id: seasonId,
                     seasonNo: n,
+                    cropType: finalCrop,
                     startDate: toISO(d1),
                     endDate: toISO(d2),
                 });
             } else {
                 await createSeason({
                     seasonNo: n,
+                    cropType: finalCrop,
                     startDate: toISO(d1),
                     endDate: toISO(d2),
                 });
             }
-            router.replace("/(form)/sub/season");
+            router.replace("/(user)/sub/season");
         } catch (e: any) {
-            console.warn("SEASONFORM", e.code);
+            console.warn("SEASONFORM", e.code, e);
             if (e.code === "23505") {
                 Alert.alert("Validasi", "Musim ke-" + n + " sudah ada.");
             } else {
@@ -189,6 +177,8 @@ export default function SeasonForm() {
     };
 
     const showBlockingLoader = initialLoading;
+    const cropTypeValue = watch("cropType");
+    const isOther = cropTypeValue === "Lainnya";
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -200,7 +190,7 @@ export default function SeasonForm() {
             >
                 <View style={{ flexDirection: "row", justifyContent: "flex-start", gap: 12, alignItems: "center" }}>
                     <Pressable
-                        onPress={() => router.replace("/(form)/sub/season")}
+                        onPress={() => router.replace("/(user)/sub/season")}
                         style={({ pressed }) => [
                             styles.iconBtn,
                             { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
@@ -274,6 +264,118 @@ export default function SeasonForm() {
                             )}
                         />
                         {errors.seasonNo && <Text style={[styles.err, { color: C.danger }]}>{errors.seasonNo.message as string}</Text>}
+                        {/* Jenis Tanaman — Select */}
+                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
+                            Jenis Tanaman
+                        </Text>
+                        <Controller
+                            control={control}
+                            name="cropType"
+                            rules={{ required: "Pilih jenis tanaman" }}
+                            render={({ field: { value } }) => (
+                                <>
+                                    <Pressable
+                                        onPress={() => setShowCrop((v) => !v)}
+                                        style={[
+                                            styles.selectInput,
+                                            {
+                                                borderColor: errors.cropType ? C.danger : C.border,
+                                                backgroundColor: C.surface,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 12,
+                                            },
+                                        ]}
+                                    >
+                                        <Text
+                                            style={{
+                                                color: value ? C.text : C.icon,
+                                                fontFamily: Fonts.sans as any,
+                                                fontSize: 15,
+                                                fontWeight: "800",
+                                            }}
+                                        >
+                                            {value || "Pilih jenis tanaman"}
+                                        </Text>
+                                        <Ionicons
+                                            name={showCrop ? "chevron-up" : "chevron-down"}
+                                            size={18}
+                                            color={C.icon}
+                                        />
+                                    </Pressable>
+
+                                    {showCrop && (
+                                        <View
+                                            style={[
+                                                styles.dropdown,
+                                                { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 },
+                                            ]}
+                                        >
+                                            {CROP_OPTIONS.map((item) => (
+                                                <Pressable
+                                                    key={item}
+                                                    onPress={() => {
+                                                        setValue("cropType", item, { shouldValidate: true });
+                                                        setShowCrop(false);
+                                                    }}
+                                                    style={({ pressed }) => [
+                                                        styles.dropdownItem,
+                                                        {
+                                                            backgroundColor: pressed
+                                                                ? scheme === "light"
+                                                                    ? C.surfaceSoft
+                                                                    : C.surface
+                                                                : "transparent",
+                                                            borderColor: C.border,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <Ionicons name="leaf-outline" size={14} color={C.tint} />
+                                                    <Text style={{ color: C.text, fontWeight: "700" }}>{item}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
+                            )}
+                        />
+                        {errors.cropType && (
+                            <Text style={[styles.err, { color: C.danger }]}>{errors.cropType.message}</Text>
+                        )}
+                        {/* Input ‘Jenis Lainnya’ — jika pilih Lainnya */}
+                        {isOther && (
+                            <>
+                                <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
+                                <Controller
+                                    control={control}
+                                    name="cropTypeOther"
+                                    rules={{
+                                        required: "Sebutkan jenis tanaman lainnya",
+                                        validate: (v) => !!(v || "").trim() || "Sebutkan jenis tanaman lainnya",
+                                    }}
+                                    render={({ field: { onChange, onBlur, value } }) => (
+                                        <TextInput
+                                            placeholder="Contoh: Porang"
+                                            placeholderTextColor={C.icon}
+                                            onBlur={onBlur}
+                                            onChangeText={onChange}
+                                            value={value}
+                                            style={[
+                                                styles.input,
+                                                {
+                                                    color: C.text,
+                                                    borderColor: errors.cropTypeOther ? C.danger : C.border,
+                                                    borderRadius: S.radius.md,
+                                                },
+                                            ]}
+                                        />
+                                    )}
+                                />
+                                {errors.cropTypeOther && (
+                                    <Text style={[styles.err, { color: C.danger }]}>{errors.cropTypeOther.message as string}</Text>
+                                )}
+                            </>
+                        )}
 
                         {/* Tanggal Mulai */}
                         <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tanggal Mulai</Text>
@@ -425,6 +527,15 @@ const styles = StyleSheet.create({
         borderWidth: 1, fontSize: 15, paddingHorizontal: 12,
         paddingVertical: Platform.select({ ios: 10, android: 8 }) as number,
         backgroundColor: "transparent",
+    },
+    dropdown: { borderWidth: 1, marginTop: 8, overflow: "hidden" },
+    dropdownItem: {
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
     err: { marginTop: 6, fontSize: 12 },
     selectInput: {

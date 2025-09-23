@@ -2,7 +2,7 @@ import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { AdminUserRow, useAdminUserService } from "@/services/adminUserService";
 import { DetailForm } from "@/types/detail-admin";
-import { CROP_OPTIONS, Role } from "@/types/profile";
+import { Role } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -39,12 +39,10 @@ export default function AdminUserDetail() {
     const [saving, setSaving] = useState(false);
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
-    const [showCrop, setShowCrop] = useState(false);
 
     const {
         control,
         handleSubmit,
-        setValue,
         watch,
         reset,
         formState: { errors },
@@ -60,9 +58,6 @@ export default function AdminUserDetail() {
         },
         mode: "onChange",
     });
-
-    const cropTypeValue = watch("cropType");
-    const isOther = cropTypeValue === "Lainnya";
 
     const load = useCallback(async () => {
         if (!userId) return;
@@ -82,8 +77,6 @@ export default function AdminUserDetail() {
                 email: row.email ?? "",
                 password: "",
                 village: row.nama_desa ?? "",
-                cropType: inferCropType(row.jenis_tanaman) ?? "",
-                cropTypeOther: inferCropTypeOther(row.jenis_tanaman) ?? "",
                 landAreaHa: row.luas_lahan != null ? String(row.luas_lahan) : "",
             });
         } catch (e: any) {
@@ -350,121 +343,6 @@ export default function AdminUserDetail() {
                         <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>
                     )}
 
-                    {/* Jenis Tanaman — Select */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Jenis Tanaman
-                    </Text>
-                    <Controller
-                        control={control}
-                        name="cropType"
-                        rules={{ required: "Pilih jenis tanaman" }}
-                        render={({ field: { value } }) => (
-                            <>
-                                <Pressable
-                                    onPress={() => setShowCrop((v) => !v)}
-                                    style={[
-                                        styles.selectInput,
-                                        {
-                                            borderColor: errors.cropType ? C.danger : C.border,
-                                            backgroundColor: C.surface,
-                                            borderRadius: S.radius.md,
-                                            paddingHorizontal: S.spacing.md,
-                                            paddingVertical: 12,
-                                        },
-                                    ]}
-                                >
-                                    <Text
-                                        style={{
-                                            color: value ? C.text : C.icon,
-                                            fontFamily: Fonts.sans as any,
-                                            fontSize: 15,
-                                            fontWeight: "800",
-                                        }}
-                                    >
-                                        {value || "Pilih jenis tanaman"}
-                                    </Text>
-                                    <Ionicons
-                                        name={showCrop ? "chevron-up" : "chevron-down"}
-                                        size={18}
-                                        color={C.icon}
-                                    />
-                                </Pressable>
-
-                                {showCrop && (
-                                    <View
-                                        style={[
-                                            styles.dropdown,
-                                            { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 },
-                                        ]}
-                                    >
-                                        {CROP_OPTIONS.map((item) => (
-                                            <Pressable
-                                                key={item}
-                                                onPress={() => {
-                                                    setValue("cropType", item, { shouldValidate: true });
-                                                    setShowCrop(false);
-                                                }}
-                                                style={({ pressed }) => [
-                                                    styles.dropdownItem,
-                                                    {
-                                                        backgroundColor: pressed
-                                                            ? scheme === "light"
-                                                                ? C.surfaceSoft
-                                                                : C.surface
-                                                            : "transparent",
-                                                        borderColor: C.border,
-                                                    },
-                                                ]}
-                                            >
-                                                <Ionicons name="leaf-outline" size={14} color={C.tint} />
-                                                <Text style={{ color: C.text, fontWeight: "700" }}>{item}</Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-                            </>
-                        )}
-                    />
-                    {errors.cropType && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.cropType.message as string}</Text>
-                    )}
-
-                    {/* Input ‘Jenis Lainnya’ — jika pilih Lainnya */}
-                    {isOther && (
-                        <>
-                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
-                            <Controller
-                                control={control}
-                                name="cropTypeOther"
-                                rules={{
-                                    required: "Sebutkan jenis tanaman lainnya",
-                                    validate: (v) => !!(v || "").trim() || "Sebutkan jenis tanaman lainnya",
-                                }}
-                                render={({ field: { onChange, onBlur, value } }) => (
-                                    <TextInput
-                                        placeholder="Contoh: Porang"
-                                        placeholderTextColor={C.icon}
-                                        onBlur={onBlur}
-                                        onChangeText={onChange}
-                                        value={value}
-                                        style={[
-                                            styles.input,
-                                            {
-                                                borderColor: errors.cropTypeOther ? C.danger : C.border,
-                                                color: C.text,
-                                                borderRadius: S.radius.md,
-                                                paddingHorizontal: S.spacing.md,
-                                                paddingVertical: 10,
-                                            },
-                                        ]}
-                                    />
-                                )}
-                            />
-                            {errors.cropTypeOther && (
-                                <Text style={[styles.err, { color: C.danger }]}>{errors.cropTypeOther.message as string}</Text>
-                            )}
-                        </>
-                    )}
                     {/* Luas Lahan (ha) */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
                         Luas Lahan (hektar)
@@ -534,17 +412,6 @@ export default function AdminUserDetail() {
         </SafeAreaView>
     );
 }
-
-function inferCropType(jenis?: string | null) {
-    if (!jenis) return "";
-    return CROP_OPTIONS.includes(jenis) ? jenis : "Lainnya";
-}
-
-function inferCropTypeOther(jenis?: string | null) {
-    if (!jenis) return "";
-    return CROP_OPTIONS.includes(jenis) ? "" : jenis;
-}
-
 /** ===== Styles ===== */
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },

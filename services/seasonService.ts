@@ -41,6 +41,7 @@ export const seasonRepo = {
     const payload = {
       user_id: userId,
       season_no: input.seasonNo,
+      crop_type: input.cropType,
       start_date: input.startDate,
       end_date: input.endDate,
     };
@@ -82,6 +83,7 @@ export const seasonRepo = {
 
     const patch: Record<string, any> = {};
     if (input.seasonNo != null) patch.season_no = input.seasonNo;
+    if (input.cropType) patch.crop_type = input.cropType;
     if (input.startDate) patch.start_date = input.startDate;
     if (input.endDate) patch.end_date = input.endDate;
 

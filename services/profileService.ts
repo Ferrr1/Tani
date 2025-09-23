@@ -11,7 +11,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, nama_desa, jenis_tanaman, luas_lahan, role, created_at, updated_at"
+      "id, email, full_name, nama_desa, luas_lahan, role, created_at, updated_at"
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -21,9 +21,7 @@ export async function getMyProfile(): Promise<Profile | null> {
 }
 
 export async function updateMyProfile(
-  patch: Partial<
-    Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">
-  >
+  patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>
 ): Promise<Profile> {
   const {
     data: { user },
@@ -37,7 +35,7 @@ export async function updateMyProfile(
     const n = Number(body.luas_lahan);
     body.luas_lahan = Number.isFinite(n) && n >= 0 ? n : null;
   }
-  ["full_name", "nama_desa", "jenis_tanaman"].forEach((k) => {
+  ["full_name", "nama_desa"].forEach((k) => {
     if (k in body) {
       const v = (body as any)[k];
       (body as any)[k] = (v ?? "").toString().trim() || null;
@@ -49,7 +47,7 @@ export async function updateMyProfile(
     .update(body)
     .eq("id", user.id)
     .select(
-      "id, email, full_name, nama_desa, jenis_tanaman, luas_lahan, role, created_at, updated_at"
+      "id, email, full_name, nama_desa, luas_lahan, role, created_at, updated_at"
     )
     .single();
 

@@ -44,7 +44,6 @@ export default function HomeAdminScreen() {
                 fullName: r.full_name ?? "—",
                 email: r.email ?? null,
                 village: r.nama_desa ?? null,
-                cropType: r.jenis_tanaman ?? null,
                 landAreaHa: r.luas_lahan ?? null,
                 avatar: (r as any).avatar_url ?? null,
             })),

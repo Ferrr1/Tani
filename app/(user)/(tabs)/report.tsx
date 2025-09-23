@@ -501,15 +501,15 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, marginTop: 10,
     },
     th: { flex: 1.6, fontSize: 11, fontWeight: "800" },
-    thSmall: { flex: 0.7, fontSize: 11, fontWeight: "800" },
-    thRight: { width: 110, fontSize: 11, fontWeight: "800", textAlign: "right" },
+    thSmall: { flex: 1, fontSize: 11, fontWeight: "800" },
+    thRight: { width: 90, fontSize: 11, fontWeight: "800", textAlign: "right" },
 
     tr: {
         flexDirection: "row", alignItems: "center",
         paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1,
     },
     td: { flex: 1.6, fontSize: 13 },
-    tdSmall: { flex: 0.7, fontSize: 13 },
+    tdSmall: { flex: 1, fontSize: 13 },
     tdRight: { width: 110, fontSize: 13, textAlign: "right", fontWeight: "800" },
 
     sectionTitle: { fontSize: 14, fontWeight: "800", marginTop: 12 },

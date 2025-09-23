@@ -21,7 +21,7 @@ import SectionButton from "@/components/SectionButton";
 import ToolPanel from "@/components/ToolPanel";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
-import { FormValues, LaborForm, ToolForm } from "@/types/expense";
+import { LaborForm, NonCashFormValues, ToolForm } from "@/types/expense";
 import { currency } from "@/utils/currency";
 
 export default function NonCashForm({
@@ -70,7 +70,7 @@ export default function NonCashForm({
         upahHarian: "",
     });
 
-    const { control, handleSubmit, watch, setValue, getValues } = useForm<FormValues>({
+    const { control, handleSubmit, watch, setValue, getValues } = useForm<NonCashFormValues>({
         defaultValues: {
             labor: {
                 nursery: defaultLabor(),
@@ -92,7 +92,7 @@ export default function NonCashForm({
     const didHydrateEdit = useRef(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
 
-    const labelToKey: Record<string, keyof FormValues["labor"]> = useMemo(
+    const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = useMemo(
         () => ({
             "pesemaian": "nursery",
             "pengolahan lahan": "land_prep",
@@ -108,10 +108,10 @@ export default function NonCashForm({
         []
     );
 
-    const getStageKeyFromRow = (r: any): keyof FormValues["labor"] | undefined => {
+    const getStageKeyFromRow = (r: any): keyof NonCashFormValues["labor"] | undefined => {
         const cat: string | undefined = r?.metadata?.category;
         if (typeof cat === "string") {
-            const byCode: Record<string, keyof FormValues["labor"]> = {
+            const byCode: Record<string, keyof NonCashFormValues["labor"]> = {
                 labor_nursery: "nursery",
                 labor_land_prep: "land_prep",
                 labor_planting: "planting",
@@ -186,7 +186,7 @@ export default function NonCashForm({
                 });
 
                 // labor
-                const setLabor = (key: keyof FormValues["labor"], lf: Partial<LaborForm>) => {
+                const setLabor = (key: keyof NonCashFormValues["labor"], lf: Partial<LaborForm>) => {
                     const now = getValues(`labor.${key}`);
                     setValue(`labor.${key}.tipe` as const, lf.tipe ?? now.tipe, { shouldDirty: false });
                     setValue(`labor.${key}.jumlahOrang` as const, lf.jumlahOrang ?? now.jumlahOrang, { shouldDirty: false });
@@ -259,9 +259,9 @@ export default function NonCashForm({
     }, [calcLaborSubtotal, laborW, tools, extrasW]);
 
     /** ===== Build payload (sesuai service) ===== */
-    const buildPayload = (fv: FormValues) => {
+    const buildPayload = (fv: NonCashFormValues) => {
         // 1) labor per stage
-        const mapLabor = (key: keyof FormValues["labor"], stageLabel: string, code: string) => {
+        const mapLabor = (key: keyof NonCashFormValues["labor"], stageLabel: string, code: string) => {
             const r = fv.labor[key];
             const people = Math.max(0, toNum(r.jumlahOrang));
             const days = Math.max(0, toNum(r.jumlahHari));
@@ -333,7 +333,7 @@ export default function NonCashForm({
 
     /** ===== Submit ===== */
     const [saving, setSaving] = useState(false);
-    const onSubmit = async (fv: FormValues) => {
+    const onSubmit = async (fv: NonCashFormValues) => {
         try {
             const { labors, tools: toolItems, extras } = buildPayload(fv);
             if ((labors.length + toolItems.length + (extras?.length || 0)) === 0) {
@@ -538,14 +538,22 @@ export default function NonCashForm({
                                 name="extras.tax"
                                 control={control}
                                 C={C}
-                                rules={{ validate: (v: string) => v === "" || toNum(v) >= 0 || "Harus angka ≥ 0" }}
+                                rules={{
+                                    required: "Wajib diisi",
+                                    validate: (v: NonCashFormValues["extras"]["tax"]) =>
+                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                }}
                             />
                             <RHFLineInput
                                 label="Sewa Lahan"
                                 name="extras.landRent"
                                 control={control}
                                 C={C}
-                                rules={{ validate: (v: string) => v === "" || toNum(v) >= 0 || "Harus angka ≥ 0" }}
+                                rules={{
+                                    required: "Wajib diisi",
+                                    validate: (v: NonCashFormValues["extras"]["landRent"]) =>
+                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                }}
                             />
                         </View>
                     )}

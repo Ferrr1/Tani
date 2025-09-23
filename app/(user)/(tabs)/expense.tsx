@@ -26,7 +26,6 @@ export default function ExpenseScreen() {
 
     // Seasons
     const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
-    console.log("EXPENSE SCREEN: seasonRows", seasonRows);
     const { seasonId, setSeasonId, ready } = useSeasonFilter();
     const [openSeasonList, setOpenSeasonList] = useState(false);
 

@@ -726,8 +726,9 @@ export default function CashForm({
                                 control={control}
                                 C={C}
                                 rules={{
+                                    required: "Wajib diisi",
                                     validate: (v: CashFormValues["extras"]["tax"]) =>
-                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -736,8 +737,9 @@ export default function CashForm({
                                 control={control}
                                 C={C}
                                 rules={{
+                                    required: "Wajib diisi",
                                     validate: (v: CashFormValues["extras"]["landRent"]) =>
-                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -746,8 +748,9 @@ export default function CashForm({
                                 control={control}
                                 C={C}
                                 rules={{
+                                    required: "Wajib diisi",
                                     validate: (v: CashFormValues["extras"]["transport"]) =>
-                                        v === "" || toNum(v) >= 0 || "Harus angka ≥ 0",
+                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
                                 }}
                             />
                         </View>

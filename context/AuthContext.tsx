@@ -18,14 +18,13 @@ export type AuthState = {
     profileReady: boolean;
     role: Role | null;
 
-    // ⬇️ dikembalikan seperti sebelumnya
     signUp: (params: { email: string; password: string; meta?: Partial<Profile> }) => Promise<void>;
 
     signIn: (email: string, password: string, remember?: boolean) => Promise<AuthTokenResponsePassword>;
     signOut: () => Promise<void>;
     reloadProfile: () => Promise<void>;
     updateProfile: (
-        patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>
+        patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>
     ) => Promise<void>;
 };
 
@@ -212,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [session?.user?.id]);
 
     const updateProfile = useCallback(
-        async (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "jenis_tanaman" | "luas_lahan">>) => {
+        async (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>) => {
             try {
                 const updated = await updateMyProfile(patch);
                 setProfile(updated);

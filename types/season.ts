@@ -1,5 +1,28 @@
+export const CROP_OPTIONS: string[] = [
+  "popcoi",
+  "selada air",
+  "sawi",
+  "kangkong",
+  "jagung",
+  "bayam",
+  "terong",
+  "cabai",
+  "labusiam",
+  "timun",
+  "buncis",
+  "kacang Panjang",
+  "ubijalar",
+  "seledri",
+  "daun bawang",
+  "kacang merah",
+  "edamame",
+  "Lainnya",
+];
+
 export type SeasonFormValues = {
   seasonNo: string; // "1", "2"
+  cropType: string;
+  cropTypeOther?: string;
   startDate: string;
   endDate: string;
 };
@@ -8,6 +31,7 @@ export type SeasonRow = {
   id: string;
   user_id: string;
   season_no: number;
+  crop_type: string | null;
   start_date: string; // YYYY-MM-DD
   end_date: string; // YYYY-MM-DD
   created_at: string;
@@ -16,6 +40,7 @@ export type SeasonRow = {
 
 export type CreateSeasonInput = {
   seasonNo: number;
+  cropType: string;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
 };
@@ -23,6 +48,7 @@ export type CreateSeasonInput = {
 export type UpdateSeasonInput = {
   id: string;
   seasonNo?: number;
+  cropType: string;
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
 };
