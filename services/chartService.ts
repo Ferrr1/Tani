@@ -110,6 +110,7 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
       if (error) throw error;
 
       const rows = (data || []) as ExpenseItemRow[];
+      // console.log("expenseChartService.fetchItems", rows);
       if (!mounted.current || myReq !== reqItemsRef.current) return;
       setItems(rows);
     } catch (e) {
