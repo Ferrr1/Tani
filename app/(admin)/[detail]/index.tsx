@@ -52,8 +52,6 @@ export default function AdminUserDetail() {
             email: "",
             password: "",
             village: "",
-            cropType: "",
-            cropTypeOther: "",
             landAreaHa: "",
         },
         mode: "onChange",
@@ -96,8 +94,6 @@ export default function AdminUserDetail() {
         if (!userId) return;
         setSaving(true);
         try {
-            const finalCrop =
-                v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
             const luas = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
             if (Number.isNaN(luas) || luas <= 0) {
                 Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
@@ -111,7 +107,6 @@ export default function AdminUserDetail() {
                 newPassword: (v.password || "").trim() ? v.password : undefined,
                 newFullName: v.fullName.trim(),
                 newNamaDesa: v.village.trim(),
-                newJenisTanaman: finalCrop,
                 newLuasLahan: luas,
                 newRole: role
             });

@@ -3,12 +3,10 @@ import { SeasonFilterProvider } from '@/context/SeasonFilterContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { STACK_ANIM } from '@/navigation/stackAnim';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { SplashScreen, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-SplashScreen.preventAutoHideAsync().catch(() => { });
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

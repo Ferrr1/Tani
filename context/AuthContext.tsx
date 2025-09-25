@@ -4,9 +4,11 @@ import type { AuthTokenResponsePassword, Session, User } from "@supabase/supabas
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { getMyProfile, updateMyProfile } from "@/services/profileService";
-import type { Profile, Role } from "@/types/profile";
+import type { Profile, RegisterForm, Role } from "@/types/profile";
 
 const REMEMBER_KEY = "auth:remember";
+const PENDING_ANSWER = "auth:pending_mother_name";
+const PENDING_PROFILE = "auth:pending_profile_patch";
 const TAG = "[Auth]";
 
 export type AuthState = {
@@ -18,14 +20,12 @@ export type AuthState = {
     profileReady: boolean;
     role: Role | null;
 
-    signUp: (params: { email: string; password: string; meta?: Partial<Profile> }) => Promise<void>;
+    register: (form: RegisterForm, remember?: boolean) => Promise<void>;
 
     signIn: (email: string, password: string, remember?: boolean) => Promise<AuthTokenResponsePassword>;
     signOut: () => Promise<void>;
     reloadProfile: () => Promise<void>;
-    updateProfile: (
-        patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>
-    ) => Promise<void>;
+    updateProfile: (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>) => Promise<void>;
 };
 
 const AuthCtx = createContext<AuthState | undefined>(undefined);
@@ -76,10 +76,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log(TAG, "onAuthStateChange:", event, "user.id =", sess?.user?.id ?? null);
             setSession(sess ?? null);
             setAuthReady(true);
+
             if (event === "SIGNED_OUT") {
                 console.log(TAG, "onAuthStateChange: SIGNED_OUT → clear profile state");
                 setProfile(null);
                 setProfileReady(false);
+            }
+            if (event === "SIGNED_IN" && sess?.user?.id) {
+                (async () => {
+                    try {
+                        const pendingAnswer = await AsyncStorage.getItem(PENDING_ANSWER);
+                        const patchStr = await AsyncStorage.getItem(PENDING_PROFILE);
+                        if (pendingAnswer || patchStr) {
+                            console.log(TAG, "post-login: applying pending registration data");
+                            if (patchStr) {
+                                try {
+                                    const patch = JSON.parse(patchStr);
+                                    await updateMyProfile(patch);
+                                    await AsyncStorage.removeItem(PENDING_PROFILE);
+                                } catch (e: any) {
+                                    console.log(TAG, "post-login: apply pending profile patch error:", e?.message);
+                                }
+                            }
+                            if (pendingAnswer) {
+                                const { error: rpcErr } = await supabase.rpc("set_mother_name", {
+                                    p_user_id: sess.user.id,
+                                    p_answer: pendingAnswer,
+                                });
+                                if (rpcErr) {
+                                    console.log(TAG, "post-login: set_mother_name RPC error:", rpcErr.message);
+                                } else {
+                                    await AsyncStorage.removeItem(PENDING_ANSWER);
+                                }
+                            }
+                            await reloadProfile();
+                        }
+                    } catch (e: any) {
+                        console.log(TAG, "post-login: apply pending error:", e?.message);
+                    }
+                })();
             }
         });
 
@@ -130,26 +165,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, [session?.user?.id]);
 
-    const signUp = useCallback(
-        async ({ email, password, meta }: { email: string; password: string; meta?: Partial<Profile> }) => {
-            console.log(TAG, "signUp: start for", email);
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: { data: meta ?? {} },
-            });
+
+    const register = useCallback(
+        async (form: RegisterForm, remember: boolean = true) => {
+            const { fullName, motherName, email, password, village, landAreaHa } = form;
+            const luas = Number((landAreaHa ?? "").toString().trim().replace(",", "."));
+            const luasSafe = Number.isFinite(luas) && luas >= 0 ? luas : 0;
+
+            console.log(TAG, "register: start for", email);
+            const { data, error } = await supabase.auth.signUp({ email, password });
             if (error) {
-                console.log(TAG, "signUp: error:", error.message);
+                console.log(TAG, "register: signUp error:", error.message);
                 throw error;
             }
             try {
-                await AsyncStorage.setItem(REMEMBER_KEY, "1");
-                console.log(TAG, "signUp: REMEMBER_KEY set to 1");
+                await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
             } catch (e: any) {
-                console.log(TAG, "signUp: set REMEMBER_KEY error:", e?.message);
+                console.log(TAG, "register: set REMEMBER_KEY error:", e?.message);
             }
 
-            console.log(TAG, "signUp: done, user.id =", data.session?.user?.id ?? null);
+            const uid = data.session?.user?.id ?? null;
+            if (!uid) {
+                try {
+                    await AsyncStorage.setItem(
+                        PENDING_PROFILE,
+                        JSON.stringify({
+                            full_name: fullName.trim(),
+                            nama_desa: village.trim(),
+                            luas_lahan: luasSafe,
+                        })
+                    );
+                    await AsyncStorage.setItem(PENDING_ANSWER, motherName.trim());
+                } catch (e: any) {
+                    console.log(TAG, "register: save pending error:", e?.message);
+                }
+                console.log(TAG, "register: no session (likely email confirm). Pending saved.");
+                return;
+            }
+            try {
+                await updateMyProfile({
+                    full_name: fullName.trim(),
+                    nama_desa: village.trim(),
+                    luas_lahan: luasSafe,
+                });
+                console.log(TAG, "register: profile updated");
+            } catch (e: any) {
+                console.log(TAG, "register: updateMyProfile error:", e?.message);
+                // lanjut set mother_name walau profil gagal (tidak fatal)
+            }
+
+            // 4) Set mother_name (hash di server via RPC)
+            const { error: rpcErr } = await supabase.rpc("set_mother_name", {
+                p_user_id: uid,
+                p_answer: motherName,
+            });
+            if (rpcErr) {
+                console.log(TAG, "register: set_mother_name RPC error:", rpcErr.message);
+            } else {
+                console.log(TAG, "register: mother_name set (hashed)");
+            }
+            await reloadProfile();
+            console.log(TAG, "register: done for", email);
         },
         []
     );
@@ -158,7 +234,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         async (email: string, _password: string, remember: boolean = false) => {
             console.log(TAG, "signIn: start for", email, "remember =", remember);
             const res = await supabase.auth.signInWithPassword({ email, password: _password });
-            console.log(TAG, "signIn: supabase response: error =", res.error?.message ?? null, "user.id =", res.data?.user?.id ?? null);
+            console.log(
+                TAG,
+                "signIn: supabase response: error =",
+                res.error?.message ?? null,
+                "user.id =",
+                res.data?.user?.id ?? null
+            );
             if (res.error) throw res.error?.message;
             try {
                 await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
@@ -187,6 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfileReady(false);
         console.log(TAG, "signOut: done, profile cleared");
     }, []);
+
 
     const reloadProfile = useCallback(async () => {
         const userId = session?.user?.id;
@@ -230,16 +313,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             profile,
             profileReady,
             role: profile?.role ?? null,
-            signUp,
+            register,
             signIn,
             signOut,
             reloadProfile,
             updateProfile,
         }),
-        [session, authReady, profile, profileReady, signUp, signIn, signOut, reloadProfile, updateProfile]
+        [session, authReady, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile]
     );
 
-    console.log(TAG, "render provider: authReady=", authReady, "profileReady=", profileReady, "user.id=", session?.user?.id ?? null);
+    console.log(
+        TAG,
+        "render provider: authReady=",
+        authReady,
+        "profileReady=",
+        profileReady,
+        "user.id=",
+        session?.user?.id ?? null
+    );
 
     return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }

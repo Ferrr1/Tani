@@ -28,7 +28,6 @@ export default function LaborOne({
     C: any;
     S: any;
 }) {
-    // Pantau tipe untuk conditional render
     const tipe: "borongan" | "harian" | undefined = useWatch({
         control,
         name: `${name}.tipe`,
@@ -37,13 +36,11 @@ export default function LaborOne({
     const selectTipe = (t: "borongan" | "harian") => {
         setValue(`${name}.tipe`, t, { shouldDirty: true });
         if (t === "borongan") {
-            // kosongkan field harian agar validasi gak ke-trigger
             setValue(`${name}.jumlahOrang`, "", { shouldDirty: true });
             setValue(`${name}.jumlahHari`, "", { shouldDirty: true });
             setValue(`${name}.jamKerja`, "", { shouldDirty: true });
             setValue(`${name}.upahHarian`, "", { shouldDirty: true });
         } else {
-            // kosongkan field borongan
             setValue(`${name}.hargaBorongan`, "", { shouldDirty: true });
             setValue(`${name}.upahBerlaku`, "", { shouldDirty: true });
         }
@@ -86,7 +83,6 @@ export default function LaborOne({
                                 name={`${name}.upahBerlaku`}
                                 control={control}
                                 C={C}
-                                // Jika ingin opsional, hapus required
                                 rules={{ required: "Wajib diisi" }}
                             />
                         </View>

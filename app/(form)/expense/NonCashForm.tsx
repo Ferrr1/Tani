@@ -10,7 +10,7 @@ import {
     StyleSheet,
     Text,
     View,
-    useColorScheme
+    useColorScheme,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,7 +21,13 @@ import SectionButton from "@/components/SectionButton";
 import ToolPanel from "@/components/ToolPanel";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
-import { LaborForm, NonCashFormValues, ToolForm } from "@/types/expense";
+import {
+    LaborForm,
+    NonCashFormValues,
+    NonCashLaborInput,
+    NonCashToolInput,
+    ToolForm,
+} from "@/types/expense";
 import { currency } from "@/utils/currency";
 
 export default function NonCashForm({
@@ -46,7 +52,6 @@ export default function NonCashForm({
         listNonCashExtras,
     } = useExpenseService();
 
-    // expanders
     const [openNursery, setOpenNursery] = useState(false);
     const [openLandPrep, setOpenLandPrep] = useState(false);
     const [openPlanting, setOpenPlanting] = useState(false);
@@ -57,9 +62,7 @@ export default function NonCashForm({
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openTools, setOpenTools] = useState(false);
-    const [openExtras, setOpenExtras] = useState(false);
-
-    // tools list
+    const [openExtras, setOpenExtras] = useState(true);
     const [tools, setTools] = useState<ToolForm[]>([]);
 
     const defaultLabor = (): LaborForm => ({
@@ -68,77 +71,60 @@ export default function NonCashForm({
         jumlahHari: "",
         jamKerja: "",
         upahHarian: "",
+        hargaBorongan: "",
+        upahBerlaku: "",
     });
 
-    const { control, handleSubmit, watch, setValue, getValues } = useForm<NonCashFormValues>({
-        defaultValues: {
-            labor: {
-                nursery: defaultLabor(),
-                land_prep: defaultLabor(),
-                planting: defaultLabor(),
-                fertilizing: defaultLabor(),
-                irrigation: defaultLabor(),
-                weeding: defaultLabor(),
-                pest_ctrl: defaultLabor(),
-                harvest: defaultLabor(),
-                postharvest: defaultLabor(),
+    const { control, handleSubmit, watch, setValue, getValues } =
+        useForm<NonCashFormValues>({
+            defaultValues: {
+                labor: {
+                    nursery: defaultLabor(),
+                    land_prep: defaultLabor(),
+                    planting: defaultLabor(),
+                    fertilizing: defaultLabor(),
+                    irrigation: defaultLabor(),
+                    weeding: defaultLabor(),
+                    pest_ctrl: defaultLabor(),
+                    harvest: defaultLabor(),
+                    postharvest: defaultLabor(),
+                },
+                tools: [],
+                extras: { tax: "", landRent: "" },
             },
-            tools: [],
-            extras: { tax: "", landRent: "" },
-        },
-        mode: "onChange",
-    });
+            mode: "onChange",
+        });
 
     const didHydrateEdit = useRef(false);
-    const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
-
-    const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = useMemo(
-        () => ({
-            "pesemaian": "nursery",
-            "pengolahan lahan": "land_prep",
-            "penanaman": "planting",
-            "pemupukan": "fertilizing",
-            "penyiraman": "irrigation",
-            "penyiangan": "weeding",
-            "pengendalian hama & penyakit": "pest_ctrl",
-            "pengendalian hama dan penyakit": "pest_ctrl",
-            "panen": "harvest",
-            "pasca panen": "postharvest",
-        }),
-        []
+    const [initialLoading, setInitialLoading] = useState<boolean>(
+        mode === "edit"
     );
 
-    const getStageKeyFromRow = (r: any): keyof NonCashFormValues["labor"] | undefined => {
-        const cat: string | undefined = r?.metadata?.category;
-        if (typeof cat === "string") {
-            const byCode: Record<string, keyof NonCashFormValues["labor"]> = {
-                labor_nursery: "nursery",
-                labor_land_prep: "land_prep",
-                labor_planting: "planting",
-                labor_fertilizing: "fertilizing",
-                labor_irrigation: "irrigation",
-                labor_weeding: "weeding",
-                labor_pest_ctrl: "pest_ctrl",
-                labor_harvest: "harvest",
-                labor_postharvest: "postharvest",
-            };
-            if (byCode[cat]) return byCode[cat];
+    /** ===== Helpers ===== */
+    const toNum = (x?: unknown) => {
+        if (x === null || x === undefined) return 0;
+        if (typeof x === "number") return Number.isFinite(x) ? x : 0;
+        if (typeof x === "string") {
+            const v = parseFloat(x.replace(",", "."));
+            return Number.isFinite(v) ? v : 0;
         }
-        const lbl = String(r?.label ?? "").trim().toLowerCase();
-        if (labelToKey[lbl]) return labelToKey[lbl];
-        const contains = (s: string) => lbl.includes(s);
-        if (contains("semai")) return "nursery";
-        if (contains("olah") && contains("lahan")) return "land_prep";
-        if (contains("tanam")) return "planting";
-        if (contains("pupuk")) return "fertilizing";
-        if (contains("siram")) return "irrigation";
-        if (contains("siang")) return "weeding";
-        if (contains("hama") || contains("penyakit")) return "pest_ctrl";
-        if (contains("panen") && !contains("pasca")) return "harvest";
-        if (contains("pasca")) return "postharvest";
-        return undefined;
+        return 0;
     };
 
+    const toStr = (v: any) => (v === null || v === undefined ? "" : String(v));
+
+    const calcLaborSubtotal = useCallback((lf: LaborForm) => {
+        if (lf.tipe === "borongan") {
+            const kontrak = toNum(lf.hargaBorongan);
+            return kontrak >= 0 ? kontrak : 0;
+        }
+        const orang = toNum(lf.jumlahOrang);
+        const hari = toNum(lf.jumlahHari);
+        const upah = toNum(lf.upahHarian);
+        return orang > 0 && hari > 0 && upah >= 0 ? orang * hari * upah : 0;
+    }, []);
+
+    /** ===== Hydrate (edit) ===== */
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
@@ -152,26 +138,16 @@ export default function NonCashForm({
                     listNonCashExtras(expenseId),
                 ]);
                 if (!alive) return;
-                console.log(
-                    "HYDRATE NONCASH EXPENSE",
-                    expenseId,
-                    "LABORS",
-                    labors,
-                    "TOOLS",
-                    toolsRows,
-                    "EXTRAS",
-                    extras,
-                )
 
                 // tools
                 setTools(
                     (toolsRows || []).map((t: any) => ({
                         id: String(t.id),
                         nama: t.label ?? t.tool_name ?? "",
-                        jumlah: String(t.quantity ?? ""),
-                        hargaBeli: String(t.purchase_price ?? ""),
-                        umurThn: String(t.useful_life_years ?? ""),
-                        nilaiSisa: String(t.salvage_value ?? ""),
+                        jumlah: toStr(t.quantity),
+                        hargaBeli: toStr(t.purchase_price),
+                        umurThn: toStr(t.useful_life_years),
+                        nilaiSisa: toStr(t.salvage_value),
                     }))
                 );
 
@@ -179,31 +155,135 @@ export default function NonCashForm({
                 setValue("extras.tax", "");
                 setValue("extras.landRent", "");
                 (extras || []).forEach((e: any) => {
-                    const kind = e?.extra_kind || e?.metadata?.type || e?.metadata?.extra_kind;
-                    const amount = Number(e?.unit_price ?? e?.amount_estimate ?? e?.subtotal ?? 0) || 0;
-                    if (kind === "tax") setValue("extras.tax", String(amount || ""));
-                    if (kind === "land_rent") setValue("extras.landRent", String(amount || ""));
+                    const kind =
+                        e?.extra_kind || e?.metadata?.type || e?.metadata?.extra_kind;
+                    const amount = toNum(e?.unit_price ?? e?.amount_estimate ?? e?.amount);
+                    if (kind === "tax") setValue("extras.tax", toStr(amount));
+                    if (kind === "land_rent") setValue("extras.landRent", toStr(amount));
                 });
 
+                const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = {
+                    pesemaian: "nursery",
+                    "pengolahan lahan": "land_prep",
+                    penanaman: "planting",
+                    pemupukan: "fertilizing",
+                    penyiraman: "irrigation",
+                    penyiangan: "weeding",
+                    "pengendalian hama & penyakit": "pest_ctrl",
+                    "pengendalian hama dan penyakit": "pest_ctrl",
+                    panen: "harvest",
+                    "pasca panen": "postharvest",
+                };
+
+                const getStageKeyFromRow = (
+                    r: any
+                ): keyof NonCashFormValues["labor"] | undefined => {
+                    const lbl = String(r?.label ?? "").trim().toLowerCase();
+                    if (labelToKey[lbl]) return labelToKey[lbl];
+                    const contains = (s: string) => lbl.includes(s);
+                    if (contains("semai")) return "nursery";
+                    if (contains("olah") && contains("lahan")) return "land_prep";
+                    if (contains("tanam")) return "planting";
+                    if (contains("pupuk")) return "fertilizing";
+                    if (contains("siram")) return "irrigation";
+                    if (contains("siang")) return "weeding";
+                    if (contains("hama") || contains("penyakit")) return "pest_ctrl";
+                    if (contains("panen") && !contains("pasca")) return "harvest";
+                    if (contains("pasca")) return "postharvest";
+                    return undefined;
+                };
+
                 // labor
-                const setLabor = (key: keyof NonCashFormValues["labor"], lf: Partial<LaborForm>) => {
+                const setLabor = (
+                    key: keyof NonCashFormValues["labor"],
+                    lf: Partial<LaborForm>
+                ) => {
                     const now = getValues(`labor.${key}`);
-                    setValue(`labor.${key}.tipe` as const, lf.tipe ?? now.tipe, { shouldDirty: false });
-                    setValue(`labor.${key}.jumlahOrang` as const, lf.jumlahOrang ?? now.jumlahOrang, { shouldDirty: false });
-                    setValue(`labor.${key}.jumlahHari` as const, lf.jumlahHari ?? now.jumlahHari, { shouldDirty: false });
-                    setValue(`labor.${key}.jamKerja` as const, lf.jamKerja ?? now.jamKerja, { shouldDirty: false });
-                    setValue(`labor.${key}.upahHarian` as const, lf.upahHarian ?? now.upahHarian, { shouldDirty: false });
+                    setValue(`labor.${key}.tipe` as const, lf.tipe ?? now.tipe, {
+                        shouldDirty: false,
+                    });
+                    setValue(
+                        `labor.${key}.jumlahOrang` as const,
+                        lf.jumlahOrang ?? now.jumlahOrang,
+                        { shouldDirty: false }
+                    );
+                    setValue(
+                        `labor.${key}.jumlahHari` as const,
+                        lf.jumlahHari ?? now.jumlahHari,
+                        { shouldDirty: false }
+                    );
+                    setValue(
+                        `labor.${key}.jamKerja` as const,
+                        lf.jamKerja ?? now.jamKerja,
+                        { shouldDirty: false }
+                    );
+                    setValue(
+                        `labor.${key}.upahHarian` as const,
+                        lf.upahHarian ?? now.upahHarian,
+                        { shouldDirty: false }
+                    );
+                    setValue(
+                        `labor.${key}.hargaBorongan` as const,
+                        lf.hargaBorongan ?? now.hargaBorongan,
+                        { shouldDirty: false }
+                    );
+                    setValue(
+                        `labor.${key}.upahBerlaku` as const,
+                        lf.upahBerlaku ?? now.upahBerlaku,
+                        { shouldDirty: false }
+                    );
                 };
 
                 (labors || []).forEach((r: any) => {
                     const key = getStageKeyFromRow(r);
                     if (!key) return;
-                    const tipe: LaborForm["tipe"] = r?.metadata?.labor_type === "contract" ? "borongan" : "harian";
-                    const jumlahOrang = String(r?.people_count ?? r?.quantity ?? "");
-                    const jumlahHari = String(r?.days ?? "");
-                    const upahHarian = String(r?.daily_wage ?? r?.unit_price ?? "");
-                    const jamKerja = r?.metadata?.jamKerja != null ? String(r?.metadata?.jamKerja) : "";
-                    setLabor(key, { tipe, jumlahOrang, jumlahHari, upahHarian, jamKerja });
+
+                    const laborType =
+                        r?.metadata?.labor_type ?? r?.labor_type ?? r?.metadata?.laborType;
+                    const isContract = String(laborType) === "contract";
+
+                    if (isContract) {
+                        const contractPrice =
+                            r?.metadata?.contract_price ?? r?.contract_price ?? null;
+                        const prevailingWage =
+                            r?.metadata?.prevailing_wage ?? r?.prevailing_wage ?? null;
+
+                        setLabor(key, {
+                            tipe: "borongan",
+                            hargaBorongan: toStr(contractPrice),
+                            upahBerlaku: toStr(prevailingWage),
+                            jumlahOrang: "",
+                            jumlahHari: "",
+                            upahHarian: "",
+                            jamKerja: "",
+                        });
+                    } else {
+                        // harian
+                        const orang =
+                            r?.people_count ??
+                            r?.metadata?.people_count ??
+                            r?.metadata?.peopleCount ??
+                            0;
+                        const hari =
+                            r?.days ?? r?.metadata?.days ?? r?.metadata?.jumlahHari ?? 0;
+                        const upah =
+                            r?.daily_wage ??
+                            r?.metadata?.daily_wage ??
+                            r?.metadata?.dailyWage ??
+                            0;
+                        const jam =
+                            r?.metadata?.hours_per_day ?? r?.hours_per_day ?? null;
+
+                        setLabor(key, {
+                            tipe: "harian",
+                            jumlahOrang: toStr(orang),
+                            jumlahHari: toStr(hari),
+                            upahHarian: toStr(upah),
+                            jamKerja: jam != null ? toStr(jam) : "",
+                            hargaBorongan: "",
+                            upahBerlaku: "",
+                        });
+                    }
                 });
 
                 didHydrateEdit.current = true;
@@ -215,22 +295,11 @@ export default function NonCashForm({
             }
         };
         hydrate();
-        return () => { alive = false; };
+        return () => {
+            alive = false;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mode, expenseId, listNonCashLabor, listNonCashTools, listNonCashExtras]);
-
-    /** ===== Helpers ===== */
-    const toNum = (s?: string) => {
-        const v = parseFloat((s || "0").replace(",", "."));
-        return Number.isFinite(v) ? v : 0;
-    };
-
-    const calcLaborSubtotal = useCallback((lf: LaborForm) => {
-        const orang = toNum(lf.jumlahOrang);
-        const hari = toNum(lf.jumlahHari);
-        const upah = toNum(lf.upahHarian);
-        return orang > 0 && hari > 0 && upah >= 0 ? orang * hari * upah : 0;
-    }, []);
 
     // watches
     const laborW = watch("labor");
@@ -254,75 +323,80 @@ export default function NonCashForm({
             return sum + (qty > 0 && price >= 0 ? qty * price : 0);
         }, 0);
 
-        const extrasTotal = toNum(extrasW.tax) * toNum(extrasW.landRent);
-        return laborTotal + toolsTotal + extrasTotal;
+        const extras = toNum(extrasW.landRent) + toNum(extrasW.tax);
+        const totalNonCash = toolsTotal + laborTotal + extras;
+        return totalNonCash;
     }, [calcLaborSubtotal, laborW, tools, extrasW]);
 
-    /** ===== Build payload (sesuai service) ===== */
+    /** ===== Build payload (sesuai service baru) ===== */
     const buildPayload = (fv: NonCashFormValues) => {
-        // 1) labor per stage
-        const mapLabor = (key: keyof NonCashFormValues["labor"], stageLabel: string, code: string) => {
+        const mapLabor = (
+            key: keyof NonCashFormValues["labor"],
+            stageLabel: string
+        ): NonCashLaborInput | null => {
             const r = fv.labor[key];
+
+            if (r.tipe === "borongan") {
+                const contractPrice = Math.max(0, toNum(r.hargaBorongan));
+                const prevailingWage = Math.max(0, toNum(r.upahBerlaku));
+                return {
+                    laborType: "contract",
+                    contractPrice,
+                    prevailingWage,
+                    stageLabel,
+                };
+            }
+
+            // harian
             const people = Math.max(0, toNum(r.jumlahOrang));
             const days = Math.max(0, toNum(r.jumlahHari));
             const wage = Math.max(0, toNum(r.upahHarian));
-            if (!(people > 0 && days > 0)) return null;
-            const laborType = r.tipe === "borongan" ? "contract" : "daily";
+            if (!(people > 0 && days > 0 && wage >= 0)) return null;
+
             return {
-                laborType,                // "contract" | "daily"
+                laborType: "daily",
                 peopleCount: people,
                 days,
                 dailyWage: wage,
                 jamKerja: r.jamKerja !== "" ? Math.max(0, toNum(r.jamKerja)) : null,
-                stageLabel,               // contoh: "Pesemaian"
+                stageLabel,
             };
         };
 
         const labors = [
-            mapLabor("nursery", "Pesemaian", "labor_nursery"),
-            mapLabor("land_prep", "Pengolahan Lahan", "labor_land_prep"),
-            mapLabor("planting", "Penanaman", "labor_planting"),
-            mapLabor("fertilizing", "Pemupukan", "labor_fertilizing"),
-            mapLabor("irrigation", "Penyiraman", "labor_irrigation"),
-            mapLabor("weeding", "Penyiangan", "labor_weeding"),
-            mapLabor("pest_ctrl", "Pengendalian Hama & Penyakit", "labor_pest_ctrl"),
-            mapLabor("harvest", "Panen", "labor_harvest"),
-            mapLabor("postharvest", "Pasca Panen", "labor_postharvest"),
-        ].filter(Boolean) as {
-            laborType: "contract" | "daily";
-            peopleCount: number;
-            days: number;
-            dailyWage: number;
-            jamKerja?: number | null;
-            stageLabel?: string | null;
-        }[];
+            mapLabor("nursery", "Pesemaian"),
+            mapLabor("land_prep", "Pengolahan Lahan"),
+            mapLabor("planting", "Penanaman"),
+            mapLabor("fertilizing", "Pemupukan"),
+            mapLabor("irrigation", "Penyiraman"),
+            mapLabor("weeding", "Penyiangan"),
+            mapLabor("pest_ctrl", "Pengendalian Hama & Penyakit"),
+            mapLabor("harvest", "Panen"),
+            mapLabor("postharvest", "Pasca Panen"),
+        ].filter((v): v is NonCashLaborInput => v !== null);
 
-        // 2) tools
+        // tools
         const toolItems = (tools || [])
-            .map((t) => {
+            .map((t): NonCashToolInput | null => {
                 const quantity = Math.max(0, toNum(t.jumlah));
                 const purchasePrice = Math.max(0, toNum(t.hargaBeli));
                 if (!(quantity > 0 && purchasePrice >= 0)) return null;
-                const usefulLifeYears = t.umurThn ? Math.max(0, toNum(t.umurThn)) : null;
-                const salvageValue = t.nilaiSisa ? Math.max(0, toNum(t.nilaiSisa)) : null;
+
+                const uly = t.umurThn ? Math.max(0, toNum(t.umurThn)) : undefined;
+                const sv = t.nilaiSisa ? Math.max(0, toNum(t.nilaiSisa)) : undefined;
+
                 return {
                     toolName: t.nama?.trim() || "Alat",
                     quantity,
                     purchasePrice,
-                    usefulLifeYears,
-                    salvageValue,
+                    ...(uly !== undefined ? { usefulLifeYears: uly } : {}),
+                    ...(sv !== undefined ? { salvageValue: sv } : {}),
                 };
             })
-            .filter(Boolean) as {
-                toolName: string;
-                quantity: number;
-                purchasePrice: number;
-                usefulLifeYears?: number | null;
-                salvageValue?: number | null;
-            }[];
+            .filter((v): v is NonCashToolInput => v !== null);
 
-        // 3) extras
-        const extras: { type: "tax" | "land_rent"; amount: number; }[] = [];
+        // extras
+        const extras: { type: "tax" | "land_rent"; amount: number }[] = [];
         const vTax = toNum(fv.extras.tax);
         if (vTax > 0) extras.push({ type: "tax", amount: vTax });
         const vRent = toNum(fv.extras.landRent);
@@ -336,14 +410,21 @@ export default function NonCashForm({
     const onSubmit = async (fv: NonCashFormValues) => {
         try {
             const { labors, tools: toolItems, extras } = buildPayload(fv);
-            if ((labors.length + toolItems.length + (extras?.length || 0)) === 0) {
+
+            if (labors.length === 0 && toolItems.length === 0 && extras.length === 0) {
                 Alert.alert("Validasi", "Isi minimal satu data yang valid.");
                 return;
             }
 
             setSaving(true);
             if (mode === "edit" && expenseId) {
-                await updateNonCashExpense({ expenseId, seasonId, labors, tools: toolItems, extras });
+                await updateNonCashExpense({
+                    expenseId,
+                    seasonId,
+                    labors,
+                    tools: toolItems,
+                    extras,
+                });
             } else {
                 await createNonCashExpense({ seasonId, labors, tools: toolItems, extras });
             }
@@ -535,13 +616,14 @@ export default function NonCashForm({
                         <View style={{ marginTop: 8, gap: 10 }}>
                             <RHFLineInput
                                 label="Pajak"
+                                placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
                                     validate: (v: NonCashFormValues["extras"]["tax"]) =>
-                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -552,7 +634,7 @@ export default function NonCashForm({
                                 rules={{
                                     required: "Wajib diisi",
                                     validate: (v: NonCashFormValues["extras"]["landRent"]) =>
-                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                         </View>
@@ -587,6 +669,19 @@ const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     headerTitle: { fontSize: 18, fontWeight: "800" },
-    iconBtn: { width: 36, height: 36, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-    saveBtn: { paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+    iconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    saveBtn: {
+        paddingVertical: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "row",
+        gap: 8,
+    },
 });

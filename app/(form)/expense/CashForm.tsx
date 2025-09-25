@@ -1,7 +1,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+    Dispatch,
+    SetStateAction,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import { useForm } from "react-hook-form";
 import {
     Alert,
@@ -10,7 +18,7 @@ import {
     StyleSheet,
     Text,
     useColorScheme,
-    View
+    View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,8 +30,20 @@ import RHFLineInput from "@/components/RHFLineInput";
 import SectionButton from "@/components/SectionButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
-import { CashFormValues, Category, ChemItem, LaborForm, SATUAN_KIMIA, SEED_UNIT, SEEDLING_UNIT, SERVICE_UNIT, Unit, UNIT_FERTILIZER } from "@/types/expense";
+import {
+    CashFormValues,
+    Category,
+    ChemItem,
+    LaborForm,
+    SATUAN_KIMIA,
+    SEED_UNIT,
+    SEEDLING_UNIT,
+    SERVICE_UNIT,
+    Unit,
+    UNIT_FERTILIZER,
+} from "@/types/expense";
 import { currency } from "@/utils/currency";
+
 type Mode = "create" | "edit";
 
 export default function CashForm({
@@ -41,9 +61,11 @@ export default function CashForm({
     const router = useRouter();
 
     const {
+        listCashMaterials,
+        listCashLabors,
+        listCashExtras,
         createCashExpense,
         updateCashExpense,
-        listCashItems,
     } = useExpenseService();
 
     const [openSeed, setOpenSeed] = useState(false);
@@ -61,9 +83,10 @@ export default function CashForm({
     const [openPestCtrl, setOpenPestCtrl] = useState(false);
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
-    const [openExtras, setOpenExtras] = useState(false);
+    const [openExtras, setOpenExtras] = useState(true);
 
     const [seedItems, setSeedItems] = useState<ChemItem[]>([]);
+    console.log("seedItems:", seedItems);
     const [seedlingItems, setSeedlingItems] = useState<ChemItem[]>([]);
     const [fertilizerItems, setFertilizerItems] = useState<ChemItem[]>([]);
     const [insectItems, setInsectItems] = useState<ChemItem[]>([]);
@@ -73,7 +96,11 @@ export default function CashForm({
     const addChem = (
         setter: Dispatch<SetStateAction<ChemItem[]>>,
         item: Omit<ChemItem, "id">
-    ) => setter((prev) => [...prev, { ...item, id: String(Date.now() + Math.random()) }]);
+    ) =>
+        setter((prev) => [
+            ...prev,
+            { ...item, id: String(Date.now() + Math.random()) },
+        ]);
 
     const defaultLabor = (): LaborForm => ({
         tipe: "harian",
@@ -81,6 +108,8 @@ export default function CashForm({
         jumlahHari: "",
         jamKerja: "",
         upahHarian: "",
+        hargaBorongan: "",
+        upahBerlaku: "",
     });
 
     const { control, handleSubmit, watch, setValue } = useForm<CashFormValues>({
@@ -102,7 +131,9 @@ export default function CashForm({
     });
 
     const didHydrateEdit = useRef(false);
-    const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
+    const [initialLoading, setInitialLoading] = useState<boolean>(
+        mode === "edit"
+    );
 
     useEffect(() => {
         let alive = true;
@@ -113,10 +144,18 @@ export default function CashForm({
 
             try {
                 setInitialLoading(true);
-                const rows = await listCashItems(expenseId);
+
+                const [materials, labors, extras] = await Promise.all([
+                    listCashMaterials(expenseId),
+                    listCashLabors(expenseId),
+                    listCashExtras(expenseId),
+                ]);
+                console.log("hydrateEdit: materials:", materials);
+                console.log("hydrateEdit: labors:", labors);
+                console.log("hydrateEdit: extras:", extras);
                 if (!alive) return;
 
-                // reset buckets
+                // Reset buckets
                 setSeedItems([]);
                 setSeedlingItems([]);
                 setFertilizerItems([]);
@@ -124,12 +163,12 @@ export default function CashForm({
                 setHerbItems([]);
                 setFungiItems([]);
 
-                // reset extras
+                // Reset extras
                 setValue("extras.tax", "");
                 setValue("extras.landRent", "");
                 setValue("extras.transport", "");
 
-                // reset labor
+                // Reset labor per stage
                 const clearLaborKey = (key: keyof CashFormValues["labor"]) => {
                     const v: LaborForm = defaultLabor();
                     setValue(`labor.${key}.tipe` as const, v.tipe);
@@ -137,19 +176,63 @@ export default function CashForm({
                     setValue(`labor.${key}.jumlahHari` as const, v.jumlahHari);
                     setValue(`labor.${key}.jamKerja` as const, v.jamKerja);
                     setValue(`labor.${key}.upahHarian` as const, v.upahHarian);
+                    setValue(`labor.${key}.hargaBorongan` as const, v.hargaBorongan!);
+                    setValue(`labor.${key}.upahBerlaku` as const, v.upahBerlaku!);
                 };
-                ([
-                    "nursery",
-                    "land_prep",
-                    "planting",
-                    "fertilizing",
-                    "irrigation",
-                    "weeding",
-                    "pest_ctrl",
-                    "harvest",
-                    "postharvest",
-                ] as (keyof CashFormValues["labor"])[]).forEach(clearLaborKey);
+                (
+                    [
+                        "nursery",
+                        "land_prep",
+                        "planting",
+                        "fertilizing",
+                        "irrigation",
+                        "weeding",
+                        "pest_ctrl",
+                        "harvest",
+                        "postharvest",
+                    ] as (keyof CashFormValues["labor"])[]
+                ).forEach(clearLaborKey);
 
+                // --- MATERIALS
+                (materials || []).forEach((m: any) => {
+                    const cat: Category | undefined = m?.category;
+                    const unit: Unit | undefined = (m?.unit as Unit) ?? "gram";
+                    const qty = String(m?.quantity ?? "");
+                    const price = String(m?.unit_price ?? "");
+                    const name = m?.label ?? m?.item_name ?? "";
+                    const add = (setter: Dispatch<SetStateAction<ChemItem[]>>) =>
+                        setter((prev) => [
+                            ...prev,
+                            {
+                                id: String(Date.now() + Math.random()),
+                                category: cat!,
+                                name,
+                                unit,
+                                qty,
+                                price,
+                            },
+                        ]);
+
+                    if (cat === "seed") return add(setSeedItems);
+                    if (cat === "seedling") return add(setSeedlingItems);
+                    if (cat === "fertilizer") return add(setFertilizerItems);
+                    if (cat === "insecticide") return add(setInsectItems);
+                    if (cat === "herbicide") return add(setHerbItems);
+                    if (cat === "fungicide") return add(setFungiItems);
+                });
+
+                // --- EXTRAS
+                (extras || []).forEach((e: any) => {
+                    const cat: Category = e?.metadata.category;
+                    console.log("EXTRAS:", cat, e);
+                    if (cat === "tax") setValue("extras.tax", String(e.amount || ""));
+                    if (cat === "land_rent")
+                        setValue("extras.landRent", String(e.amount || ""));
+                    if (cat === "transport")
+                        setValue("extras.transport", String(e.amount || ""));
+                });
+
+                // --- LABOR
                 const laborCatToKey: Record<string, keyof CashFormValues["labor"]> = {
                     labor_nursery: "nursery",
                     labor_land_prep: "land_prep",
@@ -162,73 +245,60 @@ export default function CashForm({
                     labor_postharvest: "postharvest",
                 };
 
-                rows.forEach((it: any) => {
-                    const cat: Category | undefined = it?.metadata?.category;
-                    const unit: Unit | undefined = it?.metadata?.unit;
+                (labors || []).forEach((it: any) => {
+                    console.log("LABOR:", it);
+                    const cat: Category | undefined = it?.metadata.category;
+                    if (!cat) return;
+                    const key = laborCatToKey[cat];
+                    if (!key) return;
 
-                    // bahan/kimia
-                    const pushChem = (setter: Dispatch<SetStateAction<ChemItem[]>>) => {
-                        const id = String(Date.now() + Math.random());
-                        const qty = String(it.quantity ?? "");
-                        const price = String(it.unit_price ?? "");
-                        const name = it.label ?? it.item_name ?? "";
-                        setter((prev) => [
-                            ...prev,
-                            {
-                                id,
-                                category: cat!,
-                                name,
-                                unit: (unit as Unit) ?? "gram",
-                                qty,
-                                price,
-                            },
-                        ]);
-                    };
+                    const laborType =
+                        it?.labor_type ||
+                        it?.metadata?.laborType ||
+                        it?.metadata?.labor_type;
 
-                    if (cat === "seed") return pushChem(setSeedItems);
-                    if (cat === "seedling") return pushChem(setSeedlingItems);
-                    if (cat === "fertilizer") return pushChem(setFertilizerItems);
-                    if (cat === "insecticide") return pushChem(setInsectItems);
-                    if (cat === "herbicide") return pushChem(setHerbItems);
-                    if (cat === "fungicide") return pushChem(setFungiItems);
-
-                    // extras
-                    if (cat === "tax") {
-                        setValue("extras.tax", String(it.unit_price ?? it.subtotal ?? it.amount_estimate ?? ""));
-                        return;
-                    }
-                    if (cat === "land_rent") {
-                        setValue("extras.landRent", String(it.unit_price ?? it.subtotal ?? it.amount_estimate ?? ""));
-                        return;
-                    }
-                    if (cat === "transport") {
-                        setValue("extras.transport", String(it.unit_price ?? it.subtotal ?? it.amount_estimate ?? ""));
-                        return;
-                    }
-
-                    // labor
-                    if (cat && cat.startsWith("labor_")) {
-                        const key = laborCatToKey[cat];
-                        if (!key) return;
-
-                        const laborType = it?.metadata?.laborType as "contract" | "daily" | undefined;
-                        const tipe: LaborForm["tipe"] = laborType === "contract" ? "borongan" : "harian";
-
-                        const people = Number(it?.metadata?.peopleCount ?? 0);
-                        const days = Number(it?.metadata?.days ?? 0);
-                        const wage = Number(it?.unit_price ?? 0);
-
-                        const qty = Number(it?.quantity ?? 0);
-                        const jumlahOrang = people > 0 ? people : qty > 0 ? qty : 0;
+                    if (laborType === "contract") {
+                        const kontrak = Number(it?.contract_price ?? 0);
+                        const upahBerlaku = Number(
+                            it?.metadata?.prevailingWage ??
+                            NaN
+                        );
+                        setValue(`labor.${key}.tipe` as const, "borongan");
+                        setValue(
+                            `labor.${key}.hargaBorongan` as const,
+                            kontrak ? String(kontrak) : ""
+                        );
+                        setValue(
+                            `labor.${key}.upahBerlaku` as const,
+                            Number.isFinite(upahBerlaku) ? String(upahBerlaku) : ""
+                        );
+                        setValue(`labor.${key}.jumlahOrang` as const, "");
+                        setValue(`labor.${key}.jumlahHari` as const, "");
+                        setValue(`labor.${key}.upahHarian` as const, "");
+                    } else {
+                        const people =
+                            Number(it?.people_count ?? it?.metadata?.peopleCount ?? 0) || 0;
+                        const days = Number(it?.days ?? it?.metadata?.days ?? 0) || 0;
+                        const wage = Number(it?.daily_wage ?? 0);
+                        const jumlahOrang = people > 0 ? people : 0;
                         const jumlahHari = days > 0 ? days : 1;
 
-                        setValue(`labor.${key}.tipe` as const, tipe);
-                        setValue(`labor.${key}.jumlahOrang` as const, String(jumlahOrang || ""));
-                        setValue(`labor.${key}.jumlahHari` as const, String(jumlahHari || ""));
+                        setValue(`labor.${key}.tipe` as const, "harian");
+                        setValue(
+                            `labor.${key}.jumlahOrang` as const,
+                            String(jumlahOrang || "")
+                        );
+                        setValue(
+                            `labor.${key}.jumlahHari` as const,
+                            String(jumlahHari || "")
+                        );
                         setValue(`labor.${key}.upahHarian` as const, String(wage || ""));
-                        if (it?.metadata?.jamKerja != null) {
-                            setValue(`labor.${key}.jamKerja` as const, String(it.metadata.jamKerja));
-                        }
+                        setValue(
+                            `labor.${key}.jamKerja` as const,
+                            it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : ""
+                        );
+                        setValue(`labor.${key}.hargaBorongan` as const, "");
+                        setValue(`labor.${key}.upahBerlaku` as const, "");
                     }
                 });
 
@@ -245,15 +315,18 @@ export default function CashForm({
         return () => {
             alive = false;
         };
-    }, [mode, expenseId, listCashItems, setValue]);
+    }, [mode, expenseId, listCashMaterials, listCashLabors, listCashExtras, setValue]);
 
-    // subtotal helpers
     const toNum = (s?: string) => {
         const v = parseFloat((s || "0").replace(",", "."));
         return Number.isFinite(v) ? v : 0;
     };
 
     const calcLaborSubtotal = useCallback((lf: LaborForm) => {
+        if (lf.tipe === "borongan") {
+            const kontrak = toNum(lf.hargaBorongan);
+            return kontrak >= 0 ? kontrak : 0;
+        }
         const orang = toNum(lf.jumlahOrang);
         const hari = toNum(lf.jumlahHari);
         const upah = toNum(lf.upahHarian);
@@ -268,12 +341,12 @@ export default function CashForm({
         }, 0);
     }, []);
 
-    // watch labor + extras for total
     const laborW = watch("labor");
     const extrasW = watch("extras");
 
     const total = useMemo(() => {
-        const extras = toNum(extrasW.tax) * (toNum(extrasW.landRent) + toNum(extrasW.transport));
+        const extras =
+            toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
 
         const chem =
             sumChem(seedItems) +
@@ -293,8 +366,8 @@ export default function CashForm({
             calcLaborSubtotal(laborW.pest_ctrl) +
             calcLaborSubtotal(laborW.harvest) +
             calcLaborSubtotal(laborW.postharvest);
-
-        return chem + laborTotal + extras;
+        const totalCash = chem + laborTotal + extras;
+        return totalCash;
     }, [
         calcLaborSubtotal,
         sumChem,
@@ -320,22 +393,43 @@ export default function CashForm({
             }));
 
         const laborOne = (cat: Category, lf: LaborForm) => {
+            if (lf.tipe === "borongan") {
+                const kontrak = Math.max(0, toNum(lf.hargaBorongan));
+                if (!(kontrak >= 0)) return null;
+                return {
+                    category: cat,
+                    itemName: "borongan",
+                    unit: "service" as Unit,
+                    quantity: 1,
+                    unitPrice: kontrak,
+                    _meta: {
+                        category: cat,
+                        unit: "service",
+                        laborType: "contract",
+                        prevailingWage: lf.upahBerlaku
+                            ? Math.max(0, toNum(lf.upahBerlaku))
+                            : undefined,
+                        jamKerja: lf.jamKerja || undefined,
+                    },
+                };
+            }
+
             const people = Math.max(0, toNum(lf.jumlahOrang));
             const days = Math.max(0, toNum(lf.jumlahHari));
             const qty = Math.max(0, people * days);
             const upah = Math.max(0, toNum(lf.upahHarian));
             if (qty <= 0) return null;
-            const laborType = lf.tipe === "borongan" ? "contract" : "daily";
+
             return {
                 category: cat,
-                itemName: lf.tipe,
+                itemName: "harian",
                 unit: "service" as Unit,
                 quantity: qty,
                 unitPrice: upah,
                 _meta: {
                     category: cat,
                     unit: "service",
-                    laborType,
+                    laborType: "daily",
                     peopleCount: people,
                     days,
                     jamKerja: lf.jamKerja || undefined,
@@ -438,19 +532,31 @@ export default function CashForm({
                 colors={[C.gradientFrom, C.gradientTo]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
+                style={[
+                    styles.header,
+                    { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg },
+                ]}
             >
                 <View style={styles.headerRow}>
                     <Pressable
                         onPress={() => router.back()}
                         style={({ pressed }) => [
                             styles.iconBtn,
-                            { borderColor: C.border, backgroundColor: C.surface, opacity: pressed ? 0.9 : 1 },
+                            {
+                                borderColor: C.border,
+                                backgroundColor: C.surface,
+                                opacity: pressed ? 0.9 : 1,
+                            },
                         ]}
                     >
                         <Ionicons name="arrow-back" size={18} color={C.text} />
                     </Pressable>
-                    <Text style={[styles.headerTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
+                    <Text
+                        style={[
+                            styles.headerTitle,
+                            { color: C.text, fontFamily: Fonts.rounded as any },
+                        ]}
+                    >
                         Pengeluaran | Tunai
                     </Text>
                     <View style={{ width: 36 }} />
@@ -467,11 +573,17 @@ export default function CashForm({
                 <KeyboardAwareScrollView
                     enableOnAndroid
                     extraScrollHeight={Platform.select({ ios: 20, android: 80 })}
-                    contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: 140, gap: 12 }}
+                    contentContainerStyle={{
+                        padding: S.spacing.lg,
+                        paddingBottom: 140,
+                        gap: 12,
+                    }}
                     keyboardShouldPersistTaps="handled"
                 >
                     {/* ===== Bibit ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 4 }}>Bibit</Text>
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 4 }}>
+                        Bibit
+                    </Text>
                     <SectionButton
                         title="Tambah Benih (gram)"
                         icon="leaf-outline"
@@ -485,7 +597,13 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={[SEED_UNIT]}
                             placeholderName="Nama benih"
-                            onAdd={(p) => addChem(setSeedItems, { ...p, category: "seed", unit: SEED_UNIT })}
+                            onAdd={(p) =>
+                                addChem(setSeedItems, {
+                                    ...p,
+                                    category: "seed",
+                                    unit: SEED_UNIT,
+                                })
+                            }
                             rows={seedItems}
                             setRows={setSeedItems}
                         />
@@ -504,14 +622,22 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={[SEEDLING_UNIT]}
                             placeholderName="Nama bibit"
-                            onAdd={(p) => addChem(setSeedlingItems, { ...p, category: "seedling", unit: SEEDLING_UNIT })}
+                            onAdd={(p) =>
+                                addChem(setSeedlingItems, {
+                                    ...p,
+                                    category: "seedling",
+                                    unit: SEEDLING_UNIT,
+                                })
+                            }
                             rows={seedlingItems}
                             setRows={setSeedlingItems}
                         />
                     )}
 
                     {/* ===== Pupuk ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Pupuk</Text>
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                        Pupuk
+                    </Text>
                     <SectionButton
                         title="Tambah Pupuk"
                         icon="flask-outline"
@@ -524,7 +650,11 @@ export default function CashForm({
                         <FertilizerPanel
                             schemeColors={{ C, S }}
                             onAdd={(p) =>
-                                addChem(setFertilizerItems, { ...p, category: "fertilizer", unit: UNIT_FERTILIZER })
+                                addChem(setFertilizerItems, {
+                                    ...p,
+                                    category: "fertilizer",
+                                    unit: UNIT_FERTILIZER,
+                                })
                             }
                             rows={fertilizerItems}
                             setRows={setFertilizerItems}
@@ -532,7 +662,9 @@ export default function CashForm({
                     )}
 
                     {/* ===== Pestisida ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Pestisida</Text>
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                        Pestisida
+                    </Text>
                     <SectionButton
                         title="Tambah Insektisida"
                         icon="bug-outline"
@@ -546,7 +678,9 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama insektisida"
-                            onAdd={(p) => addChem(setInsectItems, { ...p, category: "insecticide" })}
+                            onAdd={(p) =>
+                                addChem(setInsectItems, { ...p, category: "insecticide" })
+                            }
                             rows={insectItems}
                             setRows={setInsectItems}
                         />
@@ -564,7 +698,9 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama herbisida"
-                            onAdd={(p) => addChem(setHerbItems, { ...p, category: "herbicide" })}
+                            onAdd={(p) =>
+                                addChem(setHerbItems, { ...p, category: "herbicide" })
+                            }
                             rows={herbItems}
                             setRows={setHerbItems}
                         />
@@ -582,14 +718,18 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama fungisida"
-                            onAdd={(p) => addChem(setFungiItems, { ...p, category: "fungicide" })}
+                            onAdd={(p) =>
+                                addChem(setFungiItems, { ...p, category: "fungicide" })
+                            }
                             rows={fungiItems}
                             setRows={setFungiItems}
                         />
                     )}
 
                     {/* ===== Tenaga Kerja ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Tenaga Kerja</Text>
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                        Tenaga Kerja
+                    </Text>
 
                     <LaborOne
                         title="Pesemaian"
@@ -709,7 +849,9 @@ export default function CashForm({
                     />
 
                     {/* ===== Biaya Lain ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Biaya Lain</Text>
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                        Biaya Lain
+                    </Text>
                     <SectionButton
                         title="Pajak & Sewa Lahan"
                         icon="pricetag-outline"
@@ -722,6 +864,7 @@ export default function CashForm({
                         <View style={{ marginTop: 8, gap: 10 }}>
                             <RHFLineInput
                                 label="Pajak"
+                                placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
                                 C={C}
@@ -759,14 +902,21 @@ export default function CashForm({
                     {/* ===== Footer ===== */}
                     <View style={{ marginTop: 12 }}>
                         <Text style={{ textAlign: "right", color: C.text, marginBottom: 8 }}>
-                            Total: <Text style={{ color: C.success, fontWeight: "900" }}>{currency(total)}</Text>
+                            Total:{" "}
+                            <Text style={{ color: C.success, fontWeight: "900" }}>
+                                {currency(total)}
+                            </Text>
                         </Text>
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
                             disabled={saving}
                             style={({ pressed }) => [
                                 styles.saveBtn,
-                                { backgroundColor: C.tint, opacity: pressed ? 0.98 : 1, borderRadius: S.radius.xl },
+                                {
+                                    backgroundColor: C.tint,
+                                    opacity: pressed ? 0.98 : 1,
+                                    borderRadius: S.radius.xl,
+                                },
                             ]}
                         >
                             <Ionicons name="save-outline" size={18} color="#fff" />
@@ -783,8 +933,25 @@ export default function CashForm({
 
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
     headerTitle: { fontSize: 18, fontWeight: "800" },
-    iconBtn: { width: 36, height: 36, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-    saveBtn: { paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+    iconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    saveBtn: {
+        paddingVertical: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "row",
+        gap: 8,
+    },
 });

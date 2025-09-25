@@ -1,8 +1,10 @@
+export type Unit = "gram" | "kilogram" | "liter" | "bundle" | "service";
 export const SATUAN_KIMIA: Unit[] = ["gram", "kilogram", "liter"];
 export const UNIT_FERTILIZER: Unit = "kilogram";
 export const SEED_UNIT: Unit = "gram";
 export const SEEDLING_UNIT: Unit = "bundle";
 export const SERVICE_UNIT: Unit = "service";
+
 export const FERTILIZER_CHOICES = [
   "organik",
   "kandang",
@@ -10,9 +12,8 @@ export const FERTILIZER_CHOICES = [
   "phonska",
   "KCL",
   "TSP",
-];
+] as const;
 
-export type Unit = "gram" | "kilogram" | "liter" | "bundle" | "service";
 export type Category =
   | "seed"
   | "seedling"
@@ -64,6 +65,10 @@ export type ExpenseItemRow = {
   unit_price: number | null;
 
   // labor
+  labor_type: "contract" | "daily";
+  hours_per_day: number | null;
+  contract_price: number | null;
+  prevailing_wage: number | null;
   people_count: number | null;
   days: number | null;
   daily_wage: number | null;
@@ -84,6 +89,7 @@ export type ExpenseItemRow = {
   updated_at: string;
 };
 
+/** ====== CASH input ====== */
 export type CashItemInput = {
   category: Category;
   itemName?: string | null;
@@ -100,14 +106,102 @@ export type CreateCashExpenseInput = {
   expenseDate?: string; // optional override (YYYY-MM-DD)
 };
 
-export type NonCashLaborInput = {
-  laborType: "contract" | "daily";
+/** ====== Labor form (UI) ====== */
+export type LaborForm = {
+  tipe: "borongan" | "harian";
+  jumlahOrang: string;
+  jumlahHari: string;
+  jamKerja: string;
+  upahHarian: string;
+  hargaBorongan?: string; // UI borongan
+  upahBerlaku?: string; // UI catatan upah berlaku (optional)
+};
+
+/** ====== Tool form (UI) ====== */
+export type ToolForm = {
+  id: string;
+  nama: string;
+  jumlah: string;
+  hargaBeli: string;
+  umurThn: string; // optional
+  nilaiSisa: string; // optional
+};
+
+/** ====== NonCash form (UI) ====== */
+export type NonCashFormValues = {
+  labor: {
+    nursery: LaborForm;
+    land_prep: LaborForm;
+    planting: LaborForm;
+    fertilizing: LaborForm;
+    irrigation: LaborForm;
+    weeding: LaborForm;
+    pest_ctrl: LaborForm;
+    harvest: LaborForm;
+    postharvest: LaborForm;
+  };
+  tools: ToolForm[];
+  extras: { tax: string; landRent: string };
+};
+
+/** ====== CASH form (UI) ====== */
+export type ChemItem = {
+  id: string;
+  category: Category;
+  name?: string;
+  unit: Unit;
+  qty: string;
+  price: string;
+};
+
+export type CashFormValues = {
+  extras: { tax: string; landRent: string; transport: string };
+  labor: {
+    nursery: LaborForm;
+    land_prep: LaborForm;
+    planting: LaborForm;
+    fertilizing: LaborForm;
+    irrigation: LaborForm;
+    weeding: LaborForm;
+    pest_ctrl: LaborForm;
+    harvest: LaborForm;
+    postharvest: LaborForm;
+  };
+};
+
+/** ====== NONCASH input (payload ke service/DB) — DISCRIMINATED UNION ======
+ *  Penting: varian 'contract' TIDAK punya dailyWage; varian 'daily' TIDAK punya contractPrice/prevailingWage.
+ *  Service kamu memang memvalidasi:
+ *    - contract: contractPrice (required), prevailingWage (required)
+ *    - daily: peopleCount, days, dailyWage (required)
+ */
+export type ContractNonCashLaborInput = {
+  laborType: "contract";
+  contractPrice: number;
+  prevailingWage: number; // service ensureMoneyNum() -> wajib number (0 boleh)
+  stageLabel?: string | null;
+  jamKerja?: number | null; // disimpan null oleh service saat insert; keep for API parity
+  // bidirectional compatibility:
+  peopleCount?: 0;
+  days?: 0;
+  dailyWage?: never;
+};
+
+export type DailyNonCashLaborInput = {
+  laborType: "daily";
   peopleCount: number;
   days: number;
   dailyWage: number;
-  jamKerja?: number | null;
   stageLabel?: string | null;
+  jamKerja?: number | null;
+  // bidirectional compatibility:
+  contractPrice?: never;
+  prevailingWage?: never;
 };
+
+export type NonCashLaborInput =
+  | ContractNonCashLaborInput
+  | DailyNonCashLaborInput;
 
 export type NonCashToolInput = {
   toolName: string;
@@ -131,61 +225,4 @@ export type CreateNonCashExpenseInput = {
   extras?: NonCashExtraInput[];
   note?: string | null;
   expenseDate?: string; // optional override (YYYY-MM-DD)
-};
-
-export type LaborForm = {
-  tipe: "borongan" | "harian"; // map → laborType: "contract" | "daily"
-  jumlahOrang: string;
-  jumlahHari: string;
-  jamKerja: string; // metadata only
-  upahHarian: string;
-};
-
-export type ToolForm = {
-  id: string;
-  nama: string;
-  jumlah: string;
-  hargaBeli: string;
-  umurThn: string; // optional
-  nilaiSisa: string; // optional
-};
-
-export type NonCashFormValues = {
-  labor: {
-    nursery: LaborForm;
-    land_prep: LaborForm;
-    planting: LaborForm;
-    fertilizing: LaborForm;
-    irrigation: LaborForm;
-    weeding: LaborForm;
-    pest_ctrl: LaborForm;
-    harvest: LaborForm;
-    postharvest: LaborForm;
-  };
-  tools: ToolForm[];
-  extras: { tax: string; landRent: string };
-};
-
-export type ChemItem = {
-  id: string;
-  category: Category;
-  name?: string;
-  unit: Unit;
-  qty: string;
-  price: string;
-};
-
-export type CashFormValues = {
-  extras: { tax: string; landRent: string; transport: string };
-  labor: {
-    nursery: LaborForm;
-    land_prep: LaborForm;
-    planting: LaborForm;
-    fertilizing: LaborForm;
-    irrigation: LaborForm;
-    weeding: LaborForm;
-    pest_ctrl: LaborForm;
-    harvest: LaborForm;
-    postharvest: LaborForm;
-  };
 };

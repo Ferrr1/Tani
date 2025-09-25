@@ -160,7 +160,6 @@ export default function SeasonForm() {
         if ((e as any)?.type === "dismissed") return;
         const next = date ?? dStart ?? new Date();
         setValue("startDate", fmtDMY(next), { shouldValidate: true, shouldDirty: true });
-        // sinkron end minimal = start
         const endDateObj = parseDMY(watch("endDate"));
         if (!endDateObj || endDateObj.getTime() < next.getTime()) {
             setValue("endDate", fmtDMY(next), { shouldValidate: true, shouldDirty: true });

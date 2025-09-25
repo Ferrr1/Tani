@@ -4,6 +4,7 @@ export type LoginForm = { email: string; password: string };
 
 export type RegisterForm = {
   fullName: string;
+  motherName: string;
   email: string;
   password: string;
   village: string;

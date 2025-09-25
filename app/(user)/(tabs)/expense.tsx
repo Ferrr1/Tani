@@ -23,13 +23,9 @@ export default function ExpenseScreen() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
-    // Seasons
     const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
     const { seasonId, setSeasonId, ready } = useSeasonFilter();
     const [openSeasonList, setOpenSeasonList] = useState(false);
-
-    // Urutkan: terbaru di atas
     const seasons = useMemo(
         () =>
             [...seasonRows].sort(
@@ -37,8 +33,6 @@ export default function ExpenseScreen() {
             ),
         [seasonRows]
     );
-
-    // Inisialisasi default sekali saat filter belum ada & data sudah siap
     useEffect(() => {
         if (!ready) return;
         if (seasonId != null) return;
@@ -51,8 +45,6 @@ export default function ExpenseScreen() {
         [seasons, seasonId]
     );
     const currentSeason = currentIdx >= 0 ? seasons[currentIdx] : undefined;
-
-    // Expenses — filter hanya dari argumen (no setter internal)
     const {
         loading: expenseLoading,
         refreshing,
@@ -63,9 +55,9 @@ export default function ExpenseScreen() {
         typeInfo,
     } = useExpenseList(seasonId ?? undefined);
 
-    const { deleteExpense } = useExpenseService();
+    console.log("ExpenseScreen: expenses:", expenses);
 
-    // Fetch seasons saat fokus + paksa refresh data sesuai filter aktif
+    const { deleteExpense } = useExpenseService();
     useFocusEffect(
         useCallback(() => {
             fetchSeasons();
@@ -117,7 +109,6 @@ export default function ExpenseScreen() {
         router.push(`/(form)/expense/costType${qs}`);
     };
 
-    // Tahan render sampai filter siap
     if (!ready) {
         return (
             <SafeAreaView style={{ flex: 1, backgroundColor: C.background, alignItems: "center", justifyContent: "center" }}>
@@ -129,7 +120,6 @@ export default function ExpenseScreen() {
 
     const showBlocking = (seasonLoading || expenseLoading) && (expenses?.length ?? 0) === 0;
 
-    // Navigasi prev/next season (sama seperti IncomeScreen)
     const canPrev = currentIdx >= 0 && currentIdx < seasons.length - 1;
     const canNext = currentIdx > 0;
     const goPrev = () => { if (canPrev) setSeasonId(seasons[currentIdx + 1].id); };
@@ -241,7 +231,7 @@ export default function ExpenseScreen() {
                             <Pressable
                                 key={s.id}
                                 onPress={() => {
-                                    setSeasonId(s.id);     // simpan global + persist
+                                    setSeasonId(s.id);
                                     setOpenSeasonList(false);
                                 }}
                                 style={({ pressed }) => [
@@ -280,7 +270,7 @@ export default function ExpenseScreen() {
                 </View>
             ) : (
                 <FlatList
-                    key={seasonId ?? "none"} // remount list ketika filter berubah
+                    key={seasonId ?? "none"}
                     data={expenses}
                     keyExtractor={(it) => it.id}
                     contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl, paddingTop: S.spacing.md }}
@@ -411,7 +401,6 @@ export default function ExpenseScreen() {
 }
 
 const styles = StyleSheet.create({
-    // Header
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
     headerTitle: { fontSize: 18, fontWeight: "800" },
@@ -424,8 +413,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
     },
     addText: { color: "#fff", fontSize: 14, fontWeight: "800" },
-
-    // Season selector
     selectorCard: { padding: 12, borderWidth: 1 },
     seasonRow: {
         flexDirection: "row",
@@ -448,8 +435,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
-
-    // List rows
     rowCard: {
         padding: 12,
         borderWidth: 1,
@@ -479,8 +464,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     actionText: { fontSize: 11, fontWeight: "800" },
-
-    // Empty state
     emptyWrap: {
         alignItems: "center",
         justifyContent: "center",

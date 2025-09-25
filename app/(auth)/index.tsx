@@ -1,6 +1,5 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { openWhatsApp } from "@/services/openWhatsApp";
 import { LoginForm } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -231,17 +230,10 @@ export default function LoginScreen() {
 
                         <Text style={[styles.info, { color: C.textMuted }]}>
                             Lupa password?{" "}
-                            <Pressable
-                                style={{ marginTop: 6 }}
-                                onPress={() =>
-                                    openWhatsApp({
-                                        phone: "6282244882045",
-                                        text: "Halo Admin, saya lupa password.",
-                                    })
-                                }
-                            >
-                                <Text style={[styles.link, { color: C.tint }]}>Hubungi via WhatsApp</Text>
-                            </Pressable>
+
+                            <Link href={"/verify-mother"} style={[styles.link, { color: C.tint }]}>
+                                Klik disini
+                            </Link>
                         </Text>
                     </View>
 

@@ -1,4 +1,3 @@
-// app/(tabs)/information.tsx
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -33,7 +32,6 @@ export default function InformationScreen() {
         }, [fetchOnce])
     );
 
-    // === Search & filter aktif ===
     const [q, setQ] = useState("");
     const activeRows = useMemo(
         () => rows.filter((r: any) => r.is_active === true),
@@ -52,14 +50,12 @@ export default function InformationScreen() {
 
     const showBlocking = loading && rows.length === 0;
 
-    // === Accordion state (single expand) ===
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const toggleExpand = useCallback((id: string) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpandedId((prev) => (prev === id ? null : id));
     }, []);
 
-    // Tutup ekspansi saat daftar berubah (misal selesai refresh)
     useEffect(() => {
         setExpandedId(null);
     }, [q, rows.length]);

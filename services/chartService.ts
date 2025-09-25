@@ -1,40 +1,41 @@
+// services/expenseChartService.ts
 import { useAuth } from "@/context/AuthContext";
-import { ExpenseRow } from "@/types/expense";
-import { ReceiptRow } from "@/types/receipt";
-import { SeasonRow } from "@/types/season";
-import { yearOf } from "@/utils/date";
+import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { expenseRepo } from "./expenseService";
-import { receiptRepo } from "./receiptService";
 import { seasonRepo } from "./seasonService";
 
-/**
- * Versi sinkron dengan service terbaru:
- * - seasonId optional (undefined = semua season)
- * - Anti-race untuk setiap fetch (seasons/receipts/expenses)
- * - Refetch kuat ketika seasonId berubah
- * - Tetap sediakan year filter
- */
-export function useChartData(initialSeasonId?: string | "all") {
+export type ExpenseItemRow = {
+  expense_id: string;
+  user_id: string;
+  season_id: string;
+  expense_date: string; // ISO
+  year: number;
+  type: "cash" | "noncash";
+  expense_group: "cash" | "noncash";
+  row_key: string; // unik per baris di view
+  item_kind: "material" | "labor" | "extra" | "tool" | "tax";
+  item_label: string | null;
+  item_name: string | null;
+  base_amount: number | null;
+  tax_rate_percent: number;
+  final_amount: number;
+};
+
+export function useExpenseChartData(initialSeasonId?: string | "all") {
   const { user } = useAuth();
 
-  const [seasons, setSeasons] = useState<SeasonRow[]>([]);
-  const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
-  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
-
-  // Peta "all" -> undefined agar service mengambil semua season
+  const [seasons, setSeasons] = useState<any[]>([]);
   const initial = initialSeasonId === "all" ? undefined : initialSeasonId;
   const [seasonId, setSeasonId] = useState<string | undefined>(initial);
   const [year, setYear] = useState<number | "all">("all");
 
+  const [items, setItems] = useState<ExpenseItemRow[]>([]);
   const [loadingSeasons, setLoadingSeasons] = useState(true);
-  const [loadingReceipts, setLoadingReceipts] = useState(true);
-  const [loadingExpenses, setLoadingExpenses] = useState(true);
+  const [loadingItems, setLoadingItems] = useState(true);
 
   const mounted = useRef(true);
   const reqSeasonsRef = useRef(0);
-  const reqReceiptsRef = useRef(0);
-  const reqExpensesRef = useRef(0);
+  const reqItemsRef = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -43,7 +44,7 @@ export function useChartData(initialSeasonId?: string | "all") {
     };
   }, []);
 
-  /** ====== FETCHERS (anti-race) ====== */
+  /** ===== Fetch seasons (user-scoped) ===== */
   const fetchSeasons = useCallback(async () => {
     if (!user) return;
     setLoadingSeasons(true);
@@ -52,135 +53,121 @@ export function useChartData(initialSeasonId?: string | "all") {
       const data = await seasonRepo.list(user.id);
       if (!mounted.current || myReq !== reqSeasonsRef.current) return;
       setSeasons(data);
-    } catch (e) {
-      console.warn("chartService.fetchSeasons", e);
     } finally {
       if (!mounted.current || myReq !== reqSeasonsRef.current) return;
       setLoadingSeasons(false);
     }
   }, [user]);
 
-  const fetchReceipts = useCallback(async () => {
-    if (!user) return;
-    setLoadingReceipts(true);
-    const myReq = ++reqReceiptsRef.current;
-    try {
-      const data = await receiptRepo.list(user.id, { seasonId }); // seasonId undefined => semua
-      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
-      setReceipts(data);
-    } catch (e) {
-      console.warn("chartService.fetchReceipts", e);
-    } finally {
-      if (!mounted.current || myReq !== reqReceiptsRef.current) return;
-      setLoadingReceipts(false);
+  /** ===== Compute year options from seasons (start/end year) ===== */
+  const yearOptions = useMemo(() => {
+    const ys = new Set<number>();
+    for (const s of seasons) {
+      if (s?.start_date) ys.add(new Date(s.start_date).getFullYear());
+      if (s?.end_date) ys.add(new Date(s.end_date).getFullYear());
     }
-  }, [user, seasonId]);
+    return Array.from(ys).sort((a, b) => a - b);
+  }, [seasons]);
 
-  const fetchExpenses = useCallback(async () => {
+  /** ===== Compute season IDs overlapping selected year (when no specific season is chosen) ===== */
+  const seasonIdsForYear = useMemo(() => {
+    if (year === "all" || !seasons.length) return undefined;
+    const y = Number(year);
+    const ids = seasons
+      .filter((s) => {
+        const y1 = new Date(s.start_date).getFullYear();
+        const y2 = new Date(s.end_date).getFullYear();
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+        return y >= minY && y <= maxY; // overlap by year
+      })
+      .map((s) => s.id);
+    return ids.length ? ids : ["__none__"]; // avoid .in([]) error
+  }, [year, seasons]);
+
+  /** ===== Fetch expense items from view (user-scoped) ===== */
+  const fetchItems = useCallback(async () => {
     if (!user) return;
-    setLoadingExpenses(true);
-    const myReq = ++reqExpensesRef.current;
+    setLoadingItems(true);
+    const myReq = ++reqItemsRef.current;
     try {
-      const data = await expenseRepo.list(user.id, { seasonId }); // seasonId undefined => semua
-      if (!mounted.current || myReq !== reqExpensesRef.current) return;
-      setExpenses(data);
-    } catch (e) {
-      console.warn("chartService.fetchExpenses", e);
-    } finally {
-      if (!mounted.current || myReq !== reqExpensesRef.current) return;
-      setLoadingExpenses(false);
-    }
-  }, [user, seasonId]);
+      let q = supabase
+        .from("v_expense_items_screen")
+        .select("*")
+        .eq("user_id", user.id);
 
-  /** ====== EFFECTS ====== */
-  // Sekali saat mount: ambil seasons
+      // Prioritize explicit season filter
+      if (seasonId) {
+        q = q.eq("season_id", seasonId);
+      } else if (seasonIdsForYear) {
+        // When filtering by year, use overlapping season ids (align with Report)
+        q = q.in("season_id", seasonIdsForYear);
+      }
+
+      const { data, error } = await q.order("expense_date", {
+        ascending: true,
+      });
+      if (error) throw error;
+
+      const rows = (data || []) as ExpenseItemRow[];
+      if (!mounted.current || myReq !== reqItemsRef.current) return;
+      setItems(rows);
+    } catch (e) {
+      console.warn("expenseChartService.fetchItems", e);
+      if (!mounted.current || myReq !== reqItemsRef.current) return;
+      setItems([]);
+    } finally {
+      if (!mounted.current || myReq !== reqItemsRef.current) return;
+      setLoadingItems(false);
+    }
+  }, [user, seasonId, seasonIdsForYear]);
+
   useEffect(() => {
     fetchSeasons();
   }, [fetchSeasons]);
 
-  // Setiap kali seasonId berubah → reset data & refetch kuat (menang lawan respons lama)
   useEffect(() => {
-    setReceipts([]);
-    setExpenses([]);
-    if (user) {
-      // dengan menaikkan reqId di masing-masing fetch, respons lama tidak bisa override
-      fetchReceipts();
-      fetchExpenses();
-    }
-  }, [user?.id, seasonId, fetchReceipts, fetchExpenses]);
+    if (user) fetchItems();
+  }, [user?.id, seasonId, seasonIdsForYear, fetchItems]);
 
-  /** ====== DERIVATIVES ====== */
-  const yearOptions = useMemo(() => {
-    const yearsFromReceipts = receipts.map((r) => yearOf(r.created_at));
-    const yearsFromExpenses = expenses.map((e) =>
-      e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)
-    );
-    return Array.from(
-      new Set([...yearsFromReceipts, ...yearsFromExpenses])
-    ).sort((a, b) => a - b);
-  }, [receipts, expenses]);
-
-  const filteredReceipts = useMemo(() => {
-    if (year === "all") return receipts;
-    return receipts.filter((r) => yearOf(r.created_at) === year);
-  }, [receipts, year]);
-
-  const filteredExpenses = useMemo(() => {
-    if (year === "all") return expenses;
-    return expenses.filter(
-      (e) =>
-        (e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)) ===
-        year
-    );
-  }, [expenses, year]);
-
-  const totalIn = useMemo(
-    () => filteredReceipts.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
-    [filteredReceipts]
+  /** ===== Build pie summary ===== */
+  const expensePieSummary = useMemo(
+    () =>
+      items.map((r) => ({
+        key: r.row_key,
+        label: r.item_label ?? r.item_kind.toUpperCase(),
+        name: r.item_name,
+        amount: Number(r.final_amount) || 0,
+        kind: r.item_kind,
+        group: r.expense_group,
+      })),
+    [items]
   );
 
   const totalOut = useMemo(
-    () =>
-      filteredExpenses.reduce((acc, r) => acc + (Number(r.total_all) || 0), 0),
-    [filteredExpenses]
+    () => expensePieSummary.reduce((s, x) => s + (Number(x.amount) || 0), 0),
+    [expensePieSummary]
   );
 
-  const loading = loadingSeasons || loadingReceipts || loadingExpenses;
-
-  /** ====== API ====== */
-  const refreshAll = useCallback(() => {
-    // Paksa request baru (req id naik) agar mengalahkan respons lama
-    fetchSeasons();
-    fetchReceipts();
-    fetchExpenses();
-  }, [fetchSeasons, fetchReceipts, fetchExpenses]);
+  const loading = loadingSeasons || loadingItems;
 
   return {
-    // data
+    // data sumber
     seasons,
-    receipts,
-    expenses,
-    filteredReceipts,
-    filteredExpenses,
-
-    // filter
     seasonId,
-    setSeasonId, // kirim string | undefined; undefined = semua season
+    setSeasonId,
     year,
     setYear,
     yearOptions,
 
-    // aggregates
-    totalIn,
+    // item & ringkasan
+    expenseItems: items,
+    expensePieSummary,
     totalOut,
 
-    // loading flags
+    // loading
     loading,
     loadingSeasons,
-    loadingReceipts,
-    loadingExpenses,
-
-    // actions
-    fetchAll: refreshAll,
+    loadingItems,
   };
 }

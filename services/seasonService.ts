@@ -220,7 +220,6 @@ export function useSeasonList() {
       const data = await seasonRepo.list(user.id);
       if (!mounted.current) return;
       setRows(data);
-      // Saat refresh, JANGAN mengubah 'year' meskipun "all" — biarkan pilihan user
     } catch (e) {
       console.warn(e);
     } finally {
