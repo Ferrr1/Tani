@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { RegisterForm } from "@/types/profile";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -27,12 +28,15 @@ export default function ProfileScreen() {
     const router = useRouter();
     const C = Colors[scheme];
     const S = Tokens;
-    const { profile, updateProfile } = useAuth();
+    const { profile, updateProfile, user } = useAuth();
+    console.log(profile)
     const [loading, setLoading] = useState(false);
+
     const {
         control,
         handleSubmit,
         reset,
+        setValue,
         formState: { errors, isDirty },
     } = useForm<RegisterForm>({
         defaultValues: {
@@ -40,7 +44,8 @@ export default function ProfileScreen() {
             email: "",
             village: "",
             landAreaHa: "",
-        },
+            motherName: "",
+        } as any,
         mode: "onChange",
     });
 
@@ -51,7 +56,8 @@ export default function ProfileScreen() {
             email: profile.email ?? "",
             village: profile.nama_desa ?? "",
             landAreaHa: profile.luas_lahan != null ? String(profile.luas_lahan) : "",
-        });
+            motherName: "",
+        } as any);
     }, [profile, reset]);
 
     const onSave = async (v: RegisterForm) => {
@@ -61,12 +67,23 @@ export default function ProfileScreen() {
             await updateProfile({
                 full_name: v.fullName.trim(),
                 nama_desa: v.village.trim(),
-                luas_lahan: ha,
+                luas_lahan: Number.isFinite(ha) && ha >= 0 ? ha : 0,
             });
+            const newMother = (v.motherName ?? "").trim();
+            if (newMother.length > 0) {
+                if (!user?.id) throw new Error("User belum masuk.");
+                const { error: rpcErr } = await supabase.rpc("set_mother_name", {
+                    p_user_id: user.id,
+                    p_answer: newMother,
+                });
+                if (rpcErr) throw new Error(rpcErr.message);
+                setValue("motherName", "");
+            }
+
             Keyboard.dismiss();
-            Alert.alert("Tersimpan", "Profil berhasil diperbarui.");
+            Alert.alert("Tersimpan", newMother ? "Profil & nama ibu diperbarui." : "Profil berhasil diperbarui.");
         } catch (e: any) {
-            console.warn(e)
+            console.warn(e);
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan profil.");
         } finally {
             setLoading(false);
@@ -193,6 +210,39 @@ export default function ProfileScreen() {
                         )}
                     />
 
+                    {/* Nama Ibu (opsional, jika diisi akan mengganti hash) */}
+                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
+                        Nama Ibu (untuk verifikasi reset password)
+                    </Text>
+                    <Controller
+                        control={control}
+                        name="motherName"
+                        rules={{
+                            validate: (v) => {
+                                if (!v) return true; // opsional
+                                return String(v).trim().length >= 2 || "Minimal 2 karakter";
+                            },
+                        }}
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <TextInput
+                                placeholder="Isi hanya jika ingin mengubah"
+                                placeholderTextColor={C.icon}
+                                onBlur={onBlur}
+                                onChangeText={onChange}
+                                value={value as any}
+                                style={[
+                                    styles.input,
+                                    {
+                                        color: C.text,
+                                        borderColor: errors.motherName ? C.danger : C.border,
+                                        borderRadius: S.radius.md,
+                                    },
+                                ]}
+                            />
+                        )}
+                    />
+                    {errors.motherName && <Text style={[styles.err, { color: C.danger }]}>{errors.motherName.message}</Text>}
+
                     {/* Desa/Kelurahan */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Desa/Kelurahan</Text>
                     <Controller
@@ -218,7 +268,6 @@ export default function ProfileScreen() {
                         )}
                     />
                     {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message}</Text>}
-
 
                     {/* Luas Lahan (ha) */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Luas Lahan (ha)</Text>
@@ -310,11 +359,6 @@ const styles = StyleSheet.create({
     selectInput: {
         borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     },
-    dropdown: { borderWidth: 1, borderRadius: 12, overflow: "hidden", marginTop: 8 },
-    dropdownItem: {
-        paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", gap: 8,
-    },
-
     saveBtn: {
         marginTop: 16, paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
     },

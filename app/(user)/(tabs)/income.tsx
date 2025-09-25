@@ -23,13 +23,9 @@ export default function IncomeScreen() {
   const C = Colors[scheme];
   const S = Tokens;
   const router = useRouter();
-
-  // Seasons
   const { loading: seasonLoading, rows: seasonRows, fetchOnce: fetchSeasons } = useSeasonList();
   const { seasonId, setSeasonId, ready } = useSeasonFilter();
   const [openSeasonList, setOpenSeasonList] = useState(false);
-
-  // Urutkan: terbaru di atas
   const seasons = useMemo(
     () =>
       [...seasonRows].sort(
@@ -37,8 +33,6 @@ export default function IncomeScreen() {
       ),
     [seasonRows]
   );
-
-  // Inisialisasi default hanya sekali
   useEffect(() => {
     if (!ready) return;
     if (seasonId != null) return;
@@ -51,8 +45,6 @@ export default function IncomeScreen() {
     [seasons, seasonId]
   );
   const currentSeason = currentIdx >= 0 ? seasons[currentIdx] : undefined;
-
-  // Receipts (filter tunggal dari argumen hook)
   const {
     loading: receiptLoading,
     refreshing,
@@ -62,8 +54,6 @@ export default function IncomeScreen() {
   } = useReceiptList(seasonId ?? undefined);
 
   const { deleteReceipt } = useReceiptService();
-
-  // Fetch seasons saat fokus + paksa refresh data sesuai filter aktif
   useFocusEffect(
     useCallback(() => {
       fetchSeasons();
@@ -74,8 +64,6 @@ export default function IncomeScreen() {
       return () => setOpenSeasonList(false);
     }, [fetchSeasons, ready, seasonId, refreshReceipts])
   );
-
-  // Helpers
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("id-ID", {
       day: "2-digit",
@@ -181,7 +169,6 @@ export default function IncomeScreen() {
     [C, S, scheme, handleEdit, handleDelete]
   );
 
-  // Tahan render sampai SeasonFilter restore
   if (!ready) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: C.background, alignItems: "center", justifyContent: "center" }}>
@@ -193,7 +180,6 @@ export default function IncomeScreen() {
 
   const showBlocking = (seasonLoading || receiptLoading) && (receipts?.length ?? 0) === 0;
 
-  // Navigasi prev/next season (UI kecil biar cepat)
   const canPrev = currentIdx >= 0 && currentIdx < seasons.length - 1;
   const canNext = currentIdx > 0;
   const goPrev = () => { if (canPrev) setSeasonId(seasons[currentIdx + 1].id); };

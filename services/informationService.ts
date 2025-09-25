@@ -1,4 +1,3 @@
-// services/informationService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -9,7 +8,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export const informationRepo = {
-  /** READ LIST (publik) – tidak perlu filter user */
   async list(): Promise<InformationRow[]> {
     const { data, error } = await supabase
       .from("informations")
@@ -20,7 +18,6 @@ export const informationRepo = {
     return (data || []) as InformationRow[];
   },
 
-  /** READ BY ID (publik) */
   async getById(id: string): Promise<InformationRow | null> {
     const { data, error } = await supabase
       .from("informations")
@@ -42,9 +39,6 @@ export const informationRepo = {
       description: input.description.trim(),
       note: input.note?.trim() || null,
       is_active: !!input.isActive,
-      // created_by diisi otomatis via RLS/DB trigger (opsional),
-      // kalau tetap ingin set eksplisit dari client:
-      // created_by: userId
     };
 
     const { data, error } = await supabase
@@ -86,7 +80,6 @@ export const informationRepo = {
     return data as InformationRow;
   },
 
-  /** DELETE (admin-only via RLS) */
   async remove(id: string): Promise<void> {
     const { error } = await supabase.from("informations").delete().eq("id", id);
     if (error) throw error;
@@ -94,8 +87,6 @@ export const informationRepo = {
 };
 
 export function useInformationService() {
-  // Tidak butuh user untuk read; write akan di-cek oleh RLS is_admin.
-  // Tetap ambil context supaya siap kalau mau tampilkan error "bukan admin".
   const { authReady } = useAuth();
 
   const ensureReady = useCallback(() => {
@@ -126,7 +117,6 @@ export function useInformationService() {
   };
 }
 
-/** ===== List hook anti-spam (tanpa filter user_id) ===== */
 export function useInformationList() {
   const [rows, setRows] = useState<InformationRow[]>([]);
   const [loading, setLoading] = useState(true);

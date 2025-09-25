@@ -35,8 +35,6 @@ const TZ_ABBR: Record<string, string> = {
   "Asia/Jayapura": "WIT",
 };
 
-// map kode Open-Meteo → teks sederhana (ID)
-
 
 export default function HomeScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
@@ -45,7 +43,6 @@ export default function HomeScreen() {
   const C = Colors[scheme];
   const S = Tokens;
 
-  // ====== Greeting & user
   const displayName = profile?.full_name ?? "Pengunjung";
   const greet = useMemo(() => {
     const h = new Date().getHours();
@@ -55,7 +52,6 @@ export default function HomeScreen() {
     return "Selamat malam";
   }, []);
 
-  // ====== Cuaca (tanpa API key, pakai Open-Meteo + lokasi perangkat)
   const [wx, setWx] = useState<WeatherNow | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -66,11 +62,9 @@ export default function HomeScreen() {
       try {
         setLoading(true);
 
-        // 1) Minta izin lokasi
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") throw new Error("Izin lokasi ditolak.");
 
-        // 2) Ambil posisi & reverse geocode untuk nama kota/region
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
@@ -85,7 +79,6 @@ export default function HomeScreen() {
             region = rg[0].region || rg[0].subregion || undefined;
           }
         } catch {
-          // abaikan kesalahan reverse geocode
         }
 
         const params = new URLSearchParams({
@@ -314,8 +307,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-
-  // Header
   header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   greet: { fontSize: 14, opacity: 0.9 },
@@ -325,8 +316,6 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
     width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
   },
-
-  // Main card (gradient sama dengan header)
   mainCard: { marginTop: 16, padding: 16, borderWidth: 1 },
   mainRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   mainTitle: { fontSize: 42, fontWeight: "900", letterSpacing: 1 },
@@ -348,16 +337,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-around",
-    gap: 12, // bikin 2 kolom dengan gap horizontal
+    gap: 12,
   },
   square: {
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    flexBasis: "48%",   // ~2 kolom
-    marginBottom: 12,   // jarak vertikal antar baris
-    aspectRatio: 1,     // kotak
-    padding: 12,        // ruang dalam item
+    flexBasis: "48%",
+    marginBottom: 12,
+    aspectRatio: 1,
+    padding: 12,
   },
   squareIconWrap: {
     width: 72,

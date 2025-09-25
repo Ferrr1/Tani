@@ -1,4 +1,3 @@
-// app/(form)/information/informationForm.tsx
 import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useInformationService } from "@/services/informationService";
@@ -27,13 +26,9 @@ export default function InformationForm() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
-    // --- PERSIS seperti IncomeForm: baca param & flag edit
     const { informationId } = useLocalSearchParams<{ informationId?: string }>();
     const isEdit = !!informationId;
-
     const { createInformation, updateInformation, getInformationById } = useInformationService();
-
     const [saving, setSaving] = useState(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(isEdit);
 
@@ -49,7 +44,6 @@ export default function InformationForm() {
 
     const didHydrateEdit = useRef(false);
 
-    // --- Hydrate EDIT ONLY (sama pola: tunggu rows siap? di sini langsung panggil service)
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
@@ -88,7 +82,6 @@ export default function InformationForm() {
         };
     }, [isEdit, informationId, getInformationById, reset, router]);
 
-    // --- Submit handler (seragam)
     const onSubmit = async (v: CreateInformationInput) => {
         if (!v.title?.trim()) return Alert.alert("Validasi", "Judul wajib diisi.");
         if (!v.description?.trim()) return Alert.alert("Validasi", "Deskripsi wajib diisi.");
@@ -310,11 +303,7 @@ const styles = StyleSheet.create({
     iconBtn: { width: 36, height: 36, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center" },
     title: { fontSize: 22, fontWeight: "800" },
     subtitle: { fontSize: 12, marginTop: 2 },
-
-    // card
     card: { padding: 16, borderWidth: 1 },
-
-    // fields
     label: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
     input: {
         borderWidth: 1,
@@ -326,8 +315,6 @@ const styles = StyleSheet.create({
     textarea: { minHeight: 130 },
     textareaSmall: { minHeight: 70 },
     err: { marginTop: 6, fontSize: 12 },
-
-    // save button
     saveBtn: {
         marginTop: 16,
         paddingVertical: 12,

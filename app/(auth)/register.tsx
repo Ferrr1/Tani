@@ -24,7 +24,9 @@ export default function RegisterScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
-    const { signUp, authReady } = useAuth();
+
+    const { register: registerUser, authReady } = useAuth();
+
     const [showPwd, setShowPwd] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +37,7 @@ export default function RegisterScreen() {
     } = useForm<RegisterForm>({
         defaultValues: {
             fullName: "",
+            motherName: "",
             email: "",
             password: "",
             village: "",
@@ -44,18 +47,16 @@ export default function RegisterScreen() {
     });
 
     const onSubmit = async (v: RegisterForm) => {
-        const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
         try {
             setSubmitting(true);
-            await signUp({
+            await registerUser({
+                fullName: v.fullName.trim(),
+                motherName: v.motherName.trim(),
                 email: v.email.trim(),
                 password: v.password,
-                meta: {
-                    full_name: v.fullName.trim(),
-                    nama_desa: v.village.trim(),
-                    luas_lahan: ha,
-                } as any,
-            });
+                village: v.village.trim(),
+                landAreaHa: v.landAreaHa,
+            }, true);
         } catch (e: any) {
             console.warn("register error", e);
             const msg = e?.message || "Terjadi kesalahan saat pendaftaran";
@@ -122,6 +123,37 @@ export default function RegisterScreen() {
                         />
                         {errors.fullName && (
                             <Text style={[styles.err, { color: C.danger }]}>{errors.fullName.message}</Text>
+                        )}
+
+                        {/* Nama Ibu */}
+                        <Text style={[styles.label, { color: C.text }]}>Nama Ibu</Text>
+                        <Controller
+                            control={control}
+                            name="motherName"
+                            rules={{ required: "Nama wajib diisi" }}
+                            render={({ field: { onChange, onBlur, value } }) => (
+                                <TextInput
+                                    placeholder="Nama ibu"
+                                    placeholderTextColor={C.icon}
+                                    onBlur={onBlur}
+                                    onChangeText={onChange}
+                                    value={value}
+                                    style={[
+                                        styles.input,
+                                        {
+                                            borderColor: errors.motherName ? C.danger : C.border,
+                                            color: C.text,
+                                            fontFamily: Fonts.sans as any,
+                                            borderRadius: S.radius.md,
+                                            paddingHorizontal: S.spacing.md,
+                                            paddingVertical: 10,
+                                        },
+                                    ]}
+                                />
+                            )}
+                        />
+                        {errors.motherName && (
+                            <Text style={[styles.err, { color: C.danger }]}>{errors.motherName.message}</Text>
                         )}
 
                         {/* Email */}
@@ -195,7 +227,15 @@ export default function RegisterScreen() {
                                     <Pressable
                                         onPress={() => setShowPwd((s) => !s)}
                                         hitSlop={10}
-                                        style={{ position: "absolute", right: 10, top: 10, height: 24, width: 24, alignItems: "center", justifyContent: "center" }}
+                                        style={{
+                                            position: "absolute",
+                                            right: 10,
+                                            top: 10,
+                                            height: 24,
+                                            width: 24,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                        }}
                                     >
                                         <Ionicons
                                             name={showPwd ? "eye-off-outline" : "eye-outline"}
@@ -220,7 +260,7 @@ export default function RegisterScreen() {
                             rules={{ required: "Nama Desa/Kelurahan wajib diisi" }}
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <TextInput
-                                    placeholder="Contoh: Medangan"
+                                    placeholder="Contoh: Sukamaju"
                                     placeholderTextColor={C.icon}
                                     onBlur={onBlur}
                                     onChangeText={onChange}
@@ -300,9 +340,7 @@ export default function RegisterScreen() {
                             {submitting ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
-                                    Daftar
-                                </Text>
+                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>Daftar</Text>
                             )}
                         </Pressable>
 

@@ -119,7 +119,6 @@ export default function IncomeForm() {
                     return;
                 }
 
-                // Reset form sesuai data edit
                 reset({
                     quantity: row.quantity != null ? String(row.quantity) : "",
                     unit: row.unit_type ?? "",
@@ -143,7 +142,6 @@ export default function IncomeForm() {
         };
     }, [isEdit, receiptId, seasons, getReceiptById, reset, router]);
 
-    // Set DEFAULT season (CREATE only) — sekali saja
     useEffect(() => {
         if (!seasons.length) return;
         if (isEdit) return;
@@ -503,11 +501,7 @@ const styles = StyleSheet.create({
     },
     title: { fontSize: 22, fontWeight: "800" },
     subtitle: { fontSize: 12, marginTop: 2 },
-
-    // card
     card: { padding: 16, borderWidth: 1 },
-
-    // fields
     label: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
     input: {
         borderWidth: 1, fontSize: 15, paddingHorizontal: 12,
@@ -515,8 +509,6 @@ const styles = StyleSheet.create({
         backgroundColor: "transparent",
     },
     err: { marginTop: 6, fontSize: 12 },
-
-    // select styles
     selectInput: {
         borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     },
@@ -524,14 +516,10 @@ const styles = StyleSheet.create({
     dropdownItem: {
         paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", gap: 8,
     },
-
-    // badge
     badge: {
         flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
     },
-
-    // save button
     saveBtn: {
         marginTop: 16, paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
     },

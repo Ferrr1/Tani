@@ -1,62 +1,47 @@
 import { useAuth } from "@/context/AuthContext";
-import { expenseRepo } from "@/services/expenseService";
-import { receiptRepo } from "@/services/receiptService";
-import { seasonRepo } from "@/services/seasonService";
-import type { ExpenseRow } from "@/types/expense";
-import type { ReceiptRow } from "@/types/receipt";
-import type { SeasonRow } from "@/types/season";
-import { yearOf } from "@/utils/date";
+import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { seasonRepo } from "./seasonService";
 
-export type ReportProductionItem = {
-  label: string;
-  quantity: number;
-  unitType: string | null;
-  unitPrice: number; // harga/satuan
-  total: number; // quantity * unitPrice
-};
+type YearFilter = number | "all";
 
-export type ReportCashItem = {
-  category: string;
-  quantity: number;
-  unit: string | null;
-  unitPrice: number;
-  total: number;
-};
-
-export type ReportLaborItem = {
-  stageLabel: string | null;
-  laborType: "daily" | "contract";
-  peopleCount: number;
-  days: number;
-  dailyWage: number;
-  value: number; // peopleCount*days*dailyWage OR contract total
-  hok: number; // HOK estimasi (lihat aturan di bawah)
-};
-
-export type ReportToolItem = {
-  toolName: string;
-  quantity: number;
-  purchasePrice: number;
-  total: number;
-};
-
-export type ReportExtraItem = {
-  kind: "tax" | "land_rent" | "other";
-  label: string;
-  amount: number;
-};
-
+function num(x: any): number {
+  const n = typeof x === "string" ? parseFloat(x) : Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+function sum(arr: number[]) {
+  return arr.reduce((a, b) => a + b, 0);
+}
 export type ReportDataset = {
-  seasons: SeasonRow[];
-  yearOptions: number[];
-  receipts: ReceiptRow[];
-  expenses: ExpenseRow[];
-  production: ReportProductionItem[]; // penerimaan
-  cashByCategory: ReportCashItem[]; // biaya tunai (per kategori)
-  labor: ReportLaborItem[]; // non tunai: tenaga kerja
-  tools: ReportToolItem[]; // non tunai: alat
-  extras: ReportExtraItem[]; // non tunai: biaya lain (tax/land_rent/other)
+  production: {
+    label: string;
+    quantity: number | null;
+    unitType: string | null;
+    unitPrice: number;
+  }[];
+  cashByCategory: {
+    category: string;
+    quantity: number | null;
+    unit: string | null;
+    unitPrice: number;
+  }[];
+  labor: {
+    stageKey?: string;
+    stageLabel?: string;
+    laborType: "daily" | "contract";
+    value: number;
+  }[];
+  tools: {
+    toolName: string;
+    quantity: number;
+    purchasePrice: number;
+  }[];
+  extras: {
+    category: string;
+    label: string;
+    amount: number;
+  }[];
+
   totalReceipts: number;
   totalCash: number;
   totalLabor: number;
@@ -66,278 +51,248 @@ export type ReportDataset = {
   totalCost: number;
 };
 
-type BuildOptions = {
-  landFactor?: number;
-  standardDailyWage?: number;
-};
-
-async function fetchAllExpenseItemsFor(userId: string, expenseIds: string[]) {
-  const results = await Promise.all(
-    expenseIds.map(async (id) => {
-      const [cash, labor, tools, extras] = await Promise.all([
-        expenseRepo.listItems(userId, id, "cash"),
-        expenseRepo.listItems(userId, id, "labor"),
-        expenseRepo.listItems(userId, id, "tool"),
-        expenseRepo.listItems(userId, id, "extra"),
-      ]);
-      return { id, cash, labor, tools, extras };
-    })
-  );
-  return results;
-}
-
-/** ===== Hook utama: gunakan di halaman Report ===== */
-export function useReportData(initialSeasonId: string | "all" = "all") {
+export function useReportData(initialSeasonId?: string | "all") {
   const { user } = useAuth();
 
-  // sumber
-  const [seasons, setSeasons] = useState<SeasonRow[]>([]);
-  const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
-  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const initial = initialSeasonId === "all" ? undefined : initialSeasonId;
+  const [seasonId, setSeasonId] = useState<string | undefined>(initial);
+  const [year, setYear] = useState<YearFilter>("all");
 
-  // filter
-  const [seasonId, setSeasonId] = useState<string | "all">(initialSeasonId);
-  const [year, setYear] = useState<number | "all">("all");
-
-  // loading flags
-  const [loadingSeasons, setLoadingSeasons] = useState(true);
-  const [loadingReceipts, setLoadingReceipts] = useState(true);
-  const [loadingExpenses, setLoadingExpenses] = useState(true);
-
-  // guards
-  const mounted = useRef(true);
-  const inFlight = useRef({ seasons: false, receipts: false, expenses: false });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [yearOptions, setYearOptions] = useState<number[]>([]);
+  const reqRef = useRef(0);
 
   useEffect(() => {
-    mounted.current = true;
+    let alive = true;
+    (async () => {
+      if (!user) return;
+      setLoading(true);
+      const myReq = ++reqRef.current;
+      try {
+        const ss = await seasonRepo.list(user.id);
+        if (!alive || myReq !== reqRef.current) return;
+        setSeasons(ss || []);
+
+        const years = new Set<number>();
+        (ss || []).forEach((s: any) => {
+          if (s?.start_date) years.add(new Date(s.start_date).getFullYear());
+          if (s?.end_date) years.add(new Date(s.end_date).getFullYear());
+        });
+        const opts = Array.from(years).sort((a, b) => a - b);
+        setYearOptions(opts);
+      } catch (e) {
+        console.warn("reportService bootstrap", e);
+      } finally {
+        if (alive && reqRef.current) setLoading(false);
+      }
+    })();
     return () => {
-      mounted.current = false;
+      alive = false;
     };
-  }, []);
+  }, [user?.id]);
 
-  /** fetchers */
-  const fetchSeasons = useCallback(async () => {
-    if (!user) return;
-    if (inFlight.current.seasons) return;
-    inFlight.current.seasons = true;
-    try {
-      if (mounted.current) setLoadingSeasons(true);
-      const data = await seasonRepo.list(user.id);
-      if (!mounted.current) return;
-      setSeasons(data);
-    } catch (e) {
-      console.warn("reportService.fetchSeasons", e);
-    } finally {
-      inFlight.current.seasons = false;
-      if (mounted.current) setLoadingSeasons(false);
-    }
-  }, [user]);
+  const seasonIdsForYear = useMemo(() => {
+    if (year === "all" || !seasons?.length) return undefined;
+    const y = Number(year);
+    const ids = seasons
+      .filter((s: any) => {
+        const y1 = new Date(s.start_date).getFullYear();
+        const y2 = new Date(s.end_date).getFullYear();
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+        return y >= minY && y <= maxY; // overlap by year
+      })
+      .map((s: any) => s.id);
+    return ids.length ? ids : ["__none__"]; // hindari .in([]) error
+  }, [year, seasons]);
 
-  const fetchReceipts = useCallback(async () => {
-    if (!user) return;
-    if (inFlight.current.receipts) return;
-    inFlight.current.receipts = true;
-    try {
-      if (mounted.current) setLoadingReceipts(true);
-      const data = await receiptRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
-      setReceipts(data);
-    } catch (e) {
-      console.warn("reportService.fetchReceipts", e);
-    } finally {
-      inFlight.current.receipts = false;
-      if (mounted.current) setLoadingReceipts(false);
-    }
-  }, [user, seasonId]);
-
-  const fetchExpenses = useCallback(async () => {
-    if (!user) return;
-    if (inFlight.current.expenses) return;
-    inFlight.current.expenses = true;
-    try {
-      if (mounted.current) setLoadingExpenses(true);
-      const data = await expenseRepo.list(user.id, { seasonId });
-      if (!mounted.current) return;
-      setExpenses(data);
-    } catch (e) {
-      console.warn("reportService.fetchExpenses", e);
-    } finally {
-      inFlight.current.expenses = false;
-      if (mounted.current) setLoadingExpenses(false);
-    }
-  }, [user, seasonId]);
-
-  // initial
-  useEffect(() => {
-    fetchSeasons();
-  }, [fetchSeasons]);
-  useEffect(() => {
-    fetchReceipts();
-    fetchExpenses();
-  }, [seasonId, fetchReceipts, fetchExpenses]);
-
-  /** years (dari data aktif) */
-  const yearOptions = useMemo(() => {
-    const rYears = receipts.map((r) => yearOf(r.created_at));
-    const eYears = expenses.map((e) =>
-      e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)
-    );
-    return Array.from(new Set([...rYears, ...eYears])).sort((a, b) => a - b);
-  }, [receipts, expenses]);
-
-  /** filter by year (eksklusif vs season diputuskan di UI) */
-  const filteredReceipts = useMemo(() => {
-    if (year === "all") return receipts;
-    return receipts.filter((r) => yearOf(r.created_at) === year);
-  }, [receipts, year]);
-  const filteredExpenses = useMemo(() => {
-    if (year === "all") return expenses;
-    return expenses.filter(
-      (e) =>
-        (e.expense_date ? yearOf(e.expense_date) : yearOf(e.created_at)) ===
-        year
-    );
-  }, [expenses, year]);
-
-  /** ===== Build dataset detail (items) =====
-   * Agar bisa dipakai export PDF, sediakan fungsi builder dengan opsi konversi
-   */
   const buildDataset = useCallback(
-    async (opts?: BuildOptions): Promise<ReportDataset> => {
-      const landFactor = opts?.landFactor ?? 1;
-      const standardDailyWage = opts?.standardDailyWage ?? 0;
+    async (opts?: { landFactor?: number }): Promise<ReportDataset> => {
+      if (!user) return emptyDataset();
+      const landFactor = Number(opts?.landFactor ?? 1) || 1;
 
-      const _receipts = filteredReceipts;
-      const _expenses = filteredExpenses;
+      type Row = {
+        user_id: string;
+        season_id: string;
+        year: number | null;
+        section:
+          | "production"
+          | "cash_detail"
+          | "cash_labor_total"
+          | "noncash_labor_total"
+          | "noncash_tool_detail";
+        label: string | null; // ex: 'seed', 'fertilizer', 'transport', 'Penerimaan', etc.
+        name: string | null; // nama item (jika ada)
+        qty: number | null; // bisa terisi untuk material & alat; juga HOK utk labor di view
+        unit: string | null; // 'kg', 'gr', 'HOK', dst (bisa null)
+        unit_price: number | null; // harga satuan (material/alat/labor daily) jika ada
+        amount: number | null; // total nominal (selalu ada untuk ringkasan)
+      };
 
-      // PRODUKSI
-      const production: ReportProductionItem[] = _receipts.map((r) => {
-        const quantity = Number(r.quantity) || 0;
-        const unitPrice = Number(r.unit_price) || 0;
-        const total = quantity * unitPrice;
+      let q = supabase
+        .from("v_report_source")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (seasonId) {
+        q = q.eq("season_id", seasonId);
+      } else if (seasonIdsForYear) {
+        q = q.in("season_id", seasonIdsForYear);
+      }
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const rows: Row[] = (data || []) as any[];
+
+      // Bagi per section
+      const prod = rows.filter((r) => r.section === "production");
+      const cashDetail = rows.filter((r) => r.section === "cash_detail");
+      const cashLaborTotal = rows.filter(
+        (r) => r.section === "cash_labor_total"
+      );
+      const noncashLaborTotal = rows.filter(
+        (r) => r.section === "noncash_labor_total"
+      );
+      const toolDetail = rows.filter(
+        (r) => r.section === "noncash_tool_detail"
+      );
+
+      const production = prod.map((r) => {
+        const baseQty = r.qty != null ? num(r.qty) : null;
         return {
-          label: "Penerimaan (hasil panen)",
-          quantity: quantity * landFactor,
-          unitType: r.unit_type ?? null,
-          unitPrice,
-          total: total * landFactor,
+          label: "Penerimaan",
+          quantity: baseQty != null ? baseQty * landFactor : null, // skala qty
+          unitType: r.unit ?? null,
+          unitPrice:
+            r.unit_price != null
+              ? num(r.unit_price)
+              : r.amount != null
+              ? num(r.amount)
+              : 0,
         };
       });
 
-      // EXPENSE ITEMS (per expense)
-      const expenseIds = _expenses.map((e) => e.id);
-      const itemsBatches =
-        user && expenseIds.length
-          ? await fetchAllExpenseItemsFor(user.id, expenseIds)
+      type AggMat = {
+        qty: number;
+        amt: number; // amt dari baris yg punya qty
+        unit: string | null;
+        multiUnit: boolean;
+      };
+      const matMap = new Map<string, AggMat>();
+      const extraMap = new Map<string, number>();
+
+      for (const r of cashDetail) {
+        const rawLabel = (r.label ?? "").trim(); // contoh: 'seed', 'fertilizer', 'transport', dll
+        const rawName = (r.name ?? "").trim(); // contoh: 'Urea', 'Mospilan'
+        const key = rawName ? `${rawLabel}|${rawName}` : rawLabel;
+
+        const hasQtyLike = r.qty != null || r.unit_price != null;
+        if (hasQtyLike) {
+          const qv = r.qty != null ? num(r.qty) : 0;
+          const pv = r.unit_price != null ? num(r.unit_price) : 0;
+          const av = qv > 0 && pv > 0 ? qv * pv : num(r.amount);
+
+          const prev = matMap.get(key) || {
+            qty: 0,
+            amt: 0,
+            unit: r.unit ?? null,
+            multiUnit: false,
+          };
+          // unit konsisten
+          const thisUnit = r.unit ?? null;
+          if (prev.unit == null) {
+            prev.unit = thisUnit;
+          } else if (thisUnit && prev.unit !== thisUnit) {
+            prev.multiUnit = true;
+          }
+
+          prev.qty += qv;
+          prev.amt += av;
+          matMap.set(key, prev);
+        } else {
+          // extra nominal
+          extraMap.set(key, (extraMap.get(key) ?? 0) + num(r.amount));
+        }
+      }
+
+      const laborCashNom = sum(
+        cashLaborTotal.map((r) =>
+          r.qty && r.unit_price ? num(r.qty) * num(r.unit_price) : num(r.amount)
+        )
+      );
+      if (laborCashNom > 0) {
+        const key = "labor_outside";
+        extraMap.set(key, (extraMap.get(key) ?? 0) + laborCashNom);
+      }
+
+      const cashByCategory: ReportDataset["cashByCategory"] = [];
+
+      for (const [key, ag] of matMap.entries()) {
+        const qtyConv = ag.qty * landFactor;
+        const unit = ag.multiUnit ? null : ag.unit ?? null;
+        const unitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt; // harga satuan rata-rata tertimbang
+        cashByCategory.push({
+          category: key, // raw label or raw|name
+          quantity: qtyConv, // dikonversi
+          unit,
+          unitPrice, // tidak dikonversi
+        });
+      }
+
+      for (const [key, amount] of extraMap.entries()) {
+        cashByCategory.push({
+          category: key, // raw label (akan di-map di UI)
+          quantity: null,
+          unit: null,
+          unitPrice: amount * landFactor, // nilai nominal terkonversi
+        });
+      }
+
+      const laborNoncashNomBase = sum(
+        noncashLaborTotal.map((r) =>
+          r.qty && r.unit_price ? num(r.qty) * num(r.unit_price) : num(r.amount)
+        )
+      );
+      const laborVal = laborNoncashNomBase * landFactor;
+      const labor: ReportDataset["labor"] =
+        laborVal > 0
+          ? [
+              {
+                stageKey: undefined,
+                stageLabel: "Dalam Keluarga",
+                laborType: "daily",
+                value: laborVal,
+              },
+            ]
           : [];
 
-      // gabungkan semua jenis
-      const cashItems = itemsBatches.flatMap((b: any) => b.cash);
-      const laborItems = itemsBatches.flatMap((b: any) => b.labor);
-      const toolItems = itemsBatches.flatMap((b: any) => b.tools);
-      const extraItems = itemsBatches.flatMap((b: any) => b.extras);
+      const tools: ReportDataset["tools"] = toolDetail.map((r) => ({
+        toolName: r.name || "Alat",
+        quantity: (r.qty != null ? num(r.qty) : 0) * landFactor, // skala qty
+        purchasePrice: r.unit_price != null ? num(r.unit_price) : 0,
+      }));
 
-      // CASH -> per kategori (metadata.category, metadata.unit)
-      const cashByCategory: ReportCashItem[] = cashItems.map((it: any) => {
-        const qty = Number(it.quantity) || 0;
-        const price = Number(it.unit_price) || 0;
-        const total = qty * price;
-        const unit = (it.metadata && (it.metadata as any).unit) || null;
-        const category =
-          (it.metadata && (it.metadata as any).category) ||
-          it.label ||
-          "Lainnya";
-        return {
-          category,
-          quantity: qty * landFactor,
-          unit,
-          unitPrice: price,
-          total: total * landFactor,
-        };
-      });
+      const extras: ReportDataset["extras"] = [];
 
-      // LABOR
-      const labor: ReportLaborItem[] = laborItems.map((it: any) => {
-        const people = Number(it.people_count) || 0;
-        const days = Number(it.days) || 0;
-        const wage = Number(it.daily_wage) || 0;
-        const value = people * days * wage;
-        const laborType =
-          (it.metadata && (it.metadata as any).labor_type) === "contract"
-            ? "contract"
-            : "daily";
-        const stageLabel = it.label ?? null;
-
-        // HOK:
-        // - daily: HOK = people * days
-        // - contract: HOK = (value / standardDailyWage) jika standardDailyWage > 0
-        let hok = 0;
-        if (laborType === "daily") {
-          hok = people * days;
-        } else if (standardDailyWage > 0) {
-          hok = value / standardDailyWage;
-        }
-
-        return {
-          stageLabel,
-          laborType,
-          peopleCount: people * landFactor,
-          days,
-          dailyWage: wage,
-          value: value * landFactor,
-          hok: hok * landFactor,
-        };
-      });
-
-      // TOOLS
-      const tools: ReportToolItem[] = toolItems.map((it: any) => {
-        const qty = Number(it.quantity) || 0;
-        const price = Number(it.purchase_price) || 0;
-        const total = qty * price;
-        return {
-          toolName: it.label ?? "Alat",
-          quantity: qty * landFactor,
-          purchasePrice: price,
-          total: total * landFactor,
-        };
-      });
-
-      // EXTRAS
-      const extras: ReportExtraItem[] = extraItems.map((it: any) => {
-        const kind: ReportExtraItem["kind"] =
-          it.extra_kind === "tax"
-            ? "tax"
-            : it.extra_kind === "land_rent"
-            ? "land_rent"
-            : "other";
-        const amount = Number(it.unit_price) || 0;
-        return {
-          kind,
-          label:
-            it.label ??
-            (kind === "tax"
-              ? "Pajak"
-              : kind === "land_rent"
-              ? "Sewa Lahan"
-              : "Biaya"),
-          amount: amount * landFactor,
-        };
-      });
-
-      // Aggregates
-      const totalReceipts = production.reduce((a, r) => a + r.total, 0);
-      const totalCash = cashByCategory.reduce((a, r) => a + r.total, 0);
-      const totalLabor = labor.reduce((a, r) => a + r.value, 0);
-      const totalTools = tools.reduce((a, r) => a + r.total, 0);
-      const totalExtras = extras.reduce((a, r) => a + r.amount, 0);
+      const totalReceipts = sum(
+        production.map((p) =>
+          p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice
+        )
+      );
+      const totalCash = sum(
+        cashByCategory.map((c) =>
+          c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice
+        )
+      );
+      const totalTools = sum(tools.map((t) => t.quantity * t.purchasePrice));
+      const totalLabor = sum(labor.map((l) => l.value));
+      const totalExtras = sum(extras.map((e) => e.amount));
       const totalNonCash = totalLabor + totalTools + totalExtras;
       const totalCost = totalCash + totalNonCash;
 
       return {
-        seasons,
-        yearOptions,
-        receipts: _receipts,
-        expenses: _expenses,
         production,
         cashByCategory,
         labor,
@@ -352,31 +307,34 @@ export function useReportData(initialSeasonId: string | "all" = "all") {
         totalCost,
       };
     },
-    [filteredReceipts, filteredExpenses, seasons, yearOptions, user]
+    [user?.id, seasonId, seasonIdsForYear]
   );
 
-  const loading = loadingSeasons || loadingReceipts || loadingExpenses;
-
   return {
-    // filters
+    seasons,
     seasonId,
     setSeasonId,
     year,
     setYear,
-    seasons,
     yearOptions,
-
-    // loader
     loading,
-
-    // actions
-    refreshAll: () => {
-      fetchSeasons();
-      fetchReceipts();
-      fetchExpenses();
-    },
-
-    // main builder (bisa dipakai UI & export PDF)
     buildDataset,
+  };
+}
+
+function emptyDataset(): ReportDataset {
+  return {
+    production: [],
+    cashByCategory: [],
+    labor: [],
+    tools: [],
+    extras: [],
+    totalReceipts: 0,
+    totalCash: 0,
+    totalLabor: 0,
+    totalTools: 0,
+    totalExtras: 0,
+    totalNonCash: 0,
+    totalCost: 0,
   };
 }

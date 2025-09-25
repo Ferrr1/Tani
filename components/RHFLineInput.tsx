@@ -3,12 +3,14 @@ import { Text, TextInput, View } from "react-native";
 
 export default function RHFLineInput({
     label,
+    placeholder,
     name,
     control,
     C,
     rules,
 }: {
     label: string;
+    placeholder?: string;
     name: any;
     control: any;
     C: any;
@@ -24,7 +26,7 @@ export default function RHFLineInput({
                 render={({ field: { value, onChange }, fieldState: { error } }) => (
                     <>
                         <TextInput
-                            placeholder={label}
+                            placeholder={placeholder ? placeholder : label}
                             placeholderTextColor={C.icon}
                             value={value}
                             onChangeText={onChange}

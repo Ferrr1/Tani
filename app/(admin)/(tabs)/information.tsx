@@ -1,4 +1,3 @@
-// app/information/index.tsx
 import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useInformationList, useInformationService } from "@/services/informationService";
@@ -123,7 +122,7 @@ export default function InformationScreen() {
                 <View style={styles.actions}>
                     <Pressable
                         onPress={() =>
-                            router.push(`/(form)/information/InformationForm?informationId=${item.id}`) // CHANGED: lowercase path konsisten
+                            router.push(`/(form)/information/InformationForm?informationId=${item.id}`)
                         }
                         style={({ pressed }) => [
                             styles.actionBtn,
@@ -183,7 +182,6 @@ export default function InformationScreen() {
                 </View>
 
                 <Pressable
-                    // arahkan ke file form yang benar
                     onPress={() => router.push("/(form)/information/InformationForm")}
                     style={({ pressed }) => [
                         styles.addBtn,
