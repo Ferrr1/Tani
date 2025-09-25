@@ -1,9 +1,13 @@
+import RowView from "@/components/RowView";
+import SectionTitle from "@/components/SectionTitle";
+import SubMini from "@/components/SubMini";
+import SubTitle from "@/components/SubTitle";
+import TotalLine from "@/components/TotalLine";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { generateReportPdf } from "@/services/pdf/reportPdf";
 import { getMyProfile } from "@/services/profileService";
 import { useReportData } from "@/services/reportService";
-import { CATEGORY_LABEL_REPORT } from "@/types/report";
-import { currency } from "@/utils/currency";
+import { CATEGORY_LABEL_REPORT, Theme } from "@/types/report";
 import { fmtDate } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,21 +21,23 @@ import {
     Text,
     TextInput,
     View,
-    useColorScheme
+    useColorScheme,
 } from "react-native";
-
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-
-
-type Theme = typeof Colors["light"];
-
 function prettyCashLabel(raw: string): string {
     const [rawCat, name] = raw.split("|");
+
+    // khusus: biarkan kapitalisasi label TK tetap apa adanya
+    if (rawCat?.trim() === "TK Luar Keluarga") {
+        return name ? `TK Luar Keluarga | ${name.trim()}` : "TK Luar Keluarga";
+    }
+
     const label =
         CATEGORY_LABEL_REPORT[rawCat] ??
         rawCat?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
     return name ? `${label} | ${name.trim()}` : label;
 }
 
@@ -39,6 +45,7 @@ export default function ReportScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme] as Theme;
     const S = Tokens;
+
     const {
         seasons,
         seasonId,
@@ -52,6 +59,7 @@ export default function ReportScreen() {
 
     const [profileAreaHa, setProfileAreaHa] = useState<number>(0);
     const [profileLoading, setProfileLoading] = useState<boolean>(true);
+
     useEffect(() => {
         let alive = true;
         (async () => {
@@ -141,6 +149,12 @@ export default function ReportScreen() {
             unitPrice: number;
         }[],
         laborNonCashNom: 0,
+        laborNonCashDetail: null as null | {
+            qty: number | null;
+            unit: string | null;
+            unitPrice: number | null;
+            amount: number;
+        },
         tools: [] as { toolName: string; quantity: number; purchasePrice: number }[],
         extras: [] as { category: string; label: string; amount: number }[],
     });
@@ -152,12 +166,13 @@ export default function ReportScreen() {
             if (profileLoading) return;
             setBootLoading(true);
             try {
-                const d = await buildDataset();
+                const d = await buildDataset({ landFactor });
                 if (!alive) return;
                 setBase({
                     production: d.production || [],
                     cash: d.cashByCategory || [],
                     laborNonCashNom: (d.labor || []).reduce((a, r) => a + (r.value || 0), 0),
+                    laborNonCashDetail: d.laborNonCashDetail ?? null,
                     tools: d.tools || [],
                     extras: d.extras || [],
                 });
@@ -168,6 +183,7 @@ export default function ReportScreen() {
                     production: [],
                     cash: [],
                     laborNonCashNom: 0,
+                    laborNonCashDetail: null,
                     tools: [],
                     extras: [],
                 });
@@ -178,40 +194,38 @@ export default function ReportScreen() {
         return () => {
             alive = false;
         };
-    }, [buildDataset, profileLoading, seasonId, year]);
+    }, [buildDataset, profileLoading, seasonId, year, landFactor]);
 
     const prodValue = (p: (typeof base.production)[number]) =>
-        (p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice) * landFactor;
+        p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
 
     const cashValue = (c: (typeof base.cash)[number]) =>
-        (c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice) * landFactor;
+        c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
 
-    const toolValue = (t: (typeof base.tools)[number]) =>
-        t.quantity * t.purchasePrice * landFactor;
+    const toolValue = (t: (typeof base.tools)[number]) => t.quantity * t.purchasePrice;
 
-    const extraValue = (e: (typeof base.extras)[number]) =>
-        (e.amount || 0) * landFactor;
+    const extraValue = (e: (typeof base.extras)[number]) => e.amount || 0;
 
     const totalProduksi = useMemo(
         () => base.production.reduce((acc, p) => acc + prodValue(p), 0),
-        [base.production, landFactor]
+        [base.production]
     );
 
     const totalBiayaTunai = useMemo(
         () => base.cash.reduce((acc, c) => acc + cashValue(c), 0),
-        [base.cash, landFactor]
+        [base.cash]
     );
 
     const totalBiayaNonTunaiTK = useMemo(
-        () => base.laborNonCashNom * landFactor,
-        [base.laborNonCashNom, landFactor]
+        () => base.laborNonCashNom,
+        [base.laborNonCashNom]
     );
 
     const totalBiayaNonTunaiLain = useMemo(() => {
         const toolsVal = base.tools.reduce((acc, t) => acc + toolValue(t), 0);
         const extrasVal = base.extras.reduce((acc, e) => acc + extraValue(e), 0);
         return toolsVal + extrasVal;
-    }, [base.tools, base.extras, landFactor]);
+    }, [base.tools, base.extras]);
 
     const totalBiayaNonTunai = totalBiayaNonTunaiTK + totalBiayaNonTunaiLain;
     const totalBiaya = totalBiayaTunai + totalBiayaNonTunai;
@@ -225,11 +239,13 @@ export default function ReportScreen() {
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-            <KeyboardAwareScrollView contentContainerStyle={{ flexGrow: 1 }}
+            <KeyboardAwareScrollView
+                contentContainerStyle={{ flexGrow: 1 }}
                 enableOnAndroid
                 enableAutomaticScroll
                 extraScrollHeight={Platform.select({ ios: 80, android: 200 })}
-                keyboardShouldPersistTaps="handled">
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* ===== Header ===== */}
                 <LinearGradient
                     colors={[C.gradientFrom, C.gradientTo]}
@@ -249,14 +265,13 @@ export default function ReportScreen() {
                                     perHaTitle: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`,
                                     profileAreaHa,
                                     effectiveArea: effectiveArea != null ? effectiveArea : profileAreaHa,
-                                    landFactor,
+                                    landFactor, // metadata PDF; dataset sudah terskalakan
                                     production: base.production,
                                     cash: base.cash,
                                     tools: base.tools,
                                     extras: base.extras,
                                     laborNonCashNom: base.laborNonCashNom,
                                     prettyCashLabel,
-
                                     share: true,
                                 });
                             }}
@@ -272,7 +287,7 @@ export default function ReportScreen() {
 
                 {/* Body */}
                 <View style={{ paddingHorizontal: S.spacing.lg }}>
-                    {/* === Season Selector (match ChartScreen) === */}
+                    {/* === Season Selector === */}
                     <View
                         style={[
                             styles.selectorCard,
@@ -393,7 +408,7 @@ export default function ReportScreen() {
                         )}
                     </View>
 
-                    {/* === Year Selector (match ChartScreen) === */}
+                    {/* === Year Selector === */}
                     <View
                         style={[
                             styles.selectorCard,
@@ -462,7 +477,7 @@ export default function ReportScreen() {
                     </View>
 
                     {/* Keterangan filter + judul per Ha */}
-                    <Text style={{ marginTop: 8, color: C.textMuted, fontSize: 12, fontWeight: "700" }}>
+                    <Text style={{ marginTop: 8, color: C.textMuted, fontSize: 12, fontWeight: "700" as any }}>
                         {activeFilterText}
                     </Text>
                     <Text style={[styles.tableTitle, { color: C.text, marginTop: 6 }]}>
@@ -527,20 +542,30 @@ export default function ReportScreen() {
                                         label={label}
                                         qty={c.quantity ?? undefined}
                                         unit={c.unit ?? undefined}
-                                        price={c.quantity != null ? c.unitPrice : undefined} // kalau nominal-only → biarkan "-"
+                                        price={c.quantity != null ? c.unitPrice : undefined}
                                         value={value}
                                     />
                                 );
                             })}
 
                             <SubTitle text="II. Biaya Non Tunai" C={C} />
-                            {/* TK Non Tunai Total */}
-                            {totalBiayaNonTunaiTK > 0 && (
+                            {base.laborNonCashDetail?.amount ? (
                                 <RowView
                                     C={C}
                                     label="TK Dalam Keluarga"
-                                    value={totalBiayaNonTunaiTK}
+                                    qty={base.laborNonCashDetail.qty ?? undefined}
+                                    unit={base.laborNonCashDetail.unit ?? undefined}
+                                    price={
+                                        base.laborNonCashDetail.unitPrice != null
+                                            ? base.laborNonCashDetail.unitPrice
+                                            : undefined
+                                    }
+                                    value={base.laborNonCashDetail.amount}
                                 />
+                            ) : (
+                                totalBiayaNonTunaiTK > 0 && (
+                                    <RowView C={C} label="TK Dalam Keluarga" value={totalBiayaNonTunaiTK} />
+                                )
                             )}
 
                             <SubMini text="Biaya Lain" C={C} />
@@ -559,7 +584,7 @@ export default function ReportScreen() {
                                     />
                                 );
                             })}
-                            {/* Extras nominal */}
+                            {/* Extras nominal (termasuk tax noncash) */}
                             {base.extras.map((e, i) => (
                                 <RowView
                                     key={`extra-${i}`}
@@ -584,10 +609,7 @@ export default function ReportScreen() {
                             {/* ===== Konversi Input ===== */}
                             <View style={[styles.convertWrap, { borderTopColor: C.border }]}>
                                 <View
-                                    style={[
-                                        styles.convertInputWrap,
-                                        { borderColor: C.border, backgroundColor: C.surface },
-                                    ]}
+                                    style={[styles.convertInputWrap, { borderColor: C.border, backgroundColor: C.surface }]}
                                 >
                                     <TextInput
                                         placeholder="Masukkan Ukuran Lahan (Ha)"
@@ -595,10 +617,7 @@ export default function ReportScreen() {
                                         keyboardType="decimal-pad"
                                         value={overrideAreaStr}
                                         onChangeText={setOverrideAreaStr}
-                                        style={[
-                                            styles.convertInput,
-                                            { color: C.text, fontFamily: Fonts.sans as any },
-                                        ]}
+                                        style={[styles.convertInput, { color: C.text, fontFamily: Fonts.sans as any }]}
                                         returnKeyType="done"
                                         onSubmitEditing={Keyboard.dismiss}
                                     />
@@ -609,9 +628,7 @@ export default function ReportScreen() {
                                             { backgroundColor: C.tint, opacity: pressed ? 0.95 : 1 },
                                         ]}
                                     >
-                                        <Text style={{ color: "#fff", fontWeight: "800" as any }}>
-                                            Konversi
-                                        </Text>
+                                        <Text style={{ color: "#fff", fontWeight: "800" as any }}>Konversi</Text>
                                     </Pressable>
                                 </View>
 
@@ -622,9 +639,7 @@ export default function ReportScreen() {
                                         { backgroundColor: "#ef4444", opacity: pressed ? 0.95 : 1 },
                                     ]}
                                 >
-                                    <Text style={{ color: "#fff", fontWeight: "900" as any }}>
-                                        Reset
-                                    </Text>
+                                    <Text style={{ color: "#fff", fontWeight: "900" as any }}>Reset</Text>
                                 </Pressable>
                             </View>
                         </>
@@ -635,85 +650,15 @@ export default function ReportScreen() {
     );
 }
 
-/** =========================
- *  REUSABLE UI PARTS
- *  ========================= */
-function SectionTitle({ text, C }: { text: string; C: Theme }) {
-    return (
-        <Text style={{ marginTop: 14, marginBottom: 6, color: C.text, fontWeight: "800" as any }}>
-            {text}
-        </Text>
-    );
-}
-function SubTitle({ text, C }: { text: string; C: Theme }) {
-    return (
-        <Text style={{ marginTop: 8, color: C.text, fontWeight: "700" as any }}>
-            {text}
-        </Text>
-    );
-}
-function SubMini({ text, C }: { text: string; C: Theme }) {
-    return <Text style={{ marginTop: 6, color: C.textMuted }}>{text}</Text>;
-}
-
-function RowView({
-    C,
-    label,
-    qty,
-    unit,
-    price,
-    value,
-}: {
-    C: Theme;
-    label: string;
-    qty?: number;
-    unit?: string | null;
-    price?: number;
-    value: number;
-}) {
-    return (
-        <View style={[styles.tr, { borderColor: C.border }]}>
-            <Text style={[styles.tdUraian, { color: C.text }]}>{label}</Text>
-            <Text style={[styles.tdSmall, { color: C.text }]}>{qty != null ? qty : "-"}</Text>
-            <Text style={[styles.tdSmall, { color: C.text }]}>{unit ?? "-"}</Text>
-            <Text style={[styles.tdSmall, { color: C.text }]}>{price != null ? currency(price) : "-"}</Text>
-            <Text style={[styles.tdRight, { color: C.text }]}>{currency(value)}</Text>
-        </View>
-    );
-}
-
-function TotalLine({
-    C,
-    label,
-    value,
-    valueStr,
-    bold,
-}: {
-    C: Theme;
-    label: string;
-    value?: number;
-    valueStr?: string;
-    bold?: boolean;
-}) {
-    return (
-        <View style={styles.totalRow}>
-            <Text style={{ color: C.text, fontWeight: (bold ? "900" : "600") as any }}>
-                {label}
-            </Text>
-            <Text style={{ color: C.text, fontWeight: (bold ? "900" : "600") as any }}>
-                {valueStr ?? currency(value || 0)}
-            </Text>
-        </View>
-    );
-}
-
-/** =========================
- *  STYLES
- *  ========================= */
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     iconBtn: {
-        width: 36, height: 36, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center",
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
     },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     headerTitle: { fontSize: 18, fontWeight: "800" },
@@ -753,23 +698,6 @@ const styles = StyleSheet.create({
     thUraian: { flex: 1.8, fontSize: 12, fontWeight: "800" },
     thSmall: { flex: 1, fontSize: 12, fontWeight: "800" },
     thRight: { width: 110, fontSize: 12, fontWeight: "800", textAlign: "right" },
-
-    tr: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-    },
-    tdUraian: { flex: 1.8, fontSize: 13 },
-    tdSmall: { flex: 1, fontSize: 13 },
-    tdRight: { width: 110, fontSize: 13, textAlign: "right", fontWeight: "800" },
-
-    totalRow: {
-        marginTop: 6,
-        flexDirection: "row",
-        justifyContent: "space-between",
-    },
-
     // Convert area
     convertWrap: {
         borderTopWidth: 1,

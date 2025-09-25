@@ -1,3 +1,5 @@
+import { Colors } from "@/constants/theme";
+
 export const CATEGORY_LABEL_REPORT: Record<string, string> = {
   seed: "Benih",
   seedling: "Bibit",
@@ -9,3 +11,5 @@ export const CATEGORY_LABEL_REPORT: Record<string, string> = {
   transport: "Transportasi",
   labor_outside: "TK Luar Keluarga",
 };
+
+export type Theme = (typeof Colors)["light"];

@@ -12,6 +12,7 @@ function num(x: any): number {
 function sum(arr: number[]) {
   return arr.reduce((a, b) => a + b, 0);
 }
+
 export type ReportDataset = {
   production: {
     label: string;
@@ -20,35 +21,48 @@ export type ReportDataset = {
     unitPrice: number;
   }[];
   cashByCategory: {
-    category: string;
-    quantity: number | null;
-    unit: string | null;
-    unitPrice: number;
+    category: string; // contoh "seed|Urea" atau "seed" atau "TK Luar Keluarga" atau extra/tax
+    quantity: number | null; // quantity (termasuk HOK utk TK cash), sudah diskalakan landFactor
+    unit: string | null; // "kg", "gram", "HOK", dll
+    unitPrice: number; // harga satuan (avg) atau nominal langsung (extras/tax)
   }[];
   labor: {
     stageKey?: string;
-    stageLabel?: string;
+    stageLabel?: string; // "TK Dalam Keluarga"
     laborType: "daily" | "contract";
-    value: number;
+    value: number; // nominal total noncash labor (sudah diskalakan landFactor)
   }[];
   tools: {
     toolName: string;
-    quantity: number;
+    quantity: number; // sudah diskalakan landFactor
     purchasePrice: number;
   }[];
   extras: {
-    category: string;
-    label: string;
-    amount: number;
+    category: string; // label/kategori noncash extras/tax
+    label: string; // siap tampil di UI
+    amount: number; // nominal (sudah diskalakan landFactor)
   }[];
+
+  laborCashDetail?: {
+    qty: number | null;
+    unit: string | null;
+    unitPrice: number | null;
+    amount: number;
+  } | null;
+  laborNonCashDetail?: {
+    qty: number | null;
+    unit: string | null;
+    unitPrice: number | null;
+    amount: number;
+  } | null;
 
   totalReceipts: number;
   totalCash: number;
-  totalLabor: number;
-  totalTools: number;
-  totalExtras: number;
-  totalNonCash: number;
-  totalCost: number;
+  totalLabor: number; // noncash labor
+  totalTools: number; // noncash tools
+  totalExtras: number; // noncash extras (termasuk tax noncash)
+  totalNonCash: number; // labor + tools + extras noncash
+  totalCost: number; // totalCash + totalNonCash
 };
 
 export function useReportData(initialSeasonId?: string | "all") {
@@ -121,13 +135,14 @@ export function useReportData(initialSeasonId?: string | "all") {
           | "cash_detail"
           | "cash_labor_total"
           | "noncash_labor_total"
-          | "noncash_tool_detail";
-        label: string | null; // ex: 'seed', 'fertilizer', 'transport', 'Penerimaan', etc.
-        name: string | null; // nama item (jika ada)
-        qty: number | null; // bisa terisi untuk material & alat; juga HOK utk labor di view
-        unit: string | null; // 'kg', 'gr', 'HOK', dst (bisa null)
-        unit_price: number | null; // harga satuan (material/alat/labor daily) jika ada
-        amount: number | null; // total nominal (selalu ada untuk ringkasan)
+          | "noncash_tool_detail"
+          | "noncash_detail";
+        label: string | null; // ex: 'seed', 'fertilizer', 'transport', 'Penerimaan', 'TK Luar Keluarga', 'Tax'
+        name: string | null; // nama item (material/tool)
+        qty: number | null; // qty (termasuk HOK utk labor_total)
+        unit: string | null; // 'kg', 'gram', 'HOK', dst
+        unit_price: number | null; // harga satuan; utk labor_total = avg biaya/HOK
+        amount: number | null; // total nominal
       };
 
       let q = supabase
@@ -145,137 +160,207 @@ export function useReportData(initialSeasonId?: string | "all") {
       if (error) throw error;
 
       const rows: Row[] = (data || []) as any[];
+      console.log("Report rows", rows);
 
-      // Bagi per section
-      const prod = rows.filter((r) => r.section === "production");
-      const cashDetail = rows.filter((r) => r.section === "cash_detail");
-      const cashLaborTotal = rows.filter(
+      // Kelompok per section
+      const productionRows = rows.filter((r) => r.section === "production");
+      const cashDetailRows = rows.filter((r) => r.section === "cash_detail");
+      const cashLaborTotalRows = rows.filter(
         (r) => r.section === "cash_labor_total"
       );
-      const noncashLaborTotal = rows.filter(
+      const noncashLaborTotalRows = rows.filter(
         (r) => r.section === "noncash_labor_total"
       );
-      const toolDetail = rows.filter(
+      const noncashToolRows = rows.filter(
         (r) => r.section === "noncash_tool_detail"
       );
+      const noncashDetailRows = rows.filter(
+        (r) => r.section === "noncash_detail"
+      ); // extras & tax noncash
 
-      const production = prod.map((r) => {
-        const baseQty = r.qty != null ? num(r.qty) : null;
-        return {
-          label: "Penerimaan",
-          quantity: baseQty != null ? baseQty * landFactor : null, // skala qty
-          unitType: r.unit ?? null,
-          unitPrice:
-            r.unit_price != null
-              ? num(r.unit_price)
-              : r.amount != null
-              ? num(r.amount)
-              : 0,
-        };
-      });
+      // ===== PRODUKSI =====
+      const production: ReportDataset["production"] = productionRows.map(
+        (r) => {
+          const baseQty = r.qty != null ? num(r.qty) : null;
+          return {
+            label: "Penerimaan",
+            quantity: baseQty != null ? baseQty * landFactor : null, // skala qty
+            unitType: r.unit ?? null,
+            unitPrice:
+              r.unit_price != null
+                ? num(r.unit_price)
+                : r.amount != null
+                ? num(r.amount)
+                : 0,
+          };
+        }
+      );
 
+      // ===== CASH (material/extras/tax) =====
       type AggMat = {
-        qty: number;
-        amt: number; // amt dari baris yg punya qty
+        qty: number; // total qty (material)
+        amt: number; // total nominal yg terkait qty
         unit: string | null;
         multiUnit: boolean;
       };
-      const matMap = new Map<string, AggMat>();
-      const extraMap = new Map<string, number>();
+      const matAggMap = new Map<string, AggMat>();
+      const nominalMap = new Map<string, number>(); // for extras/tax (nominal)
 
-      for (const r of cashDetail) {
-        const rawLabel = (r.label ?? "").trim(); // contoh: 'seed', 'fertilizer', 'transport', dll
-        const rawName = (r.name ?? "").trim(); // contoh: 'Urea', 'Mospilan'
+      for (const r of cashDetailRows) {
+        const rawLabel = (r.label ?? "").trim(); // 'seed', 'fertilizer', 'transport', 'Tax', dll
+        const rawName = (r.name ?? "").trim(); // 'Urea', 'Mospilan', ...
         const key = rawName ? `${rawLabel}|${rawName}` : rawLabel;
 
-        const hasQtyLike = r.qty != null || r.unit_price != null;
-        if (hasQtyLike) {
+        const hasQtyOrUnitPrice = r.qty != null || r.unit_price != null;
+        if (hasQtyOrUnitPrice) {
           const qv = r.qty != null ? num(r.qty) : 0;
           const pv = r.unit_price != null ? num(r.unit_price) : 0;
           const av = qv > 0 && pv > 0 ? qv * pv : num(r.amount);
 
-          const prev = matMap.get(key) || {
+          const prev = matAggMap.get(key) || {
             qty: 0,
             amt: 0,
             unit: r.unit ?? null,
             multiUnit: false,
           };
-          // unit konsisten
           const thisUnit = r.unit ?? null;
-          if (prev.unit == null) {
-            prev.unit = thisUnit;
-          } else if (thisUnit && prev.unit !== thisUnit) {
-            prev.multiUnit = true;
-          }
+
+          if (prev.unit == null) prev.unit = thisUnit;
+          else if (thisUnit && prev.unit !== thisUnit) prev.multiUnit = true;
 
           prev.qty += qv;
           prev.amt += av;
-          matMap.set(key, prev);
+          matAggMap.set(key, prev);
         } else {
-          // extra nominal
-          extraMap.set(key, (extraMap.get(key) ?? 0) + num(r.amount));
+          // pure nominal (extras/tax)
+          nominalMap.set(key, (nominalMap.get(key) ?? 0) + num(r.amount));
         }
-      }
-
-      const laborCashNom = sum(
-        cashLaborTotal.map((r) =>
-          r.qty && r.unit_price ? num(r.qty) * num(r.unit_price) : num(r.amount)
-        )
-      );
-      if (laborCashNom > 0) {
-        const key = "labor_outside";
-        extraMap.set(key, (extraMap.get(key) ?? 0) + laborCashNom);
       }
 
       const cashByCategory: ReportDataset["cashByCategory"] = [];
 
-      for (const [key, ag] of matMap.entries()) {
-        const qtyConv = ag.qty * landFactor;
-        const unit = ag.multiUnit ? null : ag.unit ?? null;
-        const unitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt; // harga satuan rata-rata tertimbang
+      // material (punya qty)
+      for (const [key, ag] of matAggMap.entries()) {
+        const qtyScaled = ag.qty * landFactor;
+        const normalizedUnit = ag.multiUnit ? null : ag.unit ?? null;
+        const avgUnitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt; // rata-rata tertimbang
         cashByCategory.push({
-          category: key, // raw label or raw|name
-          quantity: qtyConv, // dikonversi
-          unit,
-          unitPrice, // tidak dikonversi
+          category: key,
+          quantity: qtyScaled,
+          unit: normalizedUnit,
+          unitPrice: avgUnitPrice,
         });
       }
 
-      for (const [key, amount] of extraMap.entries()) {
+      // extras/tax (nominal → taruh sebagai unitPrice dengan quantity=null)
+      for (const [key, amount] of nominalMap.entries()) {
         cashByCategory.push({
-          category: key, // raw label (akan di-map di UI)
+          category: key,
           quantity: null,
           unit: null,
-          unitPrice: amount * landFactor, // nilai nominal terkonversi
+          unitPrice: amount * landFactor,
         });
       }
 
-      const laborNoncashNomBase = sum(
-        noncashLaborTotal.map((r) =>
-          r.qty && r.unit_price ? num(r.qty) * num(r.unit_price) : num(r.amount)
-        )
-      );
-      const laborVal = laborNoncashNomBase * landFactor;
+      // ===== TK CASH (Luar Keluarga) → kategori khusus di cashByCategory =====
+      const laborCashDetail = (() => {
+        if (!cashLaborTotalRows.length) return null;
+        const qty = sum(
+          cashLaborTotalRows.map((r) => (r.qty != null ? num(r.qty) : 0))
+        );
+        const amount = sum(
+          cashLaborTotalRows.map((r) =>
+            r.amount != null
+              ? num(r.amount)
+              : r.qty && r.unit_price
+              ? num(r.qty) * num(r.unit_price)
+              : 0
+          )
+        );
+        const unit = "HOK";
+        const unitPrice =
+          qty > 0 ? amount / qty : cashLaborTotalRows[0]?.unit_price ?? null;
+
+        if (qty > 0) {
+          cashByCategory.push({
+            category: "TK Luar Keluarga",
+            quantity: qty * landFactor, // skala HOK
+            unit: unit,
+            unitPrice: unitPrice ?? 0, // rata-rata biaya/HOK
+          });
+        } else if (amount > 0) {
+          // fallback nominal-only
+          cashByCategory.push({
+            category: "TK Luar Keluarga",
+            quantity: null,
+            unit: null,
+            unitPrice: amount * landFactor,
+          });
+        }
+        return {
+          qty: qty > 0 ? qty * landFactor : qty, // kalau mau tampilkan sesuai skala
+          unit,
+          unitPrice: unitPrice ?? null,
+          amount: amount * landFactor,
+        };
+      })();
+
+      // ===== NONCASH TK (Dalam Keluarga) → bucket labor =====
+      const laborNonCashDetail = (() => {
+        if (!noncashLaborTotalRows.length) return null;
+        const qty = sum(
+          noncashLaborTotalRows.map((r) => (r.qty != null ? num(r.qty) : 0))
+        );
+        const amount = sum(
+          noncashLaborTotalRows.map((r) =>
+            r.amount != null
+              ? num(r.amount)
+              : r.qty && r.unit_price
+              ? num(r.qty) * num(r.unit_price)
+              : 0
+          )
+        );
+        const unit = "HOK";
+        const unitPrice =
+          qty > 0 ? amount / qty : noncashLaborTotalRows[0]?.unit_price ?? null;
+        return {
+          qty: qty > 0 ? qty * landFactor : qty,
+          unit,
+          unitPrice: unitPrice ?? null,
+          amount: amount * landFactor,
+        };
+      })();
+
+      const noncashLaborNominal =
+        laborNonCashDetail?.amount != null ? laborNonCashDetail.amount : 0;
+
       const labor: ReportDataset["labor"] =
-        laborVal > 0
+        noncashLaborNominal > 0
           ? [
               {
                 stageKey: undefined,
-                stageLabel: "Dalam Keluarga",
-                laborType: "daily",
-                value: laborVal,
+                stageLabel: "TK Dalam Keluarga",
+                laborType: "daily", // tampilan saja; view sudah agregat
+                value: noncashLaborNominal,
               },
             ]
           : [];
 
-      const tools: ReportDataset["tools"] = toolDetail.map((r) => ({
+      // ===== NONCASH TOOLS =====
+      const tools: ReportDataset["tools"] = noncashToolRows.map((r) => ({
         toolName: r.name || "Alat",
-        quantity: (r.qty != null ? num(r.qty) : 0) * landFactor, // skala qty
+        quantity: (r.qty != null ? num(r.qty) : 0) * landFactor,
         purchasePrice: r.unit_price != null ? num(r.unit_price) : 0,
       }));
 
-      const extras: ReportDataset["extras"] = [];
+      // ===== NONCASH EXTRAS & TAX (agar tampil di Biaya Non Tunai → Biaya Lain) =====
+      const extras: ReportDataset["extras"] = noncashDetailRows.map((r) => ({
+        category: (r.label ?? "").trim(),
+        label: (r.label ?? "").trim(),
+        amount: (r.amount != null ? num(r.amount) : 0) * landFactor,
+      }));
 
+      // ===== TOTALS =====
       const totalReceipts = sum(
         production.map((p) =>
           p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice
@@ -287,8 +372,8 @@ export function useReportData(initialSeasonId?: string | "all") {
         )
       );
       const totalTools = sum(tools.map((t) => t.quantity * t.purchasePrice));
-      const totalLabor = sum(labor.map((l) => l.value));
-      const totalExtras = sum(extras.map((e) => e.amount));
+      const totalLabor = sum(labor.map((l) => l.value)); // noncash labor
+      const totalExtras = sum(extras.map((e) => e.amount)); // noncash extras (termasuk tax noncash)
       const totalNonCash = totalLabor + totalTools + totalExtras;
       const totalCost = totalCash + totalNonCash;
 
@@ -298,6 +383,11 @@ export function useReportData(initialSeasonId?: string | "all") {
         labor,
         tools,
         extras,
+
+        // detail opsional (bisa dipakai UI)
+        laborCashDetail,
+        laborNonCashDetail,
+
         totalReceipts,
         totalCash,
         totalLabor,
@@ -329,6 +419,8 @@ function emptyDataset(): ReportDataset {
     labor: [],
     tools: [],
     extras: [],
+    laborCashDetail: null,
+    laborNonCashDetail: null,
     totalReceipts: 0,
     totalCash: 0,
     totalLabor: 0,
