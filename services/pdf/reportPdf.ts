@@ -1,4 +1,5 @@
 import { currency } from "@/utils/currency";
+import * as FS from "expo-file-system";
 import * as Print from "expo-print";
 import { shareAsync } from "expo-sharing";
 
@@ -22,6 +23,7 @@ export type ToolRow = {
 export type ExtraRow = { category: string; label: string; amount: number };
 
 export type GenerateReportPdfParams = {
+  fileName?: string;
   title?: string; // default: "Report"
   filterText: string; // contoh: "Filter: Musim Ke-1" / "Filter: Tahun 2024"
   profileAreaHa: number; // luas profil
@@ -51,7 +53,11 @@ export type GenerateReportPdfParams = {
   share?: boolean;
 };
 
-// === Perhitungan NILAI mengikuti UI (tanpa * landFactor lagi karena service sudah scaling)
+type AnyFS = typeof FS & {
+  Directory?: any;
+  File?: any;
+};
+
 function prodValue(p: ProductionRow) {
   return p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
 }
@@ -66,6 +72,7 @@ function extraValue(e: ExtraRow) {
 }
 
 export async function generateReportPdf({
+  fileName,
   title = "Report",
   filterText,
   cropType,
@@ -261,7 +268,7 @@ export async function generateReportPdf({
       ${extras
         .map((e) => {
           const value = extraValue(e);
-          const label = e.label ?? e.category ?? "Biaya Lain";
+          const label = prettyLabel(e.label ?? e.category ?? "Biaya Lain");
           return `
             <tr>
               <td>${label}</td>
@@ -308,13 +315,72 @@ export async function generateReportPdf({
 </html>
 `.trim();
 
-  // Cetak ke file PDF
-  const { uri } = await Print.printToFileAsync({ html });
+  // 1) Print to a temporary file
+  const { uri: tmpUri } = await Print.printToFileAsync({ html });
+
+  // 2) Save under a deterministic name using the **new FS API** if present; otherwise fall back to legacy API
+  const FSAny = FS as AnyFS;
+  let outUri = tmpUri;
+
+  if (FSAny.Directory && FSAny.File) {
+    // ===== New API path (SDK 54+): Directory / File classes =====
+    try {
+      const { Directory, File } = FSAny;
+
+      // Use the cache scope for generated documents (safe & ephemeral)
+      // Create (or ensure) a "reports" directory in cache
+      // NOTE: the exact method names come from the new object-based API.
+      // These have stable names in SDK 54+ docs/blog.
+      const reportsDir = await Directory.cache.createDirectoryAsync("reports", {
+        intermediates: true,
+      });
+
+      // Create a file handle with your final name
+      const finalName = (fileName || title) + ".pdf";
+      const target = await reportsDir.createFileAsync(finalName, {
+        overwrite: true,
+      });
+
+      // Move the tmp print result to the target file
+      await File.fromUri(tmpUri).moveAsync(target.uri);
+      outUri = target.uri;
+    } catch (e) {
+      // If something goes wrong with the new API, we’ll fall back to legacy below.
+      console.warn("New FS API failed, falling back to legacy:", e);
+    }
+  }
+
+  if (outUri === tmpUri) {
+    // ===== Legacy API path (explicit, no warnings) =====
+    // Import from "expo-file-system/legacy" so your app doesn't show deprecation warnings.
+    const Legacy = await import("expo-file-system/legacy");
+
+    const reportsDir = Legacy.cacheDirectory + "reports/";
+    try {
+      const info = await Legacy.getInfoAsync(reportsDir);
+      if (!info.exists) {
+        await Legacy.makeDirectoryAsync(reportsDir, { intermediates: true });
+      }
+    } catch {}
+
+    const finalName = (fileName || title) + ".pdf";
+    const target = reportsDir + finalName;
+
+    try {
+      await Legacy.moveAsync({ from: tmpUri, to: target });
+      outUri = target;
+    } catch {
+      // keep tmpUri if move fails
+      outUri = tmpUri;
+    }
+  }
+
   if (share) {
-    await shareAsync(uri, {
+    await shareAsync(outUri, {
       mimeType: "application/pdf",
       dialogTitle: "Bagikan Report PDF",
     });
   }
-  return { uri };
+
+  return { uri: outUri };
 }

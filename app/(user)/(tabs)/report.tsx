@@ -240,6 +240,18 @@ export default function ReportScreen() {
 
     const showBlocking = (loadingService || profileLoading) && totalProduksi === 0;
 
+    const musimLabel =
+        seasonId && currentSeason ? `Musim-${currentSeason.season_no}` : "Semua-Musim";
+
+    const tahunLabel =
+        year !== "all" ? String(year) : (currentSeason
+            ? `${new Date(currentSeason.start_date).getFullYear()}`
+            : "Semua-Tahun");
+
+    // Contoh format: Report_Musim-1_2025
+    const pdfFileName = `Laporan ${musimLabel} ${tahunLabel}`;
+    console.log("pdfFileName:", pdfFileName);
+
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
             <KeyboardAwareScrollView
@@ -263,6 +275,7 @@ export default function ReportScreen() {
                         <Pressable
                             onPress={async () => {
                                 await generateReportPdf({
+                                    fileName: pdfFileName,
                                     title: "Report",
                                     filterText: activeFilterText,
                                     cropType: seasonCropType,
