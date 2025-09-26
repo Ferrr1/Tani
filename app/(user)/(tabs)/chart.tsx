@@ -151,7 +151,7 @@ export default function ChartScreen() {
                     amount: Number(s.amount) || 0,
                     pct:
                         expenseGrandTotal > 0
-                            ? Math.round(((Number(s.amount) || 0) / expenseGrandTotal) * 100)
+                            ? ((Number(s.amount) || 0) / expenseGrandTotal) * 100
                             : 0,
                     color: palette[i % palette.length],
                     idx: i,
@@ -462,7 +462,7 @@ export default function ChartScreen() {
                                                         </Text>
                                                     </View>
                                                     <Text style={{ color: C.textMuted, fontWeight: "800" }}>
-                                                        {currency(s.amount)}  ·  {s.pct}%
+                                                        {currency(s.amount)}  ·  {(s.pct).toFixed(2)}%
                                                     </Text>
                                                 </View>
                                             ))}

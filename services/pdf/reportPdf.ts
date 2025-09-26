@@ -25,36 +25,51 @@ export type GenerateReportPdfParams = {
   title?: string; // default: "Report"
   filterText: string; // contoh: "Filter: Musim Ke-1" / "Filter: Tahun 2024"
   profileAreaHa: number; // luas profil
-  effectiveArea: number; // luas konversi aktif (jika null di UI = profileAreaHa, tapi kirim angka final di sini)
-  landFactor: number; // faktor konversi yang dipakai UI
+  effectiveArea: number; // luas konversi aktif
+  landFactor: number; // faktor konversi (hanya ditampilkan)
   perHaTitle?: string; // default: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`
   production: ProductionRow[];
   cash: CashRow[];
   tools: ToolRow[];
   extras: ExtraRow[];
-  laborNonCashNom: number; // total TK non tunai (BASE)
-  prettyCashLabel: (raw: string) => string;
+  // NONCASH TK:
+  laborNonCashNom: number; // total nominal (fallback)
+  laborNonCashDetail?: {
+    // opsional: kalau ada, tampil qty/unit/harga/nilai persis seperti UI
+    qty: number | null;
+    unit: string | null;
+    unitPrice: number | null;
+    amount: number;
+  };
+
+  // Tambahan metadata yang diminta
+  cropType?: string | null; // jenis tanaman
+  village?: string | null; // nama desa
+
+  // Utilities
+  prettyLabel: (raw: string) => string;
   share?: boolean;
 };
 
-function prodValue(p: ProductionRow, landFactor: number) {
-  const base = p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
-  return base * landFactor;
+// === Perhitungan NILAI mengikuti UI (tanpa * landFactor lagi karena service sudah scaling)
+function prodValue(p: ProductionRow) {
+  return p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
 }
-function cashValue(c: CashRow, landFactor: number) {
-  const base = c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
-  return base * landFactor;
+function cashValue(c: CashRow) {
+  return c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
 }
-function toolValue(t: ToolRow, landFactor: number) {
-  return t.quantity * t.purchasePrice * landFactor;
+function toolValue(t: ToolRow) {
+  return t.quantity * t.purchasePrice;
 }
-function extraValue(e: ExtraRow, landFactor: number) {
-  return (e.amount || 0) * landFactor;
+function extraValue(e: ExtraRow) {
+  return e.amount || 0;
 }
 
 export async function generateReportPdf({
   title = "Report",
   filterText,
+  cropType,
+  village,
   perHaTitle,
   profileAreaHa,
   effectiveArea,
@@ -64,29 +79,24 @@ export async function generateReportPdf({
   tools,
   extras,
   laborNonCashNom,
-  prettyCashLabel,
+  laborNonCashDetail,
+  prettyLabel,
   share = true,
 }: GenerateReportPdfParams): Promise<{ uri: string }> {
   const _perHaTitle =
     perHaTitle ?? `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`;
 
-  const totalProduksi = production.reduce(
-    (acc, p) => acc + prodValue(p, landFactor),
-    0
-  );
-  const totalBiayaTunai = cash.reduce(
-    (acc, c) => acc + cashValue(c, landFactor),
-    0
-  );
-  const totalBiayaNonTunaiTK = laborNonCashNom * landFactor;
-  const totalTools = tools.reduce(
-    (acc, t) => acc + toolValue(t, landFactor),
-    0
-  );
-  const totalExtras = extras.reduce(
-    (acc, e) => acc + extraValue(e, landFactor),
-    0
-  );
+  // Totals (tanpa * landFactor)
+  const totalProduksi = production.reduce((acc, p) => acc + prodValue(p), 0);
+  const totalBiayaTunai = cash.reduce((acc, c) => acc + cashValue(c), 0);
+  const totalTools = tools.reduce((acc, t) => acc + toolValue(t), 0);
+  const totalExtras = extras.reduce((acc, e) => acc + extraValue(e), 0);
+
+  // TK Non Tunai: gunakan detail jika tersedia; kalau tidak, pakai nominal total
+  const tkDetailAmount = laborNonCashDetail?.amount ?? null;
+  const totalBiayaNonTunaiTK =
+    tkDetailAmount != null ? tkDetailAmount : laborNonCashNom;
+
   const totalBiayaNonTunaiLain = totalTools + totalExtras;
   const totalBiayaNonTunai = totalBiayaNonTunaiTK + totalBiayaNonTunaiLain;
   const totalBiaya = totalBiayaTunai + totalBiayaNonTunai;
@@ -95,6 +105,13 @@ export async function generateReportPdf({
   const pendapatanAtasBiayaTotal = totalProduksi - totalBiaya;
   const rcTunai = totalBiayaTunai > 0 ? totalProduksi / totalBiayaTunai : 0;
   const rcTotal = totalBiaya > 0 ? totalProduksi / totalBiaya : 0;
+
+  const cropVillageLine = [
+    cropType ? `Jenis Tanaman: <b>${cropType}</b>` : `Jenis Tanaman: <b>-</b>`,
+    village ? `Desa: <b>${village}</b>` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const html = `
 <!doctype html>
@@ -121,18 +138,21 @@ export async function generateReportPdf({
   .totals { margin-top: 8px; }
   .totals .row { display:flex; justify-content:space-between; margin-top:6px; }
   .bold { font-weight:900; }
-  .meta { font-size: 12px; margin-top: 4px; }
+  .meta { font-size: 12px; }
 </style>
 </head>
 <body>
 
   <h1>${title}</h1>
   <div class="pill">${filterText}</div>
-  <div class="meta muted">
-    ${_perHaTitle}<br/>
-    Luas Profil: <b>${profileAreaHa} Ha</b> ·
-    Luas Konversi: <b>${effectiveArea} Ha</b> ·
-    Faktor: <b>${landFactor.toFixed(2)}</b>
+  <div class="meta muted" style="display:flex; flex-direction:column;">
+    ${_perHaTitle}
+    <p style="margin-top:-4px">${
+      cropVillageLine ? "<br/>" + cropVillageLine : ""
+    }<br/></p>
+    <p style="margin-top:-4px">Luas Profil: <b>${profileAreaHa} Ha</b></p>
+    <p style="margin-top:-4px">Luas Konversi: <b>${effectiveArea} Ha</b></p>
+    <p style="margin-top:-4px">Faktor: <b>${landFactor.toFixed(2)}</b></p>
   </div>
 
   <!-- Header Kolom -->
@@ -152,7 +172,7 @@ export async function generateReportPdf({
       <tr><td colspan="5" class="section-title">Produksi</td></tr>
       ${production
         .map((p) => {
-          const value = prodValue(p, landFactor);
+          const value = prodValue(p);
           const qtyStr = p.quantity != null ? String(p.quantity) : "-";
           const unitStr = p.unitType ?? "-";
           const priceStr = p.unitPrice != null ? currency(p.unitPrice) : "-";
@@ -173,11 +193,11 @@ export async function generateReportPdf({
       <tr><td colspan="5" class="sub-title">I. Biaya Tunai</td></tr>
       ${cash
         .map((c) => {
-          const label = prettyCashLabel(c.category || "");
-          const value = cashValue(c, landFactor);
+          const label = prettyLabel(c.category || "");
+          const value = cashValue(c);
           const qtyStr = c.quantity != null ? String(c.quantity) : "-";
           const unitStr = c.unit ?? "-";
-          // Tampilkan harga hanya bila quantity ada (biar konsisten dengan UI)
+          // harga hanya bila ada qty (konsisten UI)
           const priceStr =
             c.quantity != null && c.unitPrice != null
               ? currency(c.unitPrice)
@@ -195,12 +215,26 @@ export async function generateReportPdf({
         .join("")}
 
       <tr><td colspan="5" class="sub-title">II. Biaya Non Tunai</td></tr>
-      <tr><td colspan="5" class="sub-mini">TK (Dalam Keluarga)</td></tr>
+
+      <!-- TK Dalam Keluarga -->
       ${
-        totalBiayaNonTunaiTK > 0
+        laborNonCashDetail && laborNonCashDetail.amount > 0
           ? `
         <tr>
-          <td>TK Dalam Keluarga (HOK)</td>
+          <td>TK Dalam Keluarga</td>
+          <td>${laborNonCashDetail.qty ?? "-"}</td>
+          <td>${laborNonCashDetail.unit ?? "-"}</td>
+          <td>${
+            laborNonCashDetail.unitPrice != null
+              ? currency(laborNonCashDetail.unitPrice)
+              : "-"
+          }</td>
+          <td class="td-right">${currency(laborNonCashDetail.amount)}</td>
+        </tr>`
+          : totalBiayaNonTunaiTK > 0
+          ? `
+        <tr>
+          <td>TK Dalam Keluarga</td>
           <td>-</td>
           <td>-</td>
           <td>-</td>
@@ -212,7 +246,7 @@ export async function generateReportPdf({
       <tr><td colspan="5" class="sub-mini">Biaya Lain</td></tr>
       ${tools
         .map((t) => {
-          const value = toolValue(t, landFactor);
+          const value = toolValue(t);
           return `
             <tr>
               <td>Alat${t.toolName ? ` | ${t.toolName}` : ""}</td>
@@ -226,7 +260,7 @@ export async function generateReportPdf({
         .join("")}
       ${extras
         .map((e) => {
-          const value = extraValue(e, landFactor);
+          const value = extraValue(e);
           const label = e.label ?? e.category ?? "Biaya Lain";
           return `
             <tr>

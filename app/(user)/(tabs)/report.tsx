@@ -26,12 +26,12 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-function prettyCashLabel(raw: string): string {
+function prettyLabel(raw: string): string {
     const [rawCat, name] = raw.split("|");
 
-    // khusus: biarkan kapitalisasi label TK tetap apa adanya
-    if (rawCat?.trim() === "TK Luar Keluarga") {
-        return name ? `TK Luar Keluarga | ${name.trim()}` : "TK Luar Keluarga";
+    // biarkan kapitalisasi label TK apa adanya (cash & noncash)
+    if (rawCat?.trim() === "TK Luar Keluarga" || rawCat?.trim() === "TK Dalam Keluarga") {
+        return name ? `${rawCat.trim()} | ${name.trim()}` : rawCat.trim();
     }
 
     const label =
@@ -57,6 +57,7 @@ export default function ReportScreen() {
         loading: loadingService,
     } = useReportData();
 
+    const [profileVillage, setProfileVillage] = useState<string>("");
     const [profileAreaHa, setProfileAreaHa] = useState<number>(0);
     const [profileLoading, setProfileLoading] = useState<boolean>(true);
 
@@ -68,6 +69,7 @@ export default function ReportScreen() {
                 const prof = await getMyProfile();
                 if (!alive) return;
                 const ha = Number(prof?.luas_lahan) || 0;
+                setProfileVillage(prof?.nama_desa || "");
                 setProfileAreaHa(ha > 0 ? ha : 1);
             } catch {
                 if (!alive) return;
@@ -115,6 +117,7 @@ export default function ReportScreen() {
         : year !== "all"
             ? `Filter: Tahun ${year}`
             : "Filter: Semua data";
+    const seasonCropType = seasonId ? currentSeason?.crop_type : "";
 
     const [overrideAreaStr, setOverrideAreaStr] = useState<string>("");
     const [effectiveArea, setEffectiveArea] = useState<number | null>(null);
@@ -262,6 +265,8 @@ export default function ReportScreen() {
                                 await generateReportPdf({
                                     title: "Report",
                                     filterText: activeFilterText,
+                                    cropType: seasonCropType,
+                                    village: profileVillage,
                                     perHaTitle: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`,
                                     profileAreaHa,
                                     effectiveArea: effectiveArea != null ? effectiveArea : profileAreaHa,
@@ -271,7 +276,8 @@ export default function ReportScreen() {
                                     tools: base.tools,
                                     extras: base.extras,
                                     laborNonCashNom: base.laborNonCashNom,
-                                    prettyCashLabel,
+                                    laborNonCashDetail: base.laborNonCashDetail ?? undefined,
+                                    prettyLabel,
                                     share: true,
                                 });
                             }}
@@ -533,7 +539,7 @@ export default function ReportScreen() {
                             <SectionTitle text="Biaya Produksi" C={C} />
                             <SubTitle text="I. Biaya Tunai" C={C} />
                             {base.cash.map((c, i) => {
-                                const label = prettyCashLabel(c.category || "");
+                                const label = prettyLabel(c.category || "");
                                 const value = cashValue(c);
                                 return (
                                     <RowView
@@ -549,10 +555,12 @@ export default function ReportScreen() {
                             })}
 
                             <SubTitle text="II. Biaya Non Tunai" C={C} />
+
+                            {/* TK Non Tunai (detail qty HOK + harga/HOK bila tersedia) */}
                             {base.laborNonCashDetail?.amount ? (
                                 <RowView
                                     C={C}
-                                    label="TK Dalam Keluarga"
+                                    label={prettyLabel("TK Dalam Keluarga")}
                                     qty={base.laborNonCashDetail.qty ?? undefined}
                                     unit={base.laborNonCashDetail.unit ?? undefined}
                                     price={
@@ -564,9 +572,14 @@ export default function ReportScreen() {
                                 />
                             ) : (
                                 totalBiayaNonTunaiTK > 0 && (
-                                    <RowView C={C} label="TK Dalam Keluarga" value={totalBiayaNonTunaiTK} />
+                                    <RowView
+                                        C={C}
+                                        label={prettyLabel("TK Dalam Keluarga")}
+                                        value={totalBiayaNonTunaiTK}
+                                    />
                                 )
                             )}
+
 
                             <SubMini text="Biaya Lain" C={C} />
                             {/* Tools detail */}
@@ -589,10 +602,11 @@ export default function ReportScreen() {
                                 <RowView
                                     key={`extra-${i}`}
                                     C={C}
-                                    label={e.label ?? e.category ?? "Biaya Lain"}
+                                    label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
                                     value={extraValue(e)}
                                 />
                             ))}
+
 
                             {/* TOTALS */}
                             <TotalLine label="Total Biaya Tunai" value={totalBiayaTunai} C={C} />
