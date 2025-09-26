@@ -160,8 +160,6 @@ export function useReportData(initialSeasonId?: string | "all") {
       if (error) throw error;
 
       const rows: Row[] = (data || []) as any[];
-      console.log("Report rows", rows);
-
       // Kelompok per section
       const productionRows = rows.filter((r) => r.section === "production");
       const cashDetailRows = rows.filter((r) => r.section === "cash_detail");
