@@ -155,59 +155,63 @@ export default function HomeScreen() {
   }, [wx?.tzId]);
 
   const menus = [
-    { key: "season", label: "Musim", icon: "calendar-outline", color: C.success, href: "/sub/season" },
-    { key: "income", label: "Penerimaan", icon: "arrow-down-circle-outline", color: C.success, href: "/income" },
-    { key: "expense", label: "Pengeluaran", icon: "arrow-up-circle-outline", color: C.danger, href: "/expense" },
-    { key: "chart", label: "Chart", icon: "stats-chart-outline", color: C.info, href: "/chart" },
+    { key: "season", label: "Musim", icon: "calendar-outline", color: C.tint, href: "/sub/season" },
+    { key: "income", label: "Penerimaan", icon: "arrow-down-circle-outline", color: C.tint, href: "/income" },
+    { key: "expense", label: "Pengeluaran", icon: "arrow-up-circle-outline", color: C.tint, href: "/expense" },
+    { key: "chart", label: "Chart", icon: "stats-chart-outline", color: C.tint, href: "/chart" },
     { key: "report", label: "Report", icon: "document-text-outline", color: C.tint, href: "/report" },
     { key: "informasi", label: "Panduan", icon: "information-circle-outline", color: C.tint, href: "/sub/information" },
   ] as const;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: C.background }]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: S.spacing.xl }} showsVerticalScrollIndicator={false}>
-        {/* HEADER (gradient) */}
-        <LinearGradient
-          colors={[C.gradientFrom, C.gradientTo]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
-        >
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.greet, { color: C.text, fontFamily: Fonts.rounded as any }]}>{greet}</Text>
-              <Text style={[styles.greetName, { color: C.text, fontFamily: Fonts.sans as any }]}
-                numberOfLines={1}
-              >{displayName}</Text>
-              <Text style={[styles.greetSub, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
-                Semoga panenmu subur dan melimpah.
-              </Text>
-            </View>
-
-            <HeaderLogoutButton size={28} confirm={true} />
-
-            <Pressable
-              onPress={() => router.push("/(form)/sub/profile")}
-              style={[
-                styles.avatarWrap,
-                { borderColor: C.success, backgroundColor: C.surface },
-                scheme === "light" ? S.shadow.light : S.shadow.dark,
-              ]}
-            >
-              <Text style={{
-                color: C.text,
-                fontFamily: Fonts.rounded as any,
-                fontSize: 16,
-                fontWeight: "bold"
-              }}>
-                {getInitialsName(profile?.full_name ?? "")}
-              </Text>
-            </Pressable>
+      {/* HEADER (gradient) */}
+      <LinearGradient
+        colors={[C.gradientFrom, C.gradientTo]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
+      >
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greet, { color: C.text, fontFamily: Fonts.rounded as any }]}>{greet}</Text>
+            <Text style={[styles.greetName, { color: C.text, fontFamily: Fonts.sans as any }]}
+              numberOfLines={1}
+            >{displayName}</Text>
+            <Text style={[styles.greetSub, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
+              Semoga panenmu subur dan melimpah.
+            </Text>
           </View>
-        </LinearGradient>
+
+          <HeaderLogoutButton size={28} confirm={true} />
+
+          <Pressable
+            onPress={() => router.push("/(form)/sub/profile")}
+            style={[
+              styles.avatarWrap,
+              { borderColor: C.success, backgroundColor: C.surface },
+              scheme === "light" ? S.shadow.light : S.shadow.dark,
+            ]}
+          >
+            <Text style={{
+              color: C.text,
+              fontFamily: Fonts.rounded as any,
+              fontSize: 16,
+              fontWeight: "bold"
+            }}>
+              {getInitialsName(profile?.full_name ?? "")}
+            </Text>
+          </Pressable>
+        </View>
+      </LinearGradient>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
 
         <View style={{ paddingHorizontal: S.spacing.lg }}>
-          {/* ====== CARD UTAMA (gradient sama seperti header, TANPA JAM) */}
+          {/* ====== CARD UTAMA */}
           <LinearGradient
             colors={[C.gradientFrom, C.gradientTo]}
             start={{ x: 0, y: 0 }}
@@ -270,7 +274,7 @@ export default function HomeScreen() {
                 key={m.key}
                 href={m.href}
                 asChild
-                style={{ justifyContent: "center", alignItems: "center" }}
+                style={{ alignItems: "center" }}
               >
                 <Pressable
                   style={({ pressed }) => [
@@ -336,8 +340,8 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-around",
-    gap: 12,
+    justifyContent: "center",
+    gap: 28,
   },
   square: {
     borderWidth: 1,
