@@ -1,0 +1,156 @@
+// deno-lint-ignore-file no-explicit-any
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
+};
+function json(body, status = 200, extra = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...cors,
+      ...extra,
+    },
+  });
+}
+serve(async (req) => {
+  if (req.method === "OPTIONS") return json({}, 200); // CORS preflight
+  if (req.method !== "POST") {
+    return json(
+      {
+        error: "Method not allowed",
+      },
+      405
+    );
+  }
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return json(
+      {
+        error: "Server misconfigured: missing env",
+      },
+      500
+    );
+  }
+  const authHeader = req.headers.get("Authorization") ?? "";
+  // 1) Client ANON untuk identitas pemanggil (berdasarkan JWT di header)
+  const caller = createClient(supabaseUrl, anonKey, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  });
+  // 2) Client SERVICE ROLE untuk tindakan admin (tanpa header user)
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  try {
+    // === Siapa pemanggil? ===
+    const { data: userData, error: getUserErr } = await caller.auth.getUser();
+    if (getUserErr)
+      return json(
+        {
+          error: getUserErr.message,
+        },
+        401
+      );
+    const user = userData.user;
+    if (!user)
+      return json(
+        {
+          error: "Unauthorized",
+        },
+        401
+      );
+    // === Cek apakah pemanggil admin ===
+    // Prioritas: pakai RPC 'is_admin' (kalau tersedia), fallback ke tabel/view profiles.
+    let isAdmin = false;
+    // Coba RPC tanpa argumen dulu
+    const rpcTry = await caller.rpc("is_admin");
+    if (!rpcTry.error && typeof rpcTry.data === "boolean") {
+      isAdmin = !!rpcTry.data;
+    } else {
+      // Fallback: cek role dari row profil sendiri (RLS biasanya izinkan baca row sendiri)
+      // NOTE: kolom role bisa TEXT atau ENUM → kita normalize ke string lower-case
+      const { data: me, error: meErr } = await caller
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (meErr)
+        return json(
+          {
+            error: meErr.message,
+          },
+          403
+        );
+      const roleStr = me?.role != null ? String(me.role).toLowerCase() : null;
+      isAdmin = roleStr === "admin";
+    }
+    if (!isAdmin)
+      return json(
+        {
+          error: "Forbidden",
+        },
+        403
+      );
+    // === Payload ===
+    const payload = await req.json().catch(() => ({}));
+    const { targetUserId, newEmail, newPassword } = payload || {};
+    if (!targetUserId || typeof targetUserId !== "string") {
+      return json(
+        {
+          error: "targetUserId is required",
+        },
+        400
+      );
+    }
+    if (!newEmail && !newPassword) {
+      return json(
+        {
+          error: "Provide newEmail and/or newPassword",
+        },
+        400
+      );
+    }
+    // (Opsional) Larang men-downgrade/ubah diri sendiri jika kebijakanmu begitu.
+    // if (targetUserId === user.id) {
+    //   return json({ error: "Changing your own account via this endpoint is not allowed" }, 400);
+    // }
+    // === Update auth user ===
+    const update = {};
+    if (newEmail) update.email = String(newEmail);
+    if (newPassword) update.password = String(newPassword);
+    const { error: eAuth } = await admin.auth.admin.updateUserById(
+      targetUserId,
+      update
+    );
+    if (eAuth)
+      return json(
+        {
+          error: eAuth.message,
+        },
+        400
+      );
+    // Selesai
+    return json(
+      {
+        ok: true,
+      },
+      200
+    );
+  } catch (err) {
+    console.error("admin-update-user error", err);
+    return json(
+      {
+        error: err?.message ?? "Unexpected error",
+      },
+      500
+    );
+  }
+});
