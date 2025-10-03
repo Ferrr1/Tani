@@ -27,9 +27,11 @@ Unduh file berikut:
 
 8. Tuliskan seperti ini pada powershell
 
-9. ```env $env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabase.co:5432/postgres' ```
+9. ```bash
+   $env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabase.co:5432/postgres'
+   ```
 
-10. Lakukan Restore menggunakan command ini | Note Pastikan penempatan file directory sesuai dengan powershell
+11. Lakukan Restore menggunakan command ini | Note Pastikan penempatan file directory sesuai dengan powershell
 ```bash
 	pg_restore -L .\toc.list --section=pre-data --no-owner --no-privileges `
   -d "$env:DB_URL" schema_public.dump
