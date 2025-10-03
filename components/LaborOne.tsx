@@ -1,9 +1,17 @@
 import { currency } from "@/utils/currency";
+import { useEffect } from "react";
 import { useWatch } from "react-hook-form";
 import { Text, View } from "react-native";
 import Chip from "./Chip";
 import RHFLineInput from "./RHFLineInput";
 import SectionButton from "./SectionButton";
+
+type Tipe = "borongan" | "harian";
+
+type ChipOption = {
+    value: Tipe;
+    label?: string;
+};
 
 export default function LaborOne({
     title,
@@ -16,6 +24,10 @@ export default function LaborOne({
     subtotal,
     C,
     S,
+    chipOptions = [
+        { value: "borongan", label: "Borongan" },
+        { value: "harian", label: "Harian" },
+    ],
 }: {
     title: string;
     icon: any;
@@ -27,13 +39,37 @@ export default function LaborOne({
     subtotal: number;
     C: any;
     S: any;
+    /** Kustom chip yang ingin ditampilkan (urutan menentukan default) */
+    chipOptions?: ChipOption[];
 }) {
-    const tipe: "borongan" | "harian" | undefined = useWatch({
+    const tipe: Tipe | undefined = useWatch({
         control,
         name: `${name}.tipe`,
     });
 
-    const selectTipe = (t: "borongan" | "harian") => {
+    // Pastikan nilai tipe valid terhadap chipOptions; kalau belum ada atau tidak valid -> set ke chip pertama
+    useEffect(() => {
+        const allowed = new Set(chipOptions.map((c) => c.value));
+        if (!tipe || !allowed.has(tipe)) {
+            const first = chipOptions[0]?.value;
+            if (first) {
+                setValue(`${name}.tipe`, first, { shouldDirty: true });
+                // reset field saat inisialisasi tipe
+                if (first === "borongan") {
+                    setValue(`${name}.jumlahOrang`, "", { shouldDirty: true });
+                    setValue(`${name}.jumlahHari`, "", { shouldDirty: true });
+                    setValue(`${name}.jamKerja`, "", { shouldDirty: true });
+                    setValue(`${name}.upahHarian`, "", { shouldDirty: true });
+                } else {
+                    setValue(`${name}.hargaBorongan`, "", { shouldDirty: true });
+                    setValue(`${name}.upahBerlaku`, "", { shouldDirty: true });
+                }
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tipe, chipOptions]);
+
+    const selectTipe = (t: Tipe) => {
         setValue(`${name}.tipe`, t, { shouldDirty: true });
         if (t === "borongan") {
             setValue(`${name}.jumlahOrang`, "", { shouldDirty: true });
@@ -52,14 +88,14 @@ export default function LaborOne({
 
             {open && (
                 <View style={{ marginTop: 8, gap: 10 }}>
-                    {/* Pilih tipe */}
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        {(["borongan", "harian"] as const).map((t) => (
+                    {/* Chip tipe (kustom) */}
+                    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                        {chipOptions.map(({ value, label }) => (
                             <Chip
-                                key={t}
-                                label={t[0].toUpperCase() + t.slice(1)}
-                                active={tipe === t}
-                                onPress={() => selectTipe(t)}
+                                key={value}
+                                label={label ?? value[0].toUpperCase() + value.slice(1)}
+                                active={tipe === value}
+                                onPress={() => selectTipe(value)}
                                 C={C}
                             />
                         ))}
@@ -75,7 +111,8 @@ export default function LaborOne({
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: string) => parseFloat((v || "0").replace(",", ".")) >= 0 || "Harus ≥ 0",
+                                    validate: (v: string) =>
+                                        parseFloat((v || "0").replace(",", ".")) >= 0 || "Harus ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -88,8 +125,8 @@ export default function LaborOne({
                         </View>
                     )}
 
-                    {/* === Kondisional: HARIAN (default) === */}
-                    {(tipe === "harian" || !tipe) && (
+                    {/* === Kondisional: HARIAN === */}
+                    {tipe === "harian" && (
                         <>
                             <View style={{ flexDirection: "row", gap: 8 }}>
                                 <RHFLineInput
@@ -146,7 +183,9 @@ export default function LaborOne({
 
                     <Text style={{ color: C.textMuted, fontSize: 12 }}>
                         Subtotal ≈{" "}
-                        <Text style={{ color: C.success, fontWeight: "900" }}>{currency(subtotal || 0)}</Text>
+                        <Text style={{ color: C.success, fontWeight: "900" }}>
+                            {currency(subtotal || 0)}
+                        </Text>
                     </Text>
                 </View>
             )}
