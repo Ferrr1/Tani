@@ -224,6 +224,16 @@ export default function ReportScreen() {
         [base.laborNonCashNom]
     );
 
+    const totalTools = useMemo(
+        () => base.tools.reduce((acc, t) => acc + (t.quantity * t.purchasePrice), 0),
+        [base.tools]
+    );
+
+    const totalToolsQty = useMemo(
+        () => base.tools.reduce((acc, t) => acc + (t.quantity), 0),
+        [base.tools]
+    );
+
     const totalBiayaNonTunaiLain = useMemo(() => {
         const toolsVal = base.tools.reduce((acc, t) => acc + toolValue(t), 0);
         const extrasVal = base.extras.reduce((acc, e) => acc + extraValue(e), 0);
@@ -276,11 +286,10 @@ export default function ReportScreen() {
                             onPress={async () => {
                                 await generateReportPdf({
                                     fileName: pdfFileName,
-                                    title: "Report",
-                                    filterText: activeFilterText,
+                                    title: `Laporan ${musimLabel.replace(/-/g, " ")} | ${tahunLabel.replace(/-/g, " ")}`,
                                     cropType: seasonCropType,
                                     village: profileVillage,
-                                    perHaTitle: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`,
+                                    perHaTitle: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} ha`,
                                     profileAreaHa,
                                     effectiveArea: effectiveArea != null ? effectiveArea : profileAreaHa,
                                     landFactor, // metadata PDF; dataset sudah terskalakan
@@ -540,7 +549,7 @@ export default function ReportScreen() {
                                         key={`prod-${i}`}
                                         C={C}
                                         label={p.label ?? "Penerimaan"}
-                                        qty={p.quantity ?? undefined}
+                                        qty={Number((p.quantity)?.toFixed(0)) ?? undefined}
                                         unit={p.unitType ?? null}
                                         price={p.unitPrice ?? undefined}
                                         value={value}
@@ -559,7 +568,7 @@ export default function ReportScreen() {
                                         key={`bt-${i}`}
                                         C={C}
                                         label={label}
-                                        qty={c.quantity ?? undefined}
+                                        qty={Number((c.quantity)?.toFixed(0)) ?? undefined}
                                         unit={c.unit ?? undefined}
                                         price={c.quantity != null ? c.unitPrice : undefined}
                                         value={value}
@@ -596,20 +605,14 @@ export default function ReportScreen() {
 
                             <SubMini text="Biaya Lain" C={C} />
                             {/* Tools detail */}
-                            {base.tools.map((t, i) => {
-                                const value = toolValue(t);
-                                return (
-                                    <RowView
-                                        key={`tool-${i}`}
-                                        C={C}
-                                        label={`Alat${t.toolName ? ` | ${t.toolName}` : ""}`}
-                                        qty={t.quantity}
-                                        unit={null}
-                                        price={t.purchasePrice}
-                                        value={value}
-                                    />
-                                );
-                            })}
+                            {totalTools > 0 && (
+                                <RowView
+                                    C={C}
+                                    label="Alat"
+                                    qty={totalToolsQty}
+                                    value={totalTools}
+                                />
+                            )}
                             {/* Extras nominal (termasuk tax noncash) */}
                             {base.extras.map((e, i) => (
                                 <RowView
