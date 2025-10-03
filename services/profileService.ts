@@ -49,7 +49,7 @@ export async function updateMyProfile(
     .select(
       "id, email, full_name, nama_desa, luas_lahan, role, created_at, updated_at"
     )
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
   return data as Profile;

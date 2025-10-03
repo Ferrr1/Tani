@@ -25,7 +25,6 @@ export type ExtraRow = { category: string; label: string; amount: number };
 export type GenerateReportPdfParams = {
   fileName?: string;
   title?: string; // default: "Report"
-  filterText: string; // contoh: "Filter: Musim Ke-1" / "Filter: Tahun 2024"
   profileAreaHa: number; // luas profil
   effectiveArea: number; // luas konversi aktif
   landFactor: number; // faktor konversi (hanya ditampilkan)
@@ -74,7 +73,6 @@ function extraValue(e: ExtraRow) {
 export async function generateReportPdf({
   fileName,
   title = "Report",
-  filterText,
   cropType,
   village,
   perHaTitle,
@@ -118,7 +116,7 @@ export async function generateReportPdf({
     village ? `Desa: <b>${village}</b>` : null,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" | ");
 
   const html = `
 <!doctype html>
@@ -132,7 +130,6 @@ export async function generateReportPdf({
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111827; }
   h1 { font-size: 20px; margin: 0 0 8px; }
   .muted { color: #6b7280; }
-  .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f3f4f6; color:#374151; font-size: 11px; }
   .section-title { margin: 16px 0 8px; font-weight: 800; }
   .sub-title { margin: 8px 0 4px; font-weight: 700; }
   .sub-mini { margin: 6px 0; color:#6b7280; }
@@ -151,7 +148,6 @@ export async function generateReportPdf({
 <body>
 
   <h1>${title}</h1>
-  <div class="pill">${filterText}</div>
   <div class="meta muted" style="display:flex; flex-direction:column;">
     ${_perHaTitle}
     <p style="margin-top:-4px">${
@@ -180,7 +176,8 @@ export async function generateReportPdf({
       ${production
         .map((p) => {
           const value = prodValue(p);
-          const qtyStr = p.quantity != null ? String(p.quantity) : "-";
+          const qtyStr =
+            p.quantity != null ? Number(p.quantity)?.toFixed(0) : "-";
           const unitStr = p.unitType ?? "-";
           const priceStr = p.unitPrice != null ? currency(p.unitPrice) : "-";
           return `
@@ -202,7 +199,8 @@ export async function generateReportPdf({
         .map((c) => {
           const label = prettyLabel(c.category || "");
           const value = cashValue(c);
-          const qtyStr = c.quantity != null ? String(c.quantity) : "-";
+          const qtyStr =
+            c.quantity != null ? Number(c.quantity)?.toFixed(0) : "-";
           const unitStr = c.unit ?? "-";
           // harga hanya bila ada qty (konsisten UI)
           const priceStr =
@@ -229,7 +227,7 @@ export async function generateReportPdf({
           ? `
         <tr>
           <td>TK Dalam Keluarga</td>
-          <td>${laborNonCashDetail.qty ?? "-"}</td>
+          <td>${laborNonCashDetail.qty?.toFixed(0) ?? "-"}</td>
           <td>${laborNonCashDetail.unit ?? "-"}</td>
           <td>${
             laborNonCashDetail.unitPrice != null
@@ -257,7 +255,7 @@ export async function generateReportPdf({
           return `
             <tr>
               <td>Alat${t.toolName ? ` | ${t.toolName}` : ""}</td>
-              <td>${t.quantity}</td>
+              <td>${t.quantity.toFixed(0)}</td>
               <td>-</td>
               <td>${currency(t.purchasePrice)}</td>
               <td class="td-right">${currency(value)}</td>
@@ -378,7 +376,7 @@ export async function generateReportPdf({
   if (share) {
     await shareAsync(outUri, {
       mimeType: "application/pdf",
-      dialogTitle: "Bagikan Report PDF",
+      dialogTitle: "Bagikan Laporan PDF",
     });
   }
 

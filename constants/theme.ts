@@ -6,7 +6,7 @@
  */
 import { Platform } from "react-native";
 
-const FARM_PRIMARY = "#1BA85F"; // hijau daun (utama)
+const FARM_PRIMARY = "#65BFD5"; // hijau daun (utama)
 const FARM_PRIMARY_DARK = "#167F49";
 const FARM_SOFT = "#EAF7F0"; // hijau sangat muda (card/bg lembut)
 const FARM_SOFT_DARK = "#0E1A14"; // versi gelap untuk dark mode
