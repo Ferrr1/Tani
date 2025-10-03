@@ -1,0 +1,29 @@
+Tutorial
+
+1. ke Dashboard Supabase
+2. Menu Authentication -> Sign In/Providers
+3. Disable Confirm Email
+4. Run as Administrator Powershell
+5. Download PGSQL menggunakan Powershell
+6. Download File berikut untuk melakukan restore.
+7. Konfigurasi URL Supabase yang terletak pada connection string pada navbar dashboar supabase (Button Connect).
+8. Tuliskan seperti ini pada powershell
+$env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabase.co:5432/postgres'
+9. Lakukan Restore menggunakan command ini
+	1. pg_restore -L .\toc.list --section=pre-data --no-owner --no-privileges `
+  -d "$env:NEW_DB_URL" schema_public.dump
+
+  2. pg_restore -L .\toc.list --section=post-data --no-owner --no-privileges `
+  -d "$env:NEW_DB_URL" schema_public.dump
+
+  3. pg_restore -L .\auth_toc.triggers.list --no-owner --no-privileges `
+  -d "$env:NEW_DB_URL" .\auth_users.dump
+
+10. Ke Menu Edge Function -> Deploy new via Editor
+ !! Pastikan Nama Function Sesuai !!
+ a. admin-update-user -> paste kode yang ada pada file admin-update-user
+ b. verify-mother-name -> paste kode yang ada pada file verify-mother-name
+
+11. Paste kode sql ini ke editor supabase
+
+create extension if not exists unaccent with schema extensions;
