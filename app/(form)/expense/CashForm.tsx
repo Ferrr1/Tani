@@ -1,15 +1,8 @@
+// CashForm.tsx (potongan lengkap yang relevan)
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, {
-    Dispatch,
-    SetStateAction,
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
     Alert,
@@ -28,6 +21,7 @@ import FertilizerPanel from "@/components/FertilizerPanel";
 import LaborOne from "@/components/LaborOne";
 import RHFLineInput from "@/components/RHFLineInput";
 import SectionButton from "@/components/SectionButton";
+import SeedOne from "@/components/SeedOne"; // <-- NEW
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
 import {
@@ -68,8 +62,7 @@ export default function CashForm({
         updateCashExpense,
     } = useExpenseService();
 
-    const [openSeed, setOpenSeed] = useState(false);
-    const [openSeedling, setOpenSeedling] = useState(false);
+    // ===== Removed: openSeed / openSeedling
     const [openFertilizer, setOpenFertilizer] = useState(false);
     const [openInsect, setOpenInsect] = useState(false);
     const [openHerb, setOpenHerb] = useState(false);
@@ -85,22 +78,14 @@ export default function CashForm({
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openExtras, setOpenExtras] = useState(true);
 
-    const [seedItems, setSeedItems] = useState<ChemItem[]>([]);
-    console.log("seedItems:", seedItems);
-    const [seedlingItems, setSeedlingItems] = useState<ChemItem[]>([]);
+    // ===== Removed: seedItems / seedlingItems (multiple). Pupuk/pestisida tetap multiple.
     const [fertilizerItems, setFertilizerItems] = useState<ChemItem[]>([]);
     const [insectItems, setInsectItems] = useState<ChemItem[]>([]);
     const [herbItems, setHerbItems] = useState<ChemItem[]>([]);
     const [fungiItems, setFungiItems] = useState<ChemItem[]>([]);
 
-    const addChem = (
-        setter: Dispatch<SetStateAction<ChemItem[]>>,
-        item: Omit<ChemItem, "id">
-    ) =>
-        setter((prev) => [
-            ...prev,
-            { ...item, id: String(Date.now() + Math.random()) },
-        ]);
+    const addChem = (setter: any, item: Omit<ChemItem, "id">) =>
+        setter((prev: ChemItem[]) => [...prev, { ...item, id: String(Date.now() + Math.random()) }]);
 
     const defaultLabor = (): LaborForm => ({
         tipe: "harian",
@@ -112,8 +97,12 @@ export default function CashForm({
         upahBerlaku: "",
     });
 
-    const { control, handleSubmit, watch, setValue } = useForm<CashFormValues>({
+    // ==== DEFAULT FORM (tambahkan blok seed)
+    const { control, handleSubmit, watch, setValue } = useForm<CashFormValues & {
+        seed: { kind: "seed" | "seedling"; name: string; qty: string; price: string };
+    }>({
         defaultValues: {
+            seed: { kind: "seed", name: "", qty: "", price: "" },
             extras: { tax: "", landRent: "", transport: "" },
             labor: {
                 nursery: defaultLabor(),
@@ -131,109 +120,122 @@ export default function CashForm({
     });
 
     const didHydrateEdit = useRef(false);
-    const [initialLoading, setInitialLoading] = useState<boolean>(
-        mode === "edit"
-    );
+    const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
 
     useEffect(() => {
         let alive = true;
-
         const hydrateEdit = async () => {
-            if (mode !== "edit" || !expenseId) return;
-            if (didHydrateEdit.current) return;
-
+            if (mode !== "edit" || !expenseId || didHydrateEdit.current) return;
             try {
                 setInitialLoading(true);
-
                 const [materials, labors, extras] = await Promise.all([
                     listCashMaterials(expenseId),
                     listCashLabors(expenseId),
                     listCashExtras(expenseId),
                 ]);
-                console.log("hydrateEdit: materials:", materials);
-                console.log("hydrateEdit: labors:", labors);
-                console.log("hydrateEdit: extras:", extras);
                 if (!alive) return;
 
-                // Reset buckets
-                setSeedItems([]);
-                setSeedlingItems([]);
+                // Reset lain2
                 setFertilizerItems([]);
                 setInsectItems([]);
                 setHerbItems([]);
                 setFungiItems([]);
 
-                // Reset extras
                 setValue("extras.tax", "");
                 setValue("extras.landRent", "");
                 setValue("extras.transport", "");
 
-                // Reset labor per stage
-                const clearLaborKey = (key: keyof CashFormValues["labor"]) => {
-                    const v: LaborForm = defaultLabor();
-                    setValue(`labor.${key}.tipe` as const, v.tipe);
-                    setValue(`labor.${key}.jumlahOrang` as const, v.jumlahOrang);
-                    setValue(`labor.${key}.jumlahHari` as const, v.jumlahHari);
-                    setValue(`labor.${key}.jamKerja` as const, v.jamKerja);
-                    setValue(`labor.${key}.upahHarian` as const, v.upahHarian);
-                    setValue(`labor.${key}.hargaBorongan` as const, v.hargaBorongan!);
-                    setValue(`labor.${key}.upahBerlaku` as const, v.upahBerlaku!);
-                };
-                (
-                    [
-                        "nursery",
-                        "land_prep",
-                        "planting",
-                        "fertilizing",
-                        "irrigation",
-                        "weeding",
-                        "pest_ctrl",
-                        "harvest",
-                        "postharvest",
-                    ] as (keyof CashFormValues["labor"])[]
-                ).forEach(clearLaborKey);
+                // reset labor
+                ([
+                    "nursery",
+                    "land_prep",
+                    "planting",
+                    "fertilizing",
+                    "irrigation",
+                    "weeding",
+                    "pest_ctrl",
+                    "harvest",
+                    "postharvest",
+                ] as const).forEach((k) => {
+                    const v = defaultLabor();
+                    setValue(`labor.${k}.tipe`, v.tipe);
+                    setValue(`labor.${k}.jumlahOrang`, v.jumlahOrang);
+                    setValue(`labor.${k}.jumlahHari`, v.jumlahHari);
+                    setValue(`labor.${k}.jamKerja`, v.jamKerja);
+                    setValue(`labor.${k}.upahHarian`, v.upahHarian);
+                    setValue(`labor.${k}.hargaBorongan`, v.hargaBorongan!);
+                    setValue(`labor.${k}.upahBerlaku`, v.upahBerlaku!);
+                });
 
-                // --- MATERIALS
+                // MATERIALS:
+                // - Ambil hanya SATU bibit (seed/seedling) pertama yang ditemukan
+                // - Lainnya tetap multiple (fertilizer/pesticides)
+                let firstSeed: any | null = null;
+                let firstSeedling: any | null = null;
+
                 (materials || []).forEach((m: any) => {
                     const cat: Category | undefined = m?.category;
                     const unit: Unit | undefined = (m?.unit as Unit) ?? "gram";
                     const qty = String(m?.quantity ?? "");
                     const price = String(m?.unit_price ?? "");
                     const name = m?.label ?? m?.item_name ?? "";
-                    const add = (setter: Dispatch<SetStateAction<ChemItem[]>>) =>
-                        setter((prev) => [
+
+                    if (cat === "seed" && !firstSeed) {
+                        firstSeed = { name, unit, qty, price };
+                    } else if (cat === "seedling" && !firstSeedling) {
+                        firstSeedling = { name, unit, qty, price };
+                    } else if (cat === "fertilizer") {
+                        setFertilizerItems((prev) => [
                             ...prev,
-                            {
-                                id: String(Date.now() + Math.random()),
-                                category: cat!,
-                                name,
-                                unit,
-                                qty,
-                                price,
-                            },
+                            { id: String(Date.now() + Math.random()), category: "fertilizer", name, unit, qty, price },
                         ]);
-
-                    if (cat === "seed") return add(setSeedItems);
-                    if (cat === "seedling") return add(setSeedlingItems);
-                    if (cat === "fertilizer") return add(setFertilizerItems);
-                    if (cat === "insecticide") return add(setInsectItems);
-                    if (cat === "herbicide") return add(setHerbItems);
-                    if (cat === "fungicide") return add(setFungiItems);
+                    } else if (cat === "insecticide") {
+                        setInsectItems((prev) => [
+                            ...prev,
+                            { id: String(Date.now() + Math.random()), category: "insecticide", name, unit, qty, price },
+                        ]);
+                    } else if (cat === "herbicide") {
+                        setHerbItems((prev) => [
+                            ...prev,
+                            { id: String(Date.now() + Math.random()), category: "herbicide", name, unit, qty, price },
+                        ]);
+                    } else if (cat === "fungicide") {
+                        setFungiItems((prev) => [
+                            ...prev,
+                            { id: String(Date.now() + Math.random()), category: "fungicide", name, unit, qty, price },
+                        ]);
+                    }
                 });
 
-                // --- EXTRAS
+                // Prefill seed form
+                if (firstSeed) {
+                    setValue("seed.kind", "seed");
+                    setValue("seed.name", firstSeed.name ?? "");
+                    setValue("seed.qty", firstSeed.qty ?? "");
+                    setValue("seed.price", firstSeed.price ?? "");
+                } else if (firstSeedling) {
+                    setValue("seed.kind", "seedling");
+                    setValue("seed.name", firstSeedling.name ?? "");
+                    setValue("seed.qty", firstSeedling.qty ?? "");
+                    setValue("seed.price", firstSeedling.price ?? "");
+                } else {
+                    // tidak ada bibit sebelumnya
+                    setValue("seed.kind", "seed");
+                    setValue("seed.name", "");
+                    setValue("seed.qty", "");
+                    setValue("seed.price", "");
+                }
+
+                // EXTRAS
                 (extras || []).forEach((e: any) => {
-                    const cat: Category = e?.metadata.category;
-                    console.log("EXTRAS:", cat, e);
+                    const cat: Category = e?.metadata?.category;
                     if (cat === "tax") setValue("extras.tax", String(e.amount || ""));
-                    if (cat === "land_rent")
-                        setValue("extras.landRent", String(e.amount || ""));
-                    if (cat === "transport")
-                        setValue("extras.transport", String(e.amount || ""));
+                    if (cat === "land_rent") setValue("extras.landRent", String(e.amount || ""));
+                    if (cat === "transport") setValue("extras.transport", String(e.amount || ""));
                 });
 
-                // --- LABOR
-                const laborCatToKey: Record<string, keyof CashFormValues["labor"]> = {
+                // LABOR (sama seperti sebelumnya)
+                const map: Record<string, keyof CashFormValues["labor"]> = {
                     labor_nursery: "nursery",
                     labor_land_prep: "land_prep",
                     labor_planting: "planting",
@@ -246,59 +248,33 @@ export default function CashForm({
                 };
 
                 (labors || []).forEach((it: any) => {
-                    console.log("LABOR:", it);
-                    const cat: Category | undefined = it?.metadata.category;
-                    if (!cat) return;
-                    const key = laborCatToKey[cat];
+                    const key = map[it?.metadata?.category as string];
                     if (!key) return;
-
-                    const laborType =
-                        it?.labor_type ||
-                        it?.metadata?.laborType ||
-                        it?.metadata?.labor_type;
-
-                    if (laborType === "contract") {
+                    const type =
+                        it?.labor_type || it?.metadata?.laborType || it?.metadata?.labor_type;
+                    if (type === "contract") {
                         const kontrak = Number(it?.contract_price ?? 0);
-                        const upahBerlaku = Number(
-                            it?.metadata?.prevailingWage ??
-                            NaN
-                        );
-                        setValue(`labor.${key}.tipe` as const, "borongan");
+                        const upahBerlaku = Number(it?.metadata?.prevailingWage ?? NaN);
+                        setValue(`labor.${key}.tipe`, "borongan");
+                        setValue(`labor.${key}.hargaBorongan`, kontrak ? String(kontrak) : "");
                         setValue(
-                            `labor.${key}.hargaBorongan` as const,
-                            kontrak ? String(kontrak) : ""
-                        );
-                        setValue(
-                            `labor.${key}.upahBerlaku` as const,
+                            `labor.${key}.upahBerlaku`,
                             Number.isFinite(upahBerlaku) ? String(upahBerlaku) : ""
                         );
-                        setValue(`labor.${key}.jumlahOrang` as const, "");
-                        setValue(`labor.${key}.jumlahHari` as const, "");
-                        setValue(`labor.${key}.upahHarian` as const, "");
+                        setValue(`labor.${key}.jumlahOrang`, "");
+                        setValue(`labor.${key}.jumlahHari`, "");
+                        setValue(`labor.${key}.upahHarian`, "");
                     } else {
-                        const people =
-                            Number(it?.people_count ?? it?.metadata?.peopleCount ?? 0) || 0;
+                        const people = Number(it?.people_count ?? it?.metadata?.peopleCount ?? 0) || 0;
                         const days = Number(it?.days ?? it?.metadata?.days ?? 0) || 0;
                         const wage = Number(it?.daily_wage ?? 0);
-                        const jumlahOrang = people > 0 ? people : 0;
-                        const jumlahHari = days > 0 ? days : 1;
-
-                        setValue(`labor.${key}.tipe` as const, "harian");
-                        setValue(
-                            `labor.${key}.jumlahOrang` as const,
-                            String(jumlahOrang || "")
-                        );
-                        setValue(
-                            `labor.${key}.jumlahHari` as const,
-                            String(jumlahHari || "")
-                        );
-                        setValue(`labor.${key}.upahHarian` as const, String(wage || ""));
-                        setValue(
-                            `labor.${key}.jamKerja` as const,
-                            it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : ""
-                        );
-                        setValue(`labor.${key}.hargaBorongan` as const, "");
-                        setValue(`labor.${key}.upahBerlaku` as const, "");
+                        setValue(`labor.${key}.tipe`, "harian");
+                        setValue(`labor.${key}.jumlahOrang`, String(people > 0 ? people : 0));
+                        setValue(`labor.${key}.jumlahHari`, String(days > 0 ? days : 1));
+                        setValue(`labor.${key}.upahHarian`, String(wage || ""));
+                        setValue(`labor.${key}.jamKerja`, it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : "");
+                        setValue(`labor.${key}.hargaBorongan`, "");
+                        setValue(`labor.${key}.upahBerlaku`, "");
                     }
                 });
 
@@ -341,47 +317,58 @@ export default function CashForm({
         }, 0);
     }, []);
 
-    const laborW = watch("labor");
+    const L = watch("labor");
     const extrasW = watch("extras");
+    const seedW = watch("seed");
+
+    const chemOthersTotal =
+        sumChem(fertilizerItems) + sumChem(insectItems) + sumChem(herbItems) + sumChem(fungiItems);
+
+    const seedSubtotal = useMemo(() => {
+        const q = toNum(seedW?.qty);
+        const p = toNum(seedW?.price);
+        return q > 0 && p >= 0 ? q * p : 0;
+    }, [seedW]);
+
+    const laborTotal = useMemo(() => {
+        return (
+            calcLaborSubtotal(L.nursery) +
+            calcLaborSubtotal(L.land_prep) +
+            calcLaborSubtotal(L.planting) +
+            calcLaborSubtotal(L.fertilizing) +
+            calcLaborSubtotal(L.irrigation) +
+            calcLaborSubtotal(L.weeding) +
+            calcLaborSubtotal(L.pest_ctrl) +
+            calcLaborSubtotal(L.harvest) +
+            calcLaborSubtotal(L.postharvest)
+        );
+    }, [L, calcLaborSubtotal]);
 
     const total = useMemo(() => {
-        const extras =
-            toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
+        const extras = toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
+        return seedSubtotal + chemOthersTotal + laborTotal + extras;
+    }, [seedSubtotal, chemOthersTotal, laborTotal, extrasW]);
 
-        const chem =
-            sumChem(seedItems) +
-            sumChem(seedlingItems) +
-            sumChem(fertilizerItems) +
-            sumChem(insectItems) +
-            sumChem(herbItems) +
-            sumChem(fungiItems);
+    const buildPayload = (fv: any) => {
+        const out: any[] = [];
 
-        const laborTotal =
-            calcLaborSubtotal(laborW.nursery) +
-            calcLaborSubtotal(laborW.land_prep) +
-            calcLaborSubtotal(laborW.planting) +
-            calcLaborSubtotal(laborW.fertilizing) +
-            calcLaborSubtotal(laborW.irrigation) +
-            calcLaborSubtotal(laborW.weeding) +
-            calcLaborSubtotal(laborW.pest_ctrl) +
-            calcLaborSubtotal(laborW.harvest) +
-            calcLaborSubtotal(laborW.postharvest);
-        const totalCash = chem + laborTotal + extras;
-        return totalCash;
-    }, [
-        calcLaborSubtotal,
-        sumChem,
-        seedItems,
-        seedlingItems,
-        fertilizerItems,
-        insectItems,
-        herbItems,
-        fungiItems,
-        laborW,
-        extrasW,
-    ]);
+        // SEED (wajib, satu item)
+        const kind: "seed" | "seedling" = fv.seed.kind;
+        const unit: Unit = kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
+        const q = toNum(fv.seed.qty);
+        const p = toNum(fv.seed.price);
+        if (q > 0 && p >= 0) {
+            out.push({
+                category: kind, // "seed" | "seedling"
+                itemName: fv.seed.name || null,
+                unit,
+                quantity: q,
+                unitPrice: p,
+                _meta: { category: kind, unit },
+            });
+        }
 
-    const buildPayload = (fv: CashFormValues) => {
+        // OTHERS
         const chemToRows = (rows: ChemItem[]) =>
             rows.map((r) => ({
                 category: r.category,
@@ -392,6 +379,14 @@ export default function CashForm({
                 _meta: { category: r.category, unit: r.unit },
             }));
 
+        out.push(
+            ...chemToRows(fertilizerItems),
+            ...chemToRows(insectItems),
+            ...chemToRows(herbItems),
+            ...chemToRows(fungiItems)
+        );
+
+        // LABOR
         const laborOne = (cat: Category, lf: LaborForm) => {
             if (lf.tipe === "borongan") {
                 const kontrak = Math.max(0, toNum(lf.hargaBorongan));
@@ -406,20 +401,16 @@ export default function CashForm({
                         category: cat,
                         unit: "service",
                         laborType: "contract",
-                        prevailingWage: lf.upahBerlaku
-                            ? Math.max(0, toNum(lf.upahBerlaku))
-                            : undefined,
+                        prevailingWage: lf.upahBerlaku ? Math.max(0, toNum(lf.upahBerlaku)) : undefined,
                         jamKerja: lf.jamKerja || undefined,
                     },
                 };
             }
-
             const people = Math.max(0, toNum(lf.jumlahOrang));
             const days = Math.max(0, toNum(lf.jumlahHari));
             const qty = Math.max(0, people * days);
             const upah = Math.max(0, toNum(lf.upahHarian));
             if (qty <= 0) return null;
-
             return {
                 category: cat,
                 itemName: "harian",
@@ -437,6 +428,21 @@ export default function CashForm({
             };
         };
 
+        const laborRows = [
+            laborOne("labor_nursery", fv.labor.nursery),
+            laborOne("labor_land_prep", fv.labor.land_prep),
+            laborOne("labor_planting", fv.labor.planting),
+            laborOne("labor_fertilizing", fv.labor.fertilizing),
+            laborOne("labor_irrigation", fv.labor.irrigation),
+            laborOne("labor_weeding", fv.labor.weeding),
+            laborOne("labor_pest_ctrl", fv.labor.pest_ctrl),
+            laborOne("labor_harvest", fv.labor.harvest),
+            laborOne("labor_postharvest", fv.labor.postharvest),
+        ].filter(Boolean) as any[];
+
+        out.push(...laborRows);
+
+        // EXTRAS
         const extras: any[] = [];
         const vTax = toNum(fv.extras.tax);
         if (vTax > 0)
@@ -469,28 +475,10 @@ export default function CashForm({
                 _meta: { category: "transport", unit: SERVICE_UNIT },
             });
 
-        const laborRows = [
-            laborOne("labor_nursery", fv.labor.nursery),
-            laborOne("labor_land_prep", fv.labor.land_prep),
-            laborOne("labor_planting", fv.labor.planting),
-            laborOne("labor_fertilizing", fv.labor.fertilizing),
-            laborOne("labor_irrigation", fv.labor.irrigation),
-            laborOne("labor_weeding", fv.labor.weeding),
-            laborOne("labor_pest_ctrl", fv.labor.pest_ctrl),
-            laborOne("labor_harvest", fv.labor.harvest),
-            laborOne("labor_postharvest", fv.labor.postharvest),
-        ].filter(Boolean) as any[];
+        out.push(...extras);
 
-        return [
-            ...chemToRows(seedItems),
-            ...chemToRows(seedlingItems),
-            ...chemToRows(fertilizerItems),
-            ...chemToRows(insectItems),
-            ...chemToRows(herbItems),
-            ...chemToRows(fungiItems),
-            ...laborRows,
-            ...extras,
-        ].filter(
+        // filter final
+        return out.filter(
             (x) =>
                 Number.isFinite(x.quantity) &&
                 x.quantity > 0 &&
@@ -499,16 +487,54 @@ export default function CashForm({
         );
     };
 
+    // Validasi minimal 1 labor
+    const hasAnyLabor = useCallback(() => {
+        const arr: LaborForm[] = [
+            L.nursery,
+            L.land_prep,
+            L.planting,
+            L.fertilizing,
+            L.irrigation,
+            L.weeding,
+            L.pest_ctrl,
+            L.harvest,
+            L.postharvest,
+        ];
+        return arr.some((lf) => {
+            if (lf.tipe === "borongan") return toNum(lf.hargaBorongan) > 0;
+            const orang = toNum(lf.jumlahOrang);
+            const hari = toNum(lf.jumlahHari);
+            const upah = toNum(lf.upahHarian);
+            return orang > 0 && hari > 0 && upah > 0;
+        });
+    }, [L]);
+
+    // Validasi wajib bibit
+    const hasValidSeed = useCallback(() => {
+        const q = toNum(seedW?.qty);
+        const p = toNum(seedW?.price);
+        return (seedW?.name?.trim()?.length ?? 0) > 0 && q > 0 && p >= 0;
+    }, [seedW]);
+
     const [saving, setSaving] = useState(false);
-    const onSubmit = async (fv: CashFormValues) => {
+    const onSubmit = async (fv: any) => {
         try {
+            if (!hasValidSeed()) {
+                Alert.alert("Validasi", "Bagian Bibit wajib diisi (nama, jumlah, harga).");
+                return;
+            }
+            if (!hasAnyLabor()) {
+                Alert.alert("Validasi", "Isi minimal satu item Tenaga Kerja (borongan atau harian).");
+                return;
+            }
+
             const items = buildPayload(fv);
             if (!items.length) {
                 Alert.alert("Validasi", "Isi minimal satu item yang valid.");
                 return;
             }
-            setSaving(true);
 
+            setSaving(true);
             if (mode === "edit" && expenseId) {
                 await updateCashExpense(expenseId, { seasonId, items });
             } else {
@@ -580,59 +606,18 @@ export default function CashForm({
                     }}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* ===== Bibit ===== */}
+                    {/* ===== Bibit (Wajib, single, TANPA SectionButton) ===== */}
                     <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 4 }}>
-                        Bibit
+                        Bibit *
                     </Text>
-                    <SectionButton
-                        title="Tambah Benih (gram)"
-                        icon="leaf-outline"
-                        open={openSeed}
-                        onPress={() => setOpenSeed((v) => !v)}
+                    <SeedOne
+                        name="seed"
+                        control={control}
+                        setValue={setValue}
                         C={C}
                         S={S}
                     />
-                    {openSeed && (
-                        <ChemPanel
-                            schemeColors={{ C, S }}
-                            unitChoices={[SEED_UNIT]}
-                            placeholderName="Nama benih"
-                            onAdd={(p) =>
-                                addChem(setSeedItems, {
-                                    ...p,
-                                    category: "seed",
-                                    unit: SEED_UNIT,
-                                })
-                            }
-                            rows={seedItems}
-                            setRows={setSeedItems}
-                        />
-                    )}
 
-                    <SectionButton
-                        title="Tambah Bibit (ikat)"
-                        icon="flower-outline"
-                        open={openSeedling}
-                        onPress={() => setOpenSeedling((v) => !v)}
-                        C={C}
-                        S={S}
-                    />
-                    {openSeedling && (
-                        <ChemPanel
-                            schemeColors={{ C, S }}
-                            unitChoices={[SEEDLING_UNIT]}
-                            placeholderName="Nama bibit"
-                            onAdd={(p) =>
-                                addChem(setSeedlingItems, {
-                                    ...p,
-                                    category: "seedling",
-                                    unit: SEEDLING_UNIT,
-                                })
-                            }
-                            rows={seedlingItems}
-                            setRows={setSeedlingItems}
-                        />
-                    )}
 
                     {/* ===== Pupuk ===== */}
                     <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
@@ -678,9 +663,7 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama insektisida"
-                            onAdd={(p) =>
-                                addChem(setInsectItems, { ...p, category: "insecticide" })
-                            }
+                            onAdd={(p) => addChem(setInsectItems, { ...p, category: "insecticide" })}
                             rows={insectItems}
                             setRows={setInsectItems}
                         />
@@ -698,9 +681,7 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama herbisida"
-                            onAdd={(p) =>
-                                addChem(setHerbItems, { ...p, category: "herbicide" })
-                            }
+                            onAdd={(p) => addChem(setHerbItems, { ...p, category: "herbicide" })}
                             rows={herbItems}
                             setRows={setHerbItems}
                         />
@@ -718,9 +699,7 @@ export default function CashForm({
                             schemeColors={{ C, S }}
                             unitChoices={SATUAN_KIMIA}
                             placeholderName="Nama fungisida"
-                            onAdd={(p) =>
-                                addChem(setFungiItems, { ...p, category: "fungicide" })
-                            }
+                            onAdd={(p) => addChem(setFungiItems, { ...p, category: "fungicide" })}
                             rows={fungiItems}
                             setRows={setFungiItems}
                         />
@@ -732,7 +711,7 @@ export default function CashForm({
                     </Text>
 
                     <LaborOne
-                        title="Pesemaian"
+                        title="Persemaian"
                         icon="flower-outline"
                         open={openNursery}
                         onPress={() => setOpenNursery((v) => !v)}
@@ -797,7 +776,7 @@ export default function CashForm({
                     />
 
                     <LaborOne
-                        title="Penyiayangan"
+                        title="Penyiangan"
                         icon="cut-outline"
                         open={openWeeding}
                         onPress={() => setOpenWeeding((v) => !v)}
@@ -870,8 +849,7 @@ export default function CashForm({
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: CashFormValues["extras"]["tax"]) =>
-                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -881,8 +859,7 @@ export default function CashForm({
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: CashFormValues["extras"]["landRent"]) =>
-                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -892,8 +869,7 @@ export default function CashForm({
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: CashFormValues["extras"]["transport"]) =>
-                                        !Number.isNaN(toNum(v)) && toNum(v) >= 0 || "Harus angka ≥ 0",
+                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                         </View>
@@ -903,20 +879,14 @@ export default function CashForm({
                     <View style={{ marginTop: 12 }}>
                         <Text style={{ textAlign: "right", color: C.text, marginBottom: 8 }}>
                             Total:{" "}
-                            <Text style={{ color: C.success, fontWeight: "900" }}>
-                                {currency(total)}
-                            </Text>
+                            <Text style={{ color: C.success, fontWeight: "900" }}>{currency(total)}</Text>
                         </Text>
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
                             disabled={saving}
                             style={({ pressed }) => [
                                 styles.saveBtn,
-                                {
-                                    backgroundColor: C.tint,
-                                    opacity: pressed ? 0.98 : 1,
-                                    borderRadius: S.radius.xl,
-                                },
+                                { backgroundColor: C.tint, opacity: pressed ? 0.98 : 1, borderRadius: S.radius.xl },
                             ]}
                         >
                             <Ionicons name="save-outline" size={18} color="#fff" />
@@ -933,11 +903,7 @@ export default function CashForm({
 
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-    headerRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-    },
+    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     headerTitle: { fontSize: 18, fontWeight: "800" },
     iconBtn: {
         width: 36,
