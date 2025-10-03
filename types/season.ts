@@ -1,5 +1,5 @@
 export const CROP_OPTIONS: string[] = [
-  "popcoi",
+  "pakcoi",
   "selada air",
   "sawi",
   "kangkong",

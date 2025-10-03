@@ -1,8 +1,8 @@
-export type Unit = "gram" | "kilogram" | "liter" | "bundle" | "service";
+export type Unit = "gram" | "kilogram" | "liter" | "ikat" | "service";
 export const SATUAN_KIMIA: Unit[] = ["gram", "kilogram", "liter"];
 export const UNIT_FERTILIZER: Unit = "kilogram";
 export const SEED_UNIT: Unit = "gram";
-export const SEEDLING_UNIT: Unit = "bundle";
+export const SEEDLING_UNIT: Unit = "ikat";
 export const SERVICE_UNIT: Unit = "service";
 
 export const FERTILIZER_CHOICES = [
