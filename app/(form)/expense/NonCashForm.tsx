@@ -163,7 +163,7 @@ export default function NonCashForm({
                 });
 
                 const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = {
-                    pesemaian: "nursery",
+                    persemaian: "nursery",
                     "pengolahan lahan": "land_prep",
                     penanaman: "planting",
                     pemupukan: "fertilizing",
@@ -364,7 +364,7 @@ export default function NonCashForm({
         };
 
         const labors = [
-            mapLabor("nursery", "Pesemaian"),
+            mapLabor("nursery", "Persemaian"),
             mapLabor("land_prep", "Pengolahan Lahan"),
             mapLabor("planting", "Penanaman"),
             mapLabor("fertilizing", "Pemupukan"),
@@ -405,11 +405,43 @@ export default function NonCashForm({
         return { labors, tools: toolItems, extras };
     };
 
+    const hasAnyLabor = useCallback(() => {
+        const L = watch("labor");
+        const arr: LaborForm[] = [
+            L.nursery,
+            L.land_prep,
+            L.planting,
+            L.fertilizing,
+            L.irrigation,
+            L.weeding,
+            L.pest_ctrl,
+            L.harvest,
+            L.postharvest,
+        ];
+        return arr.some((lf) => {
+            if (lf.tipe === "borongan") {
+                return toNum(lf.hargaBorongan) > 0;
+            }
+            const orang = toNum(lf.jumlahOrang);
+            const hari = toNum(lf.jumlahHari);
+            const upah = toNum(lf.upahHarian);
+            return orang > 0 && hari > 0 && upah > 0;
+        });
+    }, [watch]);
+
     /** ===== Submit ===== */
     const [saving, setSaving] = useState(false);
     const onSubmit = async (fv: NonCashFormValues) => {
         try {
             const { labors, tools: toolItems, extras } = buildPayload(fv);
+
+            if (!hasAnyLabor()) {
+                Alert.alert(
+                    "Validasi",
+                    "Isi minimal satu item Tenaga Kerja (harian)."
+                );
+                return;
+            }
 
             if (labors.length === 0 && toolItems.length === 0 && extras.length === 0) {
                 Alert.alert("Validasi", "Isi minimal satu data yang valid.");
@@ -482,7 +514,7 @@ export default function NonCashForm({
                     <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 4 }}>Tenaga Kerja</Text>
 
                     <LaborOne
-                        title="Pesemaian"
+                        title="Persemaian"
                         icon="flower-outline"
                         open={openNursery}
                         onPress={() => setOpenNursery((v) => !v)}
@@ -492,6 +524,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").nursery)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Pengolahan Lahan"
@@ -504,6 +537,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").land_prep)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Penanaman"
@@ -516,6 +550,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").planting)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Pemupukan"
@@ -528,6 +563,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").fertilizing)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Penyiraman"
@@ -540,6 +576,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").irrigation)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Penyiangan"
@@ -552,6 +589,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").weeding)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Pengendalian Hama & Penyakit"
@@ -564,6 +602,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").pest_ctrl)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Panen"
@@ -576,6 +615,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").harvest)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
                     <LaborOne
                         title="Pasca Panen"
@@ -588,6 +628,7 @@ export default function NonCashForm({
                         subtotal={calcLaborSubtotal(watch("labor").postharvest)}
                         C={C}
                         S={S}
+                        chipOptions={[{ value: "harian", label: "Harian" }]}
                     />
 
                     {/* ===== Alat ===== */}
