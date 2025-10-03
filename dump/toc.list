@@ -1,0 +1,162 @@
+;
+; Archive created at 2025-10-03 10:54:07
+;     dbname: postgres
+;     TOC Entries: 153
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 17.6
+;     Dumped by pg_dump version: 17.4
+;
+;
+; Selected TOC Entries:
+;
+;14; 2615 2200 SCHEMA - public pg_database_owner
+;4316; 0 0 COMMENT - SCHEMA public pg_database_owner
+1495; 1247 20590 TYPE public expense_item_kind postgres
+1492; 1247 20585 TYPE public expense_type postgres
+1429; 1247 29602 TYPE public extra_kind_enum postgres
+1498; 1247 20600 TYPE public extra_type postgres
+1426; 1247 29596 TYPE public labor_type_enum postgres
+1423; 1247 29582 TYPE public material_category_enum postgres
+1420; 1247 29571 TYPE public unit_enum postgres
+567; 1255 23356 FUNCTION public admin_update_profile_only(uuid, text, text, text, numeric, text) postgres
+578; 1255 20279 FUNCTION public assert_season_ownership(uuid) postgres
+653; 1255 19398 FUNCTION public ensure_receipt_ownership() postgres
+407; 1255 17354 FUNCTION public handle_new_user() postgres
+488; 1255 20752 FUNCTION public is_admin(uuid) postgres
+516; 1255 31991 FUNCTION public normalize_kba_answer(text) postgres
+555; 1255 29417 FUNCTION public set_created_by_default() postgres
+586; 1255 31992 FUNCTION public set_mother_name(uuid, text) postgres
+552; 1255 17346 FUNCTION public set_updated_at() postgres
+678; 1255 17435 FUNCTION public sync_profile_email() postgres
+494; 1255 20254 FUNCTION public tg_set_updated_at() postgres
+534; 1255 31993 FUNCTION public verify_mother_name(uuid, text) postgres
+511; 1255 32014 FUNCTION public verify_mother_name_by_email(text, text) postgres
+390; 1259 29740 TABLE public cash_extra_items postgres
+389; 1259 29692 TABLE public cash_labor_items postgres
+388; 1259 29630 TABLE public cash_material_items postgres
+386; 1259 20628 TABLE public expenses postgres
+387; 1259 29397 TABLE public informations postgres
+4317; 0 0 COMMENT public TABLE informations postgres
+4318; 0 0 COMMENT public COLUMN informations.title postgres
+4319; 0 0 COMMENT public COLUMN informations.description postgres
+4320; 0 0 COMMENT public COLUMN informations.note postgres
+4321; 0 0 COMMENT public COLUMN informations.is_active postgres
+4322; 0 0 COMMENT public COLUMN informations.created_by postgres
+393; 1259 29922 TABLE public noncash_extra_items postgres
+391; 1259 29832 TABLE public noncash_labor_items postgres
+392; 1259 29880 TABLE public noncash_tool_items postgres
+381; 1259 17326 TABLE public profiles postgres
+385; 1259 19372 TABLE public receipts postgres
+384; 1259 19323 TABLE public seasons postgres
+395; 1259 42954 VIEW public v_expense_items_screen postgres
+394; 1259 34555 VIEW public v_expenses_with_totals_screen postgres
+396; 1259 42980 VIEW public v_report_source postgres
+4072; 2606 29752 CONSTRAINT public cash_extra_items cash_extra_items_pkey postgres
+4068; 2606 29711 CONSTRAINT public cash_labor_items cash_labor_items_pkey postgres
+4063; 2606 29643 CONSTRAINT public cash_material_items cash_material_items_pkey postgres
+4053; 2606 20638 CONSTRAINT public expenses expenses_pkey postgres
+4061; 2606 29408 CONSTRAINT public informations informations_pkey postgres
+4087; 2606 29934 CONSTRAINT public noncash_extra_items noncash_extra_items_pkey postgres
+4080; 2606 29851 CONSTRAINT public noncash_labor_items noncash_labor_items_pkey postgres
+4083; 2606 29895 CONSTRAINT public noncash_tool_items noncash_tool_items_pkey postgres
+4043; 2606 17336 CONSTRAINT public profiles profiles_pkey postgres
+4051; 2606 19385 CONSTRAINT public receipts receipts_pkey postgres
+4046; 2606 19332 CONSTRAINT public seasons seasons_pkey postgres
+4048; 2606 24785 CONSTRAINT public seasons seasons_user_seasonno_unique postgres
+4073; 1259 29759 INDEX public idx_cash_extra_expense postgres
+4074; 1259 29760 INDEX public idx_cash_extra_kind postgres
+4069; 1259 29717 INDEX public idx_cash_labor_expense postgres
+4070; 1259 29718 INDEX public idx_cash_labor_type postgres
+4064; 1259 29650 INDEX public idx_cash_material_category postgres
+4065; 1259 29649 INDEX public idx_cash_material_expense postgres
+4066; 1259 29651 INDEX public idx_cash_material_meta postgres
+4054; 1259 20652 INDEX public idx_expenses_date postgres
+4055; 1259 20651 INDEX public idx_expenses_season postgres
+4056; 1259 20653 INDEX public idx_expenses_type postgres
+4057; 1259 20650 INDEX public idx_expenses_user postgres
+4084; 1259 29941 INDEX public idx_ncextra_expense postgres
+4085; 1259 29942 INDEX public idx_ncextra_kind postgres
+4077; 1259 29857 INDEX public idx_nclabor_expense postgres
+4078; 1259 29858 INDEX public idx_nclabor_type postgres
+4081; 1259 29901 INDEX public idx_nctool_expense postgres
+4039; 1259 17433 INDEX public idx_profiles_email postgres
+4040; 1259 17344 INDEX public idx_profiles_nama_desa postgres
+4041; 1259 17343 INDEX public idx_profiles_role postgres
+4049; 1259 19396 INDEX public idx_receipts_user_season_created postgres
+4044; 1259 19342 INDEX public idx_seasons_user_order postgres
+4058; 1259 29415 INDEX public informations_created_at_idx postgres
+4059; 1259 29414 INDEX public informations_is_active_idx postgres
+4075; 1259 29758 INDEX public uq_cash_extra_one_each postgres
+4076; 1259 31365 INDEX public uq_cash_extra_one_tax postgres
+4088; 1259 29940 INDEX public uq_noncash_extra_one_each postgres
+4111; 2620 29784 TRIGGER public cash_extra_items trg_cash_extra_updated_at postgres
+4110; 2620 29783 TRIGGER public cash_labor_items trg_cash_labor_updated_at postgres
+4109; 2620 29782 TRIGGER public cash_material_items trg_cash_material_updated_at postgres
+4106; 2620 20649 TRIGGER public expenses trg_expenses_set_updated_at postgres
+4107; 2620 29418 TRIGGER public informations trg_informations_created_by postgres
+4108; 2620 29416 TRIGGER public informations trg_informations_updated_at postgres
+4114; 2620 29966 TRIGGER public noncash_extra_items trg_ncextra_updated_at postgres
+4112; 2620 29964 TRIGGER public noncash_labor_items trg_nclabor_updated_at postgres
+4113; 2620 29965 TRIGGER public noncash_tool_items trg_nctool_updated_at postgres
+4102; 2620 17347 TRIGGER public profiles trg_profiles_set_updated_at postgres
+4104; 2620 19399 TRIGGER public receipts trg_receipts_ownership postgres
+4105; 2620 19397 TRIGGER public receipts trg_receipts_set_updated_at postgres
+4103; 2620 19343 TRIGGER public seasons trg_seasons_set_updated_at postgres
+4098; 2606 29753 FK CONSTRAINT public cash_extra_items cash_extra_items_expense_id_fkey postgres
+4097; 2606 29712 FK CONSTRAINT public cash_labor_items cash_labor_items_expense_id_fkey postgres
+4096; 2606 29644 FK CONSTRAINT public cash_material_items cash_material_items_expense_id_fkey postgres
+4093; 2606 20644 FK CONSTRAINT public expenses expenses_season_id_fkey postgres
+4094; 2606 20639 FK CONSTRAINT public expenses expenses_user_id_fkey postgres
+4095; 2606 29409 FK CONSTRAINT public informations informations_created_by_fkey postgres
+4101; 2606 29935 FK CONSTRAINT public noncash_extra_items noncash_extra_items_expense_id_fkey postgres
+4099; 2606 29852 FK CONSTRAINT public noncash_labor_items noncash_labor_items_expense_id_fkey postgres
+4100; 2606 29896 FK CONSTRAINT public noncash_tool_items noncash_tool_items_expense_id_fkey postgres
+4089; 2606 17337 FK CONSTRAINT public profiles profiles_id_fkey postgres
+4091; 2606 19391 FK CONSTRAINT public receipts receipts_season_id_fkey postgres
+4092; 2606 19386 FK CONSTRAINT public receipts receipts_user_id_fkey postgres
+4090; 2606 19335 FK CONSTRAINT public seasons seasons_user_id_fkey postgres
+4295; 3256 17353 POLICY public profiles admin delete postgres
+4296; 3256 17439 POLICY public profiles admin update anyone postgres
+4290; 3256 29423 POLICY public informations admins can delete informations postgres
+4288; 3256 29421 POLICY public informations admins can insert informations postgres
+4289; 3256 29422 POLICY public informations admins can update informations postgres
+4287; 3256 29420 POLICY public informations admins can view all informations postgres
+4273; 0 29740 ROW SECURITY public cash_extra_items postgres
+4303; 3256 29810 POLICY public cash_extra_items cash_extra_owner postgres
+4302; 3256 29808 POLICY public cash_labor_items cash_lab_owner postgres
+4272; 0 29692 ROW SECURITY public cash_labor_items postgres
+4301; 3256 29806 POLICY public cash_material_items cash_mat_owner postgres
+4271; 0 29630 ROW SECURITY public cash_material_items postgres
+4285; 3256 19403 POLICY public receipts delete own receipts postgres
+4281; 3256 19347 POLICY public seasons delete own seasons postgres
+4294; 3256 20756 POLICY public expenses exp_del_own_or_admin postgres
+4292; 3256 20754 POLICY public expenses exp_ins_self postgres
+4291; 3256 20753 POLICY public expenses exp_sel_own_or_admin postgres
+4293; 3256 20755 POLICY public expenses exp_upd_own_or_admin postgres
+4269; 0 20628 ROW SECURITY public expenses postgres
+4270; 0 29397 ROW SECURITY public informations postgres
+4283; 3256 19401 POLICY public receipts insert own receipts postgres
+4279; 3256 19345 POLICY public seasons insert own seasons postgres
+4306; 3256 29992 POLICY public noncash_extra_items ncextra_owner postgres
+4304; 3256 29988 POLICY public noncash_labor_items nclabor_owner postgres
+4305; 3256 29990 POLICY public noncash_tool_items nctool_owner postgres
+4276; 0 29922 ROW SECURITY public noncash_extra_items postgres
+4274; 0 29832 ROW SECURITY public noncash_labor_items postgres
+4275; 0 29880 ROW SECURITY public noncash_tool_items postgres
+4266; 0 17326 ROW SECURITY public profiles postgres
+4298; 3256 23357 POLICY public profiles profiles_read_all postgres
+4300; 3256 23359 POLICY public profiles profiles_update_admin postgres
+4299; 3256 23358 POLICY public profiles profiles_update_self postgres
+4286; 3256 29419 POLICY public informations public can view active informations postgres
+4297; 3256 17349 POLICY public profiles read own or admin all postgres
+4282; 3256 19400 POLICY public receipts read own receipts postgres
+4278; 3256 19344 POLICY public seasons read own seasons postgres
+4268; 0 19372 ROW SECURITY public receipts postgres
+4267; 0 19323 ROW SECURITY public seasons postgres
+4284; 3256 19402 POLICY public receipts update own receipts postgres
+4280; 3256 19346 POLICY public seasons update own seasons postgres
+4277; 3256 17489 POLICY public profiles user update self (no role) postgres
