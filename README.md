@@ -17,10 +17,10 @@ Aplikasi mobile untuk manajemen pertanian berbasis **Expo** (React Native).
 6) Download berkas untuk restore
 
 Unduh file berikut:
-- [schema_public.dump](https://github.com/Ferrr1/Tani/blob/master/path/to/dump/schema_public.dump?raw=1)
-- [toc.list](https://github.com/Ferrr1/Tani/blob/master/path/to/dump/toc.list?raw=1)
-- [auth_users.dump](https://github.com/Ferrr1/Tani/blob/master/path/to/dump/auth_users.dump?raw=1)
-- [auth_toc.list](https://github.com/Ferrr1/Tani/blob/master/path/to/dump/auth_toc.list?raw=1)
+- [schema_public.dump](https://github.com/Ferrr1/Tani/blob/master/dump/schema_public.dump?raw=1)
+- [toc.list](https://github.com/Ferrr1/Tani/blob/master/dump/toc.list?raw=1)
+- [auth_users.dump](https://github.com/Ferrr1/Tani/blob/master/dump/auth_users.dump?raw=1)
+- [auth_toc.list](https://github.com/Ferrr1/Tani/blob/master/dump/auth_toc.list?raw=1)
 
 
 7. Konfigurasi URL Supabase yang terletak pada connection string pada navbar dashboard supabase (Button Connect).
@@ -41,8 +41,8 @@ $env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabas
 10. Ke Menu Edge Function -> Deploy new via Editor
  !! Pastikan Nama Function Sesuai !!
 Download disini:
-- [admin-update-user](https://github.com/Ferrr1/Tani/blob/master/path/to/lib/functions/admin-update-user?raw=1)
-- [verify-mother-name](https://github.com/Ferrr1/Tani/blob/master/path/to/lib/functions/verify-mother-name?raw=1)
+- [admin-update-user](https://github.com/Ferrr1/Tani/blob/master/lib/functions/admin-update-user?raw=1)
+- [verify-mother-name](https://github.com/Ferrr1/Tani/blob/master/lib/functions/verify-mother-name?raw=1)
  a. admin-update-user -> paste kode yang ada pada file admin-update-user
  b. verify-mother-name -> paste kode yang ada pada file verify-mother-name
 
