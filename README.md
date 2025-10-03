@@ -26,18 +26,22 @@ Unduh file berikut:
 7. Konfigurasi URL Supabase yang terletak pada connection string pada navbar dashboard supabase (Button Connect).
 
 8. Tuliskan seperti ini pada powershell
-$env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabase.co:5432/postgres'
 
-9. Lakukan Restore menggunakan command ini | Note Pastikan penempatan file directory sesuai dengan powershell
-	1. pg_restore -L .\toc.list --section=pre-data --no-owner --no-privileges `
+9. ```env $env:DB_URL = 'postgresql://postgres:IniAdalahPasswordDB%40%2C.@db.URLDB.supabase.co:5432/postgres' ```
+
+10. Lakukan Restore menggunakan command ini | Note Pastikan penempatan file directory sesuai dengan powershell
+```bash
+	pg_restore -L .\toc.list --section=pre-data --no-owner --no-privileges `
   -d "$env:DB_URL" schema_public.dump
-
-  2. pg_restore -L .\toc.list --section=post-data --no-owner --no-privileges `
+```
+```bash
+	pg_restore -L .\toc.list --section=post-data --no-owner --no-privileges `
   -d "$env:DB_URL" schema_public.dump
-
-  3. pg_restore -L .\auth_toc.triggers.list --no-owner --no-privileges `
+```
+```bash
+	pg_restore -L .\auth_toc.triggers.list --no-owner --no-privileges `
   -d "$env:DB_URL" .\auth_users.dump
-
+```
 10. Ke Menu Edge Function -> Deploy new via Editor
  !! Pastikan Nama Function Sesuai !!
 Download disini:
@@ -47,7 +51,7 @@ Download disini:
  b. verify-mother-name -> paste kode yang ada pada file verify-mother-name
 
 12. Paste kode sql ini ke editor supabase
-```
+```bash
     create extension if not exists unaccent with schema extensions;
 ```
 
