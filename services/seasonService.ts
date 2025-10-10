@@ -38,32 +38,27 @@ export const seasonRepo = {
     }
     ensureDates(input.startDate, input.endDate);
 
-    const payload = {
-      user_id: userId,
-      season_no: input.seasonNo,
-      crop_type: input.cropType,
-      start_date: input.startDate,
-      end_date: input.endDate,
-    };
-
-    const { data, error } = await supabase
-      .from("seasons")
-      .insert(payload)
-      .select("*")
-      .single();
+    const { data: newId, error } = await supabase.rpc("rpc_create_season", {
+      p_season_no: input.seasonNo,
+      p_start: input.startDate,
+      p_end: input.endDate,
+      p_crop_type: input.cropType,
+    });
 
     if (error) throw error;
-    return data as SeasonRow;
+
+    const { data: row, error: e2 } = await supabase
+      .from("seasons")
+      .select("*")
+      .eq("id", newId as string)
+      .single();
+
+    if (e2) throw e2;
+    return row as SeasonRow;
   },
 
   async update(userId: string, input: UpdateSeasonInput): Promise<SeasonRow> {
     if (!input.id) throw new Error("ID season wajib diisi.");
-    if (
-      input.seasonNo != null &&
-      (!Number.isFinite(input.seasonNo) || input.seasonNo < 1)
-    ) {
-      throw new Error("Musim ke- harus angka ≥ 1.");
-    }
 
     if (input.startDate || input.endDate) {
       const { data: current, error: curErr } = await supabase
@@ -81,22 +76,23 @@ export const seasonRepo = {
       ensureDates(start, end);
     }
 
-    const patch: Record<string, any> = {};
-    if (input.seasonNo != null) patch.season_no = input.seasonNo;
-    if (input.cropType) patch.crop_type = input.cropType;
-    if (input.startDate) patch.start_date = input.startDate;
-    if (input.endDate) patch.end_date = input.endDate;
-
-    const { data, error } = await supabase
-      .from("seasons")
-      .update(patch)
-      .eq("user_id", userId)
-      .eq("id", input.id)
-      .select("*")
-      .single();
-
+    const { error } = await supabase.rpc("rpc_update_season", {
+      p_id: input.id,
+      p_season_no: input.seasonNo,
+      p_start: input.startDate,
+      p_end: input.endDate,
+      p_crop_type: input.cropType,
+    });
     if (error) throw error;
-    return data as SeasonRow;
+
+    const { data: row, error: e2 } = await supabase
+      .from("seasons")
+      .select("*")
+      .eq("id", input.id)
+      .single();
+    if (e2) throw e2;
+
+    return row as SeasonRow;
   },
 
   async remove(userId: string, id: string): Promise<void> {

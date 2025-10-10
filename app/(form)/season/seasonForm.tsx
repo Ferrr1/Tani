@@ -1,6 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonService } from "@/services/seasonService";
-import { CROP_OPTIONS, SeasonFormValues } from "@/types/season";
+import { CROP_OPTIONS, SEASON_NO_OPTIONS, SeasonFormValues } from "@/types/season";
 import { fmtDMY, fromISOtoDMY, parseDMY, toISO } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
@@ -22,6 +22,9 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+/** Sentinel untuk opsi custom */
+const OTHER = "__OTHER__";
+
 export default function SeasonForm() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
@@ -29,13 +32,18 @@ export default function SeasonForm() {
     const router = useRouter();
     const { seasonId } = useLocalSearchParams<{ seasonId?: string }>();
     const isEdit = !!seasonId;
+
     const { getSeasonById, createSeason, updateSeason } = useSeasonService();
+
     const [initialLoading, setInitialLoading] = useState<boolean>(isEdit);
     const [saving, setSaving] = useState(false);
 
     const [openStart, setOpenStart] = useState(false);
-    const [showCrop, setShowCrop] = useState(false);
     const [openEnd, setOpenEnd] = useState(false);
+
+    // dropdown untuk memilih crop (dipakai ulang untuk pilihan 1 & 2)
+    const [showSeasonNo, setShowSeasonNo] = useState(false);
+    const [showCropDropdown, setShowCropDropdown] = useState(false);
 
     const {
         control,
@@ -44,8 +52,19 @@ export default function SeasonForm() {
         setValue,
         reset,
         formState: { errors },
-    } = useForm<SeasonFormValues>({
-        defaultValues: { seasonNo: "", cropType: "", cropTypeOther: "", startDate: "", endDate: "" },
+    } = useForm<SeasonFormValues & {
+        /** ganti dari single menjadi array 1..2 */
+        cropTypes: string[];
+        /** input untuk opsi Lainnya (jika dipakai) */
+        cropTypeOther?: string;
+    }>({
+        defaultValues: {
+            seasonNo: "",
+            cropTypes: [],           // <= perubahannya di sini
+            cropTypeOther: "",       // <= hanya kalau pilih Lainnya
+            startDate: "",
+            endDate: "",
+        },
         mode: "onChange",
     });
 
@@ -53,6 +72,9 @@ export default function SeasonForm() {
     const end = watch("endDate");
     const dStart = parseDMY(start);
     const dEnd = parseDMY(end);
+
+    const cropTypes = watch("cropTypes");
+    const cropTypeOther = (watch("cropTypeOther") || "");
 
     const hasFetchedRef = useRef(false);
 
@@ -64,8 +86,8 @@ export default function SeasonForm() {
                 return;
             }
             if (hasFetchedRef.current) return;
-
             hasFetchedRef.current = true;
+
             try {
                 setInitialLoading(true);
                 const row = await getSeasonById(seasonId);
@@ -75,9 +97,18 @@ export default function SeasonForm() {
                     router.replace("/(form)/sub/season");
                     return;
                 }
+
+                // Normalisasi crop_type lama (string) atau baru (array)
+                const normalizedCropArray: string[] = Array.isArray(row.crop_type)
+                    ? (row.crop_type as string[])
+                    : row.crop_type
+                        ? [String(row.crop_type)]
+                        : [];
+
                 reset({
                     seasonNo: String(row.season_no),
-                    cropType: row.crop_type ?? "",
+                    cropTypes: normalizedCropArray.slice(0, 2), // jaga max 2
+                    cropTypeOther: "",
                     startDate: fromISOtoDMY(row.start_date),
                     endDate: fromISOtoDMY(row.end_date),
                 });
@@ -105,26 +136,70 @@ export default function SeasonForm() {
         return `${days} hari`;
     }, [dStart, dEnd]);
 
-    const onSubmit = async (v: SeasonFormValues) => {
-        const finalCrop = v.cropType === "Lainnya" ? (v.cropTypeOther || "").trim() : v.cropType;
+    /** Utility: tambah crop dengan batas 2 (hindari duplikat) */
+    const addCrop = (val: string) => {
+        const exists = cropTypes.some((x) => x.toLowerCase() === val.toLowerCase());
+        if (exists) return;
+        if (cropTypes.length >= 2) return;
+        setValue("cropTypes", [...cropTypes, val], { shouldValidate: true, shouldDirty: true });
+    };
+
+    /** Utility: hapus crop dari list */
+    const removeCrop = (val: string) => {
+        setValue(
+            "cropTypes",
+            cropTypes.filter((x) => x !== val),
+            { shouldValidate: true, shouldDirty: true }
+        );
+    };
+
+    /** Build payload crop untuk server — ganti OTHER jadi isian custom */
+    const buildServerCrops = (): string[] => {
+        const arr = cropTypes.map((c) => (c === OTHER ? cropTypeOther : c)).map((s) => s.trim()).filter(Boolean);
+        // distinct + lower (server pun akan normalisasi, tapi FE rapiin dikit)
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const x of arr) {
+            const key = x.toLowerCase();
+            if (!seen.has(key)) {
+                seen.add(key);
+                out.push(x);
+            }
+        }
+        return out.slice(0, 2);
+    };
+
+    const onSubmit = async (v: SeasonFormValues & { cropTypes: string[]; cropTypeOther?: string }) => {
         const d1 = parseDMY(v.startDate);
         const d2 = parseDMY(v.endDate);
         const n = parseInt((v.seasonNo || "").toString().replace(",", "."), 10);
         if (d1 === null || d2 === null || n <= 0) return;
+
+        // Validasi minimum 1 crop & maksimum 2
+        const crops = buildServerCrops();
+        if (crops.length < 1) {
+            Alert.alert("Validasi", "Pilih minimal satu jenis tanaman.");
+            return;
+        }
+        if (crops.length > 2) {
+            Alert.alert("Validasi", "Maksimal dua jenis tanaman.");
+            return;
+        }
+
         try {
             setSaving(true);
             if (isEdit && seasonId) {
                 await updateSeason({
                     id: seasonId,
                     seasonNo: n,
-                    cropType: finalCrop,
+                    cropType: crops, // <= kirim array text[]
                     startDate: toISO(d1),
                     endDate: toISO(d2),
                 });
             } else {
                 await createSeason({
                     seasonNo: n,
-                    cropType: finalCrop,
+                    cropType: crops, // <= kirim array text[]
                     startDate: toISO(d1),
                     endDate: toISO(d2),
                 });
@@ -132,15 +207,15 @@ export default function SeasonForm() {
             router.replace("/(user)/sub/season");
         } catch (e: any) {
             console.warn("SEASONFORM", e.code, e);
-            if (e.code === "23505") {
+            if (e.code === "P0001") {
                 Alert.alert("Validasi", "Musim ke-" + n + " sudah ada.");
+            } else if (typeof e?.message === "string" && /Maksimal 3 musim/.test(e.message)) {
+                Alert.alert("Validasi", e.message);
+            } else if (typeof e?.message === "string" && /crop_type (minimal|maksimal)/i.test(e.message)) {
+                Alert.alert("Validasi", e.message);
             } else {
-                Alert.alert(
-                    "Gagal",
-                    (isEdit ? "Tidak dapat memperbarui musim." : "Tidak dapat membuat musim.")
-                );
+                Alert.alert("Gagal", isEdit ? "Tidak dapat memperbarui musim." : "Tidak dapat membuat musim.");
             }
-
         } finally {
             setSaving(false);
         }
@@ -176,8 +251,6 @@ export default function SeasonForm() {
     };
 
     const showBlockingLoader = initialLoading;
-    const cropTypeValue = watch("cropType");
-    const isOther = cropTypeValue === "Lainnya";
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -211,9 +284,7 @@ export default function SeasonForm() {
             {showBlockingLoader ? (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                     <ActivityIndicator color={C.tint} size={"large"} />
-                    <Text style={{ marginTop: 8, color: C.textMuted }}>
-                        {"Memuat musim…"}
-                    </Text>
+                    <Text style={{ marginTop: 8, color: C.textMuted }}>{"Memuat musim…"}</Text>
                 </View>
             ) : (
                 <KeyboardAwareScrollView
@@ -243,42 +314,14 @@ export default function SeasonForm() {
                                     return (Number.isFinite(n) && n >= 1) || "Harus angka ≥ 1";
                                 },
                             }}
-                            render={({ field: { onChange, onBlur, value } }) => (
-                                <TextInput
-                                    placeholder="contoh: 1"
-                                    placeholderTextColor={C.icon}
-                                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                                    onBlur={onBlur}
-                                    onChangeText={onChange}
-                                    value={value}
-                                    style={[
-                                        styles.input,
-                                        {
-                                            color: C.text,
-                                            borderColor: errors.seasonNo ? C.danger : C.border,
-                                            borderRadius: S.radius.md,
-                                        },
-                                    ]}
-                                />
-                            )}
-                        />
-                        {errors.seasonNo && <Text style={[styles.err, { color: C.danger }]}>{errors.seasonNo.message as string}</Text>}
-                        {/* Jenis Tanaman — Select */}
-                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                            Jenis Tanaman
-                        </Text>
-                        <Controller
-                            control={control}
-                            name="cropType"
-                            rules={{ required: "Pilih jenis tanaman" }}
-                            render={({ field: { value } }) => (
+                            render={({ field: { onChange, value } }) => (
                                 <>
                                     <Pressable
-                                        onPress={() => setShowCrop((v) => !v)}
+                                        onPress={() => setShowSeasonNo((v) => !v)}
                                         style={[
                                             styles.selectInput,
                                             {
-                                                borderColor: errors.cropType ? C.danger : C.border,
+                                                borderColor: errors.seasonNo ? C.danger : C.border,
                                                 backgroundColor: C.surface,
                                                 borderRadius: S.radius.md,
                                                 paddingHorizontal: S.spacing.md,
@@ -294,43 +337,37 @@ export default function SeasonForm() {
                                                 fontWeight: "800",
                                             }}
                                         >
-                                            {value || "Pilih jenis tanaman"}
+                                            {value || "Pilih musim (1–3)"}
                                         </Text>
-                                        <Ionicons
-                                            name={showCrop ? "chevron-up" : "chevron-down"}
-                                            size={18}
-                                            color={C.icon}
-                                        />
+                                        <Ionicons name={showSeasonNo ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
                                     </Pressable>
 
-                                    {showCrop && (
+                                    {showSeasonNo && (
                                         <View
                                             style={[
                                                 styles.dropdown,
-                                                { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 },
+                                                { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12, marginTop: 8 },
                                             ]}
                                         >
-                                            {CROP_OPTIONS.map((item) => (
+                                            {SEASON_NO_OPTIONS.map((opt) => (
                                                 <Pressable
-                                                    key={item}
+                                                    key={opt}
                                                     onPress={() => {
-                                                        setValue("cropType", item, { shouldValidate: true });
-                                                        setShowCrop(false);
+                                                        onChange(opt);
+                                                        setShowSeasonNo(false);
                                                     }}
                                                     style={({ pressed }) => [
                                                         styles.dropdownItem,
                                                         {
                                                             backgroundColor: pressed
-                                                                ? scheme === "light"
-                                                                    ? C.surfaceSoft
-                                                                    : C.surface
+                                                                ? (scheme === "light" ? C.surfaceSoft : C.surface)
                                                                 : "transparent",
                                                             borderColor: C.border,
                                                         },
                                                     ]}
                                                 >
-                                                    <Ionicons name="leaf-outline" size={14} color={C.tint} />
-                                                    <Text style={{ color: C.text, fontWeight: "700" }}>{item}</Text>
+                                                    <Ionicons name="pricetag-outline" size={14} color={C.tint} />
+                                                    <Text style={{ color: C.text, fontWeight: "700" }}>Musim {opt}</Text>
                                                 </Pressable>
                                             ))}
                                         </View>
@@ -338,40 +375,123 @@ export default function SeasonForm() {
                                 </>
                             )}
                         />
-                        {errors.cropType && (
-                            <Text style={[styles.err, { color: C.danger }]}>{errors.cropType.message}</Text>
+                        {errors.seasonNo && (
+                            <Text style={[styles.err, { color: C.danger }]}>{errors.seasonNo.message as string}</Text>
                         )}
-                        {/* Input ‘Jenis Lainnya’ — jika pilih Lainnya */}
-                        {isOther && (
-                            <>
-                                <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
-                                <Controller
-                                    control={control}
-                                    name="cropTypeOther"
-                                    rules={{
-                                        required: "Sebutkan jenis tanaman lainnya",
-                                        validate: (v) => !!(v || "").trim() || "Sebutkan jenis tanaman lainnya",
-                                    }}
-                                    render={({ field: { onChange, onBlur, value } }) => (
-                                        <TextInput
-                                            placeholder="Contoh: Porang"
-                                            placeholderTextColor={C.icon}
-                                            onBlur={onBlur}
-                                            onChangeText={onChange}
-                                            value={value}
-                                            style={[
-                                                styles.input,
+
+                        {/* Jenis Tanaman — MULTI (maks 2) */}
+                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Jenis Tanaman (maks 2)</Text>
+
+                        {/* Chips terpilih */}
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                            {cropTypes.map((item) => {
+                                const label = item === OTHER ? (cropTypeOther || "Lainnya…") : item;
+                                return (
+                                    <View
+                                        key={item}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 6,
+                                            paddingVertical: 6,
+                                            paddingHorizontal: 12,
+                                            borderRadius: 999,
+                                            borderWidth: 1,
+                                            borderColor: C.border,
+                                            backgroundColor: scheme === "light" ? "#00000008" : "#ffffff10",
+                                        }}
+                                    >
+                                        <Ionicons name="leaf-outline" size={14} color={C.tint} />
+                                        <Text style={{ color: C.text, fontWeight: "800" }}>{label}</Text>
+                                        <Pressable onPress={() => removeCrop(item)} style={{ paddingLeft: 2 }}>
+                                            <Ionicons name="close" size={14} color={C.textMuted} />
+                                        </Pressable>
+                                    </View>
+                                );
+                            })}
+                            {/* Tombol tambah seperti ChemPanel: hanya muncul jika < 2 */}
+                            {cropTypes.length < 2 && (
+                                <Pressable
+                                    onPress={() => setShowCropDropdown((v) => !v)}
+                                    style={({ pressed }) => [
+                                        {
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            paddingVertical: 6,
+                                            paddingHorizontal: 12,
+                                            borderRadius: 999,
+                                            borderWidth: 1,
+                                            borderColor: C.tint,
+                                            backgroundColor: C.tint + "22",
+                                            opacity: pressed ? 0.96 : 1,
+                                        },
+                                    ]}
+                                >
+                                    <Ionicons name="add" size={16} color={C.tint} />
+                                    <Text style={{ color: C.tint, fontWeight: "900" }}>
+                                        {cropTypes.length === 0 ? "Pilih jenis tanaman" : "Tambah jenis kedua"}
+                                    </Text>
+                                </Pressable>
+                            )}
+                        </View>
+
+                        {/* Dropdown pilihan */}
+                        {showCropDropdown && cropTypes.length < 2 && (
+                            <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 }]}>
+                                {[...CROP_OPTIONS, "Lainnya…"].map((opt) => {
+                                    const val = opt === "Lainnya…" ? OTHER : opt;
+                                    const disabled = cropTypes.some((x) => x.toLowerCase() === val.toLowerCase());
+                                    return (
+                                        <Pressable
+                                            key={opt}
+                                            disabled={disabled}
+                                            onPress={() => {
+                                                setShowCropDropdown(false);
+                                                addCrop(val);
+                                            }}
+                                            style={({ pressed }) => [
+                                                styles.dropdownItem,
                                                 {
-                                                    color: C.text,
-                                                    borderColor: errors.cropTypeOther ? C.danger : C.border,
-                                                    borderRadius: S.radius.md,
+                                                    backgroundColor: pressed
+                                                        ? scheme === "light"
+                                                            ? C.surfaceSoft
+                                                            : C.surface
+                                                        : "transparent",
+                                                    borderColor: C.border,
+                                                    opacity: disabled ? 0.5 : 1,
                                                 },
                                             ]}
-                                        />
-                                    )}
+                                        >
+                                            <Ionicons name="leaf-outline" size={14} color={C.tint} />
+                                            <Text style={{ color: C.text, fontWeight: "700" }}>{opt}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        )}
+
+                        {/* Input ‘Jenis Lainnya’ bila OTHER dipilih */}
+                        {cropTypes.includes(OTHER) && (
+                            <>
+                                <Text style={[styles.label, { color: C.text, marginTop: S.spacing.sm }]}>Jenis tanaman lainnya</Text>
+                                <TextInput
+                                    placeholder="Contoh: Porang"
+                                    placeholderTextColor={C.icon}
+                                    value={cropTypeOther}
+                                    onChangeText={(t) => setValue("cropTypeOther", t, { shouldDirty: true })}
+                                    style={[
+                                        styles.input,
+                                        {
+                                            color: C.text,
+                                            borderColor:
+                                                (cropTypes.includes(OTHER) && !cropTypeOther) ? C.danger : C.border,
+                                            borderRadius: S.radius.md,
+                                        },
+                                    ]}
                                 />
-                                {errors.cropTypeOther && (
-                                    <Text style={[styles.err, { color: C.danger }]}>{errors.cropTypeOther.message as string}</Text>
+                                {cropTypes.includes(OTHER) && !cropTypeOther && (
+                                    <Text style={[styles.err, { color: C.danger }]}>Sebutkan jenis tanaman lainnya</Text>
                                 )}
                             </>
                         )}
@@ -481,7 +601,7 @@ export default function SeasonForm() {
                         )}
                     </View>
 
-                    {/* Tombol Simpan (gaya profile) */}
+                    {/* Tombol Simpan */}
                     <Pressable
                         onPress={handleSubmit(onSubmit)}
                         disabled={saving || showBlockingLoader}

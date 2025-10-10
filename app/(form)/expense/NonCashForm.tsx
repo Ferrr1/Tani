@@ -62,7 +62,7 @@ export default function NonCashForm({
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openTools, setOpenTools] = useState(false);
-    const [openExtras, setOpenExtras] = useState(true);
+    const [openExtras, setOpenExtras] = useState(false);
     const [tools, setTools] = useState<ToolForm[]>([]);
 
     const defaultLabor = (): LaborForm => ({
@@ -656,7 +656,7 @@ export default function NonCashForm({
                     {openExtras && (
                         <View style={{ marginTop: 8, gap: 10 }}>
                             <RHFLineInput
-                                label="Pajak"
+                                label="Pajak per Tahun"
                                 placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
@@ -668,7 +668,7 @@ export default function NonCashForm({
                                 }}
                             />
                             <RHFLineInput
-                                label="Sewa Lahan"
+                                label="Sewa Lahan per Tahun"
                                 name="extras.landRent"
                                 control={control}
                                 C={C}

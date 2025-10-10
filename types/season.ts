@@ -1,3 +1,5 @@
+export const SEASON_NO_OPTIONS = ["1", "2", "3"] as const;
+
 export const CROP_OPTIONS: string[] = [
   "pakcoi",
   "selada air",
@@ -16,7 +18,6 @@ export const CROP_OPTIONS: string[] = [
   "daun bawang",
   "kacang merah",
   "edamame",
-  "Lainnya",
 ];
 
 export type SeasonFormValues = {
@@ -40,7 +41,7 @@ export type SeasonRow = {
 
 export type CreateSeasonInput = {
   seasonNo: number;
-  cropType: string;
+  cropType: string[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
 };
@@ -48,7 +49,7 @@ export type CreateSeasonInput = {
 export type UpdateSeasonInput = {
   id: string;
   seasonNo?: number;
-  cropType: string;
+  cropType: string[];
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
 };

@@ -2,7 +2,7 @@ import { ChemItem, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
 import { Ionicons } from "@expo/vector-icons";
 import { Dispatch, SetStateAction, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import Chip from "./Chip";
 
 export default function ChemPanel({
@@ -27,7 +27,21 @@ export default function ChemPanel({
     const [price, setPrice] = useState("");
 
     const add = () => {
-        onAdd({ name: name.trim() || undefined, unit, qty, price });
+        const q = parseFloat((qty || "0").replace(",", "."));
+        const p = parseFloat((price || "0").replace(",", "."));
+        if (!name.trim()) {
+            Alert.alert("Validasi", "Nama bahan kimia wajib diisi.");
+            return;
+        }
+        if (!(Number.isFinite(q) && q > 0)) {
+            Alert.alert("Validasi", "Jumlah harus > 0.");
+            return;
+        }
+        if (!(Number.isFinite(p) && p >= 0)) {
+            Alert.alert("Validasi", "Harga/satuan harus ≥ 0.");
+            return;
+        }
+        onAdd({ name: name.trim(), unit, qty, price });
         setName("");
         setQty("");
         setPrice("");

@@ -2,12 +2,12 @@ import type { ExpoConfig } from "@expo/config";
 import "dotenv/config";
 
 const config: ExpoConfig = {
-  name: "Tani",
-  slug: "tani",
+  name: "Lamban Sayur",
+  slug: "lambansayur",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/logo-bg.png",
-  scheme: "tani",
+  scheme: "lambansayur",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
 
@@ -22,10 +22,10 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       foregroundImage: "./assets/images/logo-bg.png",
-      backgroundColor: "#FFFFFF",
+      backgroundColor: "#FFFFE7",
     },
     edgeToEdgeEnabled: true,
-    package: "com.fersetya.tani",
+    package: "com.fersetya.lambansayur",
   },
 
   web: {
@@ -42,7 +42,7 @@ const config: ExpoConfig = {
         image: "./assets/images/logo.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#FFFFFF",
+        backgroundColor: "#FFFFE7",
       },
     ],
   ],

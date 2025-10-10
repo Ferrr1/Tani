@@ -53,7 +53,7 @@ export default function HeaderLogoutButton({
                 styles.btn,
                 {
                     borderColor: C.border,
-                    backgroundColor: C.danger + "45",
+                    backgroundColor: C.danger + "10",
                     opacity: isLogout ? 0.6 : pressed ? 0.9 : 1,
                 },
             ]}

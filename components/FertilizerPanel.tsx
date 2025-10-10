@@ -2,7 +2,7 @@ import { ChemItem, FERTILIZER_CHOICES, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
 import { Ionicons } from "@expo/vector-icons";
 import { Dispatch, SetStateAction, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import Chip from "./Chip";
 
 export default function FertilizerPanel({
@@ -22,7 +22,24 @@ export default function FertilizerPanel({
     const [price, setPrice] = useState("");
 
     const add = () => {
-        onAdd({ name: name.trim() || undefined, unit: "kilogram", qty, price });
+        const q = parseFloat((qty || "0").replace(",", "."));
+        const p = parseFloat((price || "0").replace(",", "."));
+
+        // WAJIB semua terisi:
+        if (!name.trim()) {
+            Alert.alert("Validasi", "Nama pupuk wajib diisi (pilih atau ketik).");
+            return;
+        }
+        if (!(Number.isFinite(q) && q > 0)) {
+            Alert.alert("Validasi", "Jumlah (kg) harus > 0.");
+            return;
+        }
+        if (!(Number.isFinite(p) && p >= 0)) {
+            Alert.alert("Validasi", "Harga/kg harus ≥ 0.");
+            return;
+        }
+
+        onAdd({ name: name.trim(), unit: "kilogram", qty, price });
         setName("");
         setQty("");
         setPrice("");

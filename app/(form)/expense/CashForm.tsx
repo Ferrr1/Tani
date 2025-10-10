@@ -1,15 +1,16 @@
-// CashForm.tsx (potongan lengkap yang relevan)
+// CashForm.tsx
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import {
     Alert,
     Platform,
     Pressable,
     StyleSheet,
     Text,
+    TextInput,
     useColorScheme,
     View,
 } from "react-native";
@@ -17,13 +18,14 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ChemPanel from "@/components/ChemPanel";
+import Chip from "@/components/Chip";
 import FertilizerPanel from "@/components/FertilizerPanel";
 import LaborOne from "@/components/LaborOne";
 import RHFLineInput from "@/components/RHFLineInput";
 import SectionButton from "@/components/SectionButton";
-import SeedOne from "@/components/SeedOne"; // <-- NEW
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
+import { useSeasonService } from "@/services/seasonService";
 import {
     CashFormValues,
     Category,
@@ -39,6 +41,14 @@ import {
 import { currency } from "@/utils/currency";
 
 type Mode = "create" | "edit";
+
+type SeedLine = {
+    cropName: string;
+    kind: "seed" | "seedling";
+    name: string;
+    qty: string;
+    price: string;
+};
 
 export default function CashForm({
     seasonId,
@@ -61,8 +71,9 @@ export default function CashForm({
         createCashExpense,
         updateCashExpense,
     } = useExpenseService();
+    const { getSeasonById } = useSeasonService();
 
-    // ===== Removed: openSeed / openSeedling
+    // toggles
     const [openFertilizer, setOpenFertilizer] = useState(false);
     const [openInsect, setOpenInsect] = useState(false);
     const [openHerb, setOpenHerb] = useState(false);
@@ -76,16 +87,19 @@ export default function CashForm({
     const [openPestCtrl, setOpenPestCtrl] = useState(false);
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
-    const [openExtras, setOpenExtras] = useState(true);
+    const [openExtras, setOpenExtras] = useState(false);
 
-    // ===== Removed: seedItems / seedlingItems (multiple). Pupuk/pestisida tetap multiple.
+    // kimia
     const [fertilizerItems, setFertilizerItems] = useState<ChemItem[]>([]);
     const [insectItems, setInsectItems] = useState<ChemItem[]>([]);
     const [herbItems, setHerbItems] = useState<ChemItem[]>([]);
     const [fungiItems, setFungiItems] = useState<ChemItem[]>([]);
 
     const addChem = (setter: any, item: Omit<ChemItem, "id">) =>
-        setter((prev: ChemItem[]) => [...prev, { ...item, id: String(Date.now() + Math.random()) }]);
+        setter((prev: ChemItem[]) => [
+            ...prev,
+            { ...item, id: String(Date.now() + Math.random()) },
+        ]);
 
     const defaultLabor = (): LaborForm => ({
         tipe: "harian",
@@ -97,12 +111,12 @@ export default function CashForm({
         upahBerlaku: "",
     });
 
-    // ==== DEFAULT FORM (tambahkan blok seed)
-    const { control, handleSubmit, watch, setValue } = useForm<CashFormValues & {
-        seed: { kind: "seed" | "seedling"; name: string; qty: string; price: string };
-    }>({
+    // ==== FORM ====
+    const { control, handleSubmit, watch, setValue } = useForm<
+        CashFormValues & { seeds: SeedLine[] }
+    >({
         defaultValues: {
-            seed: { kind: "seed", name: "", qty: "", price: "" },
+            seeds: [],
             extras: { tax: "", landRent: "", transport: "" },
             labor: {
                 nursery: defaultLabor(),
@@ -120,8 +134,67 @@ export default function CashForm({
     });
 
     const didHydrateEdit = useRef(false);
+    const seedsHydrated = useRef(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
 
+    // ===== Ambil crops dari season → seeds[] (one-time init per seasonId)
+    useEffect(() => {
+        let alive = true;
+        const init = async () => {
+            if (seedsHydrated.current) return;
+            try {
+                const season = await getSeasonById(seasonId);
+                if (!alive) return;
+
+                const current = (watch("seeds") ?? []) as SeedLine[];
+                if (current.length > 0) {
+                    seedsHydrated.current = true;
+                    return;
+                }
+
+                const raw = (season?.crop_type ?? "") as any;
+                const names: string[] = Array.isArray(raw)
+                    ? raw
+                    : String(raw)
+                        .split(/[\/|,]+/)
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+
+                const seeds: SeedLine[] =
+                    names.length > 0
+                        ? names.map((nm) => ({
+                            cropName: nm,
+                            kind: "seed",
+                            name: "",
+                            qty: "",
+                            price: "",
+                        }))
+                        : [
+                            { cropName: "Tanaman", kind: "seed", name: "", qty: "", price: "" },
+                        ];
+
+                setValue("seeds", seeds, { shouldDirty: false });
+                seedsHydrated.current = true;
+            } catch {
+                const current = (watch("seeds") ?? []) as SeedLine[];
+                if (current.length === 0) {
+                    setValue(
+                        "seeds",
+                        [{ cropName: "Tanaman", kind: "seed", name: "", qty: "", price: "" }],
+                        { shouldDirty: false }
+                    );
+                }
+                seedsHydrated.current = true;
+            }
+        };
+        init();
+        return () => {
+            alive = false;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [seasonId]);
+
+    // ===== Prefill EDIT
     useEffect(() => {
         let alive = true;
         const hydrateEdit = async () => {
@@ -135,12 +208,11 @@ export default function CashForm({
                 ]);
                 if (!alive) return;
 
-                // Reset lain2
+                // reset kimia & extras
                 setFertilizerItems([]);
                 setInsectItems([]);
                 setHerbItems([]);
                 setFungiItems([]);
-
                 setValue("extras.tax", "");
                 setValue("extras.landRent", "");
                 setValue("extras.transport", "");
@@ -167,66 +239,86 @@ export default function CashForm({
                     setValue(`labor.${k}.upahBerlaku`, v.upahBerlaku!);
                 });
 
-                // MATERIALS:
-                // - Ambil hanya SATU bibit (seed/seedling) pertama yang ditemukan
-                // - Lainnya tetap multiple (fertilizer/pesticides)
-                let firstSeed: any | null = null;
-                let firstSeedling: any | null = null;
+                // Prefill seeds (seed/seedling)
+                const formSeeds = (watch("seeds") || []) as SeedLine[];
+                const seedLike = (materials || []).filter(
+                    (m: any) => m?.category === "seed" || m?.category === "seedling"
+                );
+                const patched = formSeeds.map((s, i) => {
+                    const hit = seedLike[i];
+                    if (!hit) return s;
+                    const k: "seed" | "seedling" =
+                        hit.category === "seedling" ? "seedling" : "seed";
+                    return {
+                        ...s,
+                        kind: k,
+                        name: String(hit.item_name ?? hit.label ?? s.name ?? ""),
+                        qty: String(hit.quantity ?? s.qty ?? ""),
+                        price: String(hit.unit_price ?? s.price ?? ""),
+                    };
+                });
+                setValue("seeds", patched, { shouldDirty: false });
 
+                // Prefill kimia lain
                 (materials || []).forEach((m: any) => {
                     const cat: Category | undefined = m?.category;
                     const unit: Unit | undefined = (m?.unit as Unit) ?? "gram";
                     const qty = String(m?.quantity ?? "");
                     const price = String(m?.unit_price ?? "");
-                    const name = m?.label ?? m?.item_name ?? "";
+                    const name = m?.item_name ?? m?.label ?? "";
 
-                    if (cat === "seed" && !firstSeed) {
-                        firstSeed = { name, unit, qty, price };
-                    } else if (cat === "seedling" && !firstSeedling) {
-                        firstSeedling = { name, unit, qty, price };
-                    } else if (cat === "fertilizer") {
+                    if (cat === "fertilizer") {
                         setFertilizerItems((prev) => [
                             ...prev,
-                            { id: String(Date.now() + Math.random()), category: "fertilizer", name, unit, qty, price },
+                            {
+                                id: String(Date.now() + Math.random()),
+                                category: "fertilizer",
+                                name,
+                                unit,
+                                qty,
+                                price,
+                            },
                         ]);
                     } else if (cat === "insecticide") {
                         setInsectItems((prev) => [
                             ...prev,
-                            { id: String(Date.now() + Math.random()), category: "insecticide", name, unit, qty, price },
+                            {
+                                id: String(Date.now() + Math.random()),
+                                category: "insecticide",
+                                name,
+                                unit,
+                                qty,
+                                price,
+                            },
                         ]);
                     } else if (cat === "herbicide") {
                         setHerbItems((prev) => [
                             ...prev,
-                            { id: String(Date.now() + Math.random()), category: "herbicide", name, unit, qty, price },
+                            {
+                                id: String(Date.now() + Math.random()),
+                                category: "herbicide",
+                                name,
+                                unit,
+                                qty,
+                                price,
+                            },
                         ]);
                     } else if (cat === "fungicide") {
                         setFungiItems((prev) => [
                             ...prev,
-                            { id: String(Date.now() + Math.random()), category: "fungicide", name, unit, qty, price },
+                            {
+                                id: String(Date.now() + Math.random()),
+                                category: "fungicide",
+                                name,
+                                unit,
+                                qty,
+                                price,
+                            },
                         ]);
                     }
                 });
 
-                // Prefill seed form
-                if (firstSeed) {
-                    setValue("seed.kind", "seed");
-                    setValue("seed.name", firstSeed.name ?? "");
-                    setValue("seed.qty", firstSeed.qty ?? "");
-                    setValue("seed.price", firstSeed.price ?? "");
-                } else if (firstSeedling) {
-                    setValue("seed.kind", "seedling");
-                    setValue("seed.name", firstSeedling.name ?? "");
-                    setValue("seed.qty", firstSeedling.qty ?? "");
-                    setValue("seed.price", firstSeedling.price ?? "");
-                } else {
-                    // tidak ada bibit sebelumnya
-                    setValue("seed.kind", "seed");
-                    setValue("seed.name", "");
-                    setValue("seed.qty", "");
-                    setValue("seed.price", "");
-                }
-
-                // EXTRAS
+                // Prefill extras
                 (extras || []).forEach((e: any) => {
                     const cat: Category = e?.metadata?.category;
                     if (cat === "tax") setValue("extras.tax", String(e.amount || ""));
@@ -234,7 +326,7 @@ export default function CashForm({
                     if (cat === "transport") setValue("extras.transport", String(e.amount || ""));
                 });
 
-                // LABOR (sama seperti sebelumnya)
+                // Prefill labor
                 const map: Record<string, keyof CashFormValues["labor"]> = {
                     labor_nursery: "nursery",
                     labor_land_prep: "land_prep",
@@ -250,8 +342,7 @@ export default function CashForm({
                 (labors || []).forEach((it: any) => {
                     const key = map[it?.metadata?.category as string];
                     if (!key) return;
-                    const type =
-                        it?.labor_type || it?.metadata?.laborType || it?.metadata?.labor_type;
+                    const type = it?.labor_type || it?.metadata?.laborType || it?.metadata?.labor_type;
                     if (type === "contract") {
                         const kontrak = Number(it?.contract_price ?? 0);
                         const upahBerlaku = Number(it?.metadata?.prevailingWage ?? NaN);
@@ -291,8 +382,17 @@ export default function CashForm({
         return () => {
             alive = false;
         };
-    }, [mode, expenseId, listCashMaterials, listCashLabors, listCashExtras, setValue]);
+    }, [
+        mode,
+        expenseId,
+        listCashMaterials,
+        listCashLabors,
+        listCashExtras,
+        setValue,
+        watch,
+    ]);
 
+    // ===== Helpers
     const toNum = (s?: string) => {
         const v = parseFloat((s || "0").replace(",", "."));
         return Number.isFinite(v) ? v : 0;
@@ -319,16 +419,21 @@ export default function CashForm({
 
     const L = watch("labor");
     const extrasW = watch("extras");
-    const seedW = watch("seed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const seedsW = (watch("seeds") || []) as SeedLine[];
 
     const chemOthersTotal =
         sumChem(fertilizerItems) + sumChem(insectItems) + sumChem(herbItems) + sumChem(fungiItems);
 
-    const seedSubtotal = useMemo(() => {
-        const q = toNum(seedW?.qty);
-        const p = toNum(seedW?.price);
-        return q > 0 && p >= 0 ? q * p : 0;
-    }, [seedW]);
+    const seedSubtotal = useMemo(
+        () =>
+            seedsW.reduce((acc, s) => {
+                const q = toNum(s.qty);
+                const p = toNum(s.price);
+                return acc + (q > 0 && p >= 0 ? q * p : 0);
+            }, 0),
+        [seedsW]
+    );
 
     const laborTotal = useMemo(() => {
         return (
@@ -344,31 +449,87 @@ export default function CashForm({
         );
     }, [L, calcLaborSubtotal]);
 
-    const total = useMemo(() => {
-        const extras = toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
-        return seedSubtotal + chemOthersTotal + laborTotal + extras;
-    }, [seedSubtotal, chemOthersTotal, laborTotal, extrasW]);
+    const extrasSubtotal = useMemo(() => {
+        return toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
+    }, [extrasW]);
 
+    const total = useMemo(() => {
+        return seedSubtotal + chemOthersTotal + laborTotal + extrasSubtotal;
+    }, [seedSubtotal, chemOthersTotal, laborTotal, extrasSubtotal]);
+
+    // ===== Validasi
+    const seedsValid = useCallback(() => {
+        if (!seedsW.length) return false;
+        return seedsW.every(
+            (r) =>
+                (r.name?.trim()?.length ?? 0) > 0 &&
+                toNum(r.qty) > 0 &&
+                toNum(r.price) >= 0 &&
+                (r.kind === "seed" || r.kind === "seedling")
+        );
+    }, [seedsW]);
+
+    const allChemRowsValid = (rows: ChemItem[]) =>
+        rows.length > 0 &&
+        rows.every(
+            (r) =>
+                (r.name?.trim()?.length ?? 0) > 0 &&
+                toNum(r.qty) > 0 &&
+                toNum(r.price) >= 0
+        );
+
+    const chemRowsValidIfAny = (rows: ChemItem[]) =>
+        rows.length === 0 ||
+        rows.every(
+            (r) =>
+                (r.name?.trim()?.length ?? 0) > 0 &&
+                toNum(r.qty) > 0 &&
+                toNum(r.price) >= 0
+        );
+
+    const hasAnyLabor = useCallback(() => {
+        const arr: LaborForm[] = [
+            L.nursery,
+            L.land_prep,
+            L.planting,
+            L.fertilizing,
+            L.irrigation,
+            L.weeding,
+            L.pest_ctrl,
+            L.harvest,
+            L.postharvest,
+        ];
+        return arr.some((lf) => {
+            if (lf.tipe === "borongan") return toNum(lf.hargaBorongan) > 0;
+            const orang = toNum(lf.jumlahOrang);
+            const hari = toNum(lf.jumlahHari);
+            const upah = toNum(lf.upahHarian);
+            return orang > 0 && hari > 0 && upah > 0;
+        });
+    }, [L]);
+
+    // ===== Build payload
     const buildPayload = (fv: any) => {
         const out: any[] = [];
 
-        // SEED (wajib, satu item)
-        const kind: "seed" | "seedling" = fv.seed.kind;
-        const unit: Unit = kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
-        const q = toNum(fv.seed.qty);
-        const p = toNum(fv.seed.price);
-        if (q > 0 && p >= 0) {
-            out.push({
-                category: kind, // "seed" | "seedling"
-                itemName: fv.seed.name || null,
-                unit,
-                quantity: q,
-                unitPrice: p,
-                _meta: { category: kind, unit },
-            });
-        }
+        // SEEDS (multi)
+        (seedsW as SeedLine[]).forEach((s) => {
+            const unit: Unit = s.kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
+            const q = toNum(s.qty);
+            const p = toNum(s.price);
+            if (q > 0 && p >= 0 && (s.name?.trim()?.length ?? 0) > 0) {
+                out.push({
+                    category: s.kind,
+                    itemName: s.name,
+                    unit,
+                    quantity: q,
+                    unitPrice: p,
+                    _meta: { category: s.kind, unit, cropName: s.cropName },
+                });
+            }
+        });
 
-        // OTHERS
+        // Kimia lain
         const chemToRows = (rows: ChemItem[]) =>
             rows.map((r) => ({
                 category: r.category,
@@ -386,7 +547,7 @@ export default function CashForm({
             ...chemToRows(fungiItems)
         );
 
-        // LABOR
+        // Tenaga kerja
         const laborOne = (cat: Category, lf: LaborForm) => {
             if (lf.tipe === "borongan") {
                 const kontrak = Math.max(0, toNum(lf.hargaBorongan));
@@ -487,44 +648,31 @@ export default function CashForm({
         );
     };
 
-    // Validasi minimal 1 labor
-    const hasAnyLabor = useCallback(() => {
-        const arr: LaborForm[] = [
-            L.nursery,
-            L.land_prep,
-            L.planting,
-            L.fertilizing,
-            L.irrigation,
-            L.weeding,
-            L.pest_ctrl,
-            L.harvest,
-            L.postharvest,
-        ];
-        return arr.some((lf) => {
-            if (lf.tipe === "borongan") return toNum(lf.hargaBorongan) > 0;
-            const orang = toNum(lf.jumlahOrang);
-            const hari = toNum(lf.jumlahHari);
-            const upah = toNum(lf.upahHarian);
-            return orang > 0 && hari > 0 && upah > 0;
-        });
-    }, [L]);
-
-    // Validasi wajib bibit
-    const hasValidSeed = useCallback(() => {
-        const q = toNum(seedW?.qty);
-        const p = toNum(seedW?.price);
-        return (seedW?.name?.trim()?.length ?? 0) > 0 && q > 0 && p >= 0;
-    }, [seedW]);
-
+    // ===== Submit
     const [saving, setSaving] = useState(false);
     const onSubmit = async (fv: any) => {
         try {
-            if (!hasValidSeed()) {
-                Alert.alert("Validasi", "Bagian Bibit wajib diisi (nama, jumlah, harga).");
+            if (!seedsValid()) {
+                Alert.alert(
+                    "Validasi",
+                    "Semua baris Bibit/Benih wajib diisi: pilih Benih/Bibit, isi nama, jumlah, dan harga satuan."
+                );
+                return;
+            }
+            if (!allChemRowsValid(fertilizerItems)) {
+                Alert.alert("Validasi", "Pupuk minimal 1 item dan tiap baris harus lengkap.");
+                return;
+            }
+            const pestOk =
+                chemRowsValidIfAny(insectItems) &&
+                chemRowsValidIfAny(herbItems) &&
+                chemRowsValidIfAny(fungiItems);
+            if (!pestOk) {
+                Alert.alert("Validasi", "Jika isi pestisida, tiap baris harus lengkap.");
                 return;
             }
             if (!hasAnyLabor()) {
-                Alert.alert("Validasi", "Isi minimal satu item Tenaga Kerja (borongan atau harian).");
+                Alert.alert("Validasi", "Isi minimal satu item Tenaga Kerja (borongan/harian).");
                 return;
             }
 
@@ -550,6 +698,26 @@ export default function CashForm({
     };
 
     const showBlocking = initialLoading;
+
+    // ===== Styles yang butuh C & S
+    const cardStyle = {
+        borderWidth: 1,
+        borderColor: C.border,
+        borderRadius: S.radius.lg,
+        backgroundColor: C.surface,
+        padding: S.spacing.md,
+        gap: S.spacing.sm,
+    } as const;
+
+    const divider = (
+        <View
+            style={{
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: C.border,
+                marginTop: S.spacing.xs,
+            }}
+        />
+    );
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -591,7 +759,7 @@ export default function CashForm({
 
             {showBlocking ? (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ color: C.textMuted, marginBottom: 8 }}>
+                    <Text style={{ color: C.textMuted, marginBottom: S.spacing.xs }}>
                         {mode === "edit" ? "Memuat data..." : "Menyiapkan form..."}
                     </Text>
                 </View>
@@ -601,26 +769,130 @@ export default function CashForm({
                     extraScrollHeight={Platform.select({ ios: 20, android: 80 })}
                     contentContainerStyle={{
                         padding: S.spacing.lg,
-                        paddingBottom: 140,
-                        gap: 12,
+                        paddingBottom: S.spacing.xl * 3,
+                        gap: S.spacing.md,
                     }}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* ===== Bibit (Wajib, single, TANPA SectionButton) ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 4 }}>
-                        Bibit *
-                    </Text>
-                    <SeedOne
-                        name="seed"
-                        control={control}
-                        setValue={setValue}
-                        C={C}
-                        S={S}
-                    />
+                    {/* ===== Bibit/Benih (Array) ===== */}
+                    {(seedsW as SeedLine[]).map((s, idx) => {
+                        const kind = s.kind ?? "seed";
+                        const setKind = (v: "seed" | "seedling") => {
+                            setValue(`seeds.${idx}.kind`, v as "seed" | "seedling", {
+                                shouldDirty: true,
+                            });
+                        };
+                        const seedRowSubtotal = Math.max(0, toNum(s.qty) * Math.max(0, toNum(s.price)));
 
+                        return (
+                            <View key={`${s.cropName}-${idx}`} style={cardStyle}>
+                                <Text
+                                    style={{
+                                        color: C.textMuted,
+                                        fontWeight: "800",
+                                        fontFamily: Fonts.rounded as any,
+                                    }}
+                                >
+                                    {`Bibit/Benih | ${s.cropName} *`}
+                                </Text>
+
+                                {/* Chips */}
+                                <View style={{ flexDirection: "row", gap: S.spacing.sm, flexWrap: "wrap" }}>
+                                    <Chip label="Benih" active={kind === "seed"} onPress={() => setKind("seed")} C={C} />
+                                    <Chip label="Bibit" active={kind === "seedling"} onPress={() => setKind("seedling")} C={C} />
+                                </View>
+
+                                {/* Nama: Controller + TextInput */}
+                                <Controller
+                                    control={control}
+                                    name={`seeds.${idx}.name`}
+                                    rules={{
+                                        required: "Wajib diisi",
+                                        validate: (v) =>
+                                            (String(v ?? "").trim().length > 0 && isNaN(Number(v))) ||
+                                            "Isi nama (teks), bukan angka.",
+                                    }}
+                                    render={({ field: { value, onChange, onBlur }, fieldState: { error } }) => (
+                                        <View>
+                                            <Text style={[styles.label, { color: C.textMuted }]}>{`Nama ${kind === "seed" ? "Benih" : "Bibit"
+                                                }`}</Text>
+                                            <TextInput
+                                                value={value ?? ""}
+                                                onChangeText={onChange}
+                                                onBlur={onBlur}
+                                                placeholder={`Contoh: ${kind === "seed" ? "Benih Jagung Pioneer" : "Bibit Cabai Rawit"
+                                                    }`}
+                                                keyboardType="default"
+                                                placeholderTextColor={C.textMuted}
+                                                style={[
+                                                    styles.inputBase,
+                                                    {
+                                                        borderColor: error ? C.danger : C.border,
+                                                        backgroundColor: C.surface,
+                                                        color: C.text,
+                                                        borderRadius: S.radius.md,
+                                                        paddingHorizontal: S.spacing.md,
+                                                        paddingVertical: S.spacing.sm,
+                                                    },
+                                                ]}
+                                            />
+                                            {error && (
+                                                <Text style={{ color: C.danger, marginTop: S.spacing.xs }}>{error.message}</Text>
+                                            )}
+                                        </View>
+                                    )}
+                                />
+
+                                <RHFLineInput
+                                    label="Jumlah"
+                                    name={`seeds.${idx}.qty`}
+                                    control={control}
+                                    C={C}
+                                    rules={{
+                                        required: "Wajib diisi",
+                                        validate: (v: any) =>
+                                            parseFloat(String(v).replace(",", ".")) > 0 || "Harus > 0",
+                                    }}
+                                />
+                                <RHFLineInput
+                                    label="Harga per satuan"
+                                    name={`seeds.${idx}.price`}
+                                    control={control}
+                                    C={C}
+                                    rules={{
+                                        required: "Wajib diisi",
+                                        validate: (v: any) => {
+                                            const x = parseFloat(String(v).replace(",", "."));
+                                            return (!Number.isNaN(x) && x >= 0) || "Harus angka ≥ 0";
+                                        },
+                                    }}
+                                />
+
+                                {divider}
+
+                                {/* Subtotal per baris seed */}
+                                <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                    Subtotal ≈{" "}
+                                    <Text style={{ color: C.success, fontWeight: "900" }}>
+                                        {currency(seedRowSubtotal || 0)}
+                                    </Text>
+                                </Text>
+                            </View>
+                        );
+                    })}
+
+                    {/* Subtotal semua Seeds */}
+                    <View style={{ alignItems: "flex-start" }}>
+                        <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                            Subtotal Semua ≈{" "}
+                            <Text style={{ color: C.success, fontWeight: "900" }}>
+                                {currency(seedSubtotal || 0)}
+                            </Text>
+                        </Text>
+                    </View>
 
                     {/* ===== Pupuk ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                    <Text style={[styles.sectionTitle, { color: C.textMuted, fontFamily: Fonts.rounded as any }]}>
                         Pupuk
                     </Text>
                     <SectionButton
@@ -635,11 +907,7 @@ export default function CashForm({
                         <FertilizerPanel
                             schemeColors={{ C, S }}
                             onAdd={(p) =>
-                                addChem(setFertilizerItems, {
-                                    ...p,
-                                    category: "fertilizer",
-                                    unit: UNIT_FERTILIZER,
-                                })
+                                addChem(setFertilizerItems, { ...p, category: "fertilizer", unit: UNIT_FERTILIZER })
                             }
                             rows={fertilizerItems}
                             setRows={setFertilizerItems}
@@ -647,7 +915,7 @@ export default function CashForm({
                     )}
 
                     {/* ===== Pestisida ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                    <Text style={[styles.sectionTitle, { color: C.textMuted, fontFamily: Fonts.rounded as any }]}>
                         Pestisida
                     </Text>
                     <SectionButton
@@ -706,7 +974,7 @@ export default function CashForm({
                     )}
 
                     {/* ===== Tenaga Kerja ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                    <Text style={[styles.sectionTitle, { color: C.textMuted, fontFamily: Fonts.rounded as any }]}>
                         Tenaga Kerja
                     </Text>
 
@@ -722,7 +990,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").nursery)}
                     />
-
                     <LaborOne
                         title="Pengolahan Lahan"
                         icon="construct-outline"
@@ -735,7 +1002,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").land_prep)}
                     />
-
                     <LaborOne
                         title="Penanaman"
                         icon="leaf-outline"
@@ -748,7 +1014,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").planting)}
                     />
-
                     <LaborOne
                         title="Pemupukan"
                         icon="flask-outline"
@@ -761,7 +1026,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").fertilizing)}
                     />
-
                     <LaborOne
                         title="Penyiraman"
                         icon="water-outline"
@@ -774,7 +1038,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").irrigation)}
                     />
-
                     <LaborOne
                         title="Penyiangan"
                         icon="cut-outline"
@@ -787,7 +1050,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").weeding)}
                     />
-
                     <LaborOne
                         title="Pengendalian Hama & Penyakit"
                         icon="shield-checkmark-outline"
@@ -800,7 +1062,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").pest_ctrl)}
                     />
-
                     <LaborOne
                         title="Panen"
                         icon="basket-outline"
@@ -813,7 +1074,6 @@ export default function CashForm({
                         setValue={setValue}
                         subtotal={calcLaborSubtotal(watch("labor").harvest)}
                     />
-
                     <LaborOne
                         title="Pasca Panen"
                         icon="archive-outline"
@@ -828,7 +1088,7 @@ export default function CashForm({
                     />
 
                     {/* ===== Biaya Lain ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>
+                    <Text style={[styles.sectionTitle, { color: C.textMuted, fontFamily: Fonts.rounded as any }]}>
                         Biaya Lain
                     </Text>
                     <SectionButton
@@ -840,26 +1100,28 @@ export default function CashForm({
                         S={S}
                     />
                     {openExtras && (
-                        <View style={{ marginTop: 8, gap: 10 }}>
+                        <View>
                             <RHFLineInput
-                                label="Pajak"
+                                label="Pajak per Tahun"
                                 placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
+                                    validate: (v: any) =>
+                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
-                                label="Sewa Lahan"
+                                label="Sewa Lahan per Tahun"
                                 name="extras.landRent"
                                 control={control}
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
+                                    validate: (v: any) =>
+                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
                             <RHFLineInput
@@ -869,28 +1131,45 @@ export default function CashForm({
                                 C={C}
                                 rules={{
                                     required: "Wajib diisi",
-                                    validate: (v: any) => (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
+                                    validate: (v: any) =>
+                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
+
+                            {divider}
+
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Subtotal Biaya Lain ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(extrasSubtotal || 0)}
+                                </Text>
+                            </Text>
                         </View>
                     )}
 
                     {/* ===== Footer ===== */}
-                    <View style={{ marginTop: 12 }}>
-                        <Text style={{ textAlign: "right", color: C.text, marginBottom: 8 }}>
+                    <View style={{ marginTop: S.spacing.md }}>
+                        <Text style={{ textAlign: "right", color: C.text, marginBottom: S.spacing.xs }}>
                             Total:{" "}
-                            <Text style={{ color: C.success, fontWeight: "900" }}>{currency(total)}</Text>
+                            <Text style={{ color: C.success, fontWeight: "900", fontFamily: Fonts.rounded as any }}>
+                                {currency(total)}
+                            </Text>
                         </Text>
                         <Pressable
                             onPress={handleSubmit(onSubmit)}
                             disabled={saving}
                             style={({ pressed }) => [
                                 styles.saveBtn,
-                                { backgroundColor: C.tint, opacity: pressed ? 0.98 : 1, borderRadius: S.radius.xl },
+                                {
+                                    backgroundColor: C.tint,
+                                    opacity: pressed ? 0.98 : 1,
+                                    borderRadius: S.radius.xl,
+                                    paddingVertical: S.spacing.md,
+                                },
                             ]}
                         >
                             <Ionicons name="save-outline" size={18} color="#fff" />
-                            <Text style={{ color: "#fff", fontWeight: "900" }}>
+                            <Text style={{ color: "#fff", fontWeight: "900", fontFamily: Fonts.rounded as any }}>
                                 {saving ? "Menyimpan…" : "Simpan"}
                             </Text>
                         </Pressable>
@@ -903,7 +1182,11 @@ export default function CashForm({
 
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
     headerTitle: { fontSize: 18, fontWeight: "800" },
     iconBtn: {
         width: 36,
@@ -913,8 +1196,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    sectionTitle: { fontSize: 14, fontWeight: "800", marginTop: 8 },
+    label: { fontSize: 12, fontWeight: "700", marginBottom: 4 },
+    inputBase: {
+        borderWidth: 1,
+    },
     saveBtn: {
-        paddingVertical: 12,
         alignItems: "center",
         justifyContent: "center",
         flexDirection: "row",

@@ -11,7 +11,7 @@ import {
   ExtraKind,
   Unit,
 } from "@/types/expense";
-import { ensureMoneyNum, ensurePosNum, ensureText } from "@/utils/expense";
+import { ensureText, nullIfEmpty } from "@/utils/expense";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** ================== Helpers ================== */
@@ -432,8 +432,7 @@ export const expenseRepo = {
       })
     );
   },
-
-  /** ========== CASH: create ke tabel baru ========== */
+  /** ========== CASH: create via RPC (atomic) ========== */
   async createCash(
     userId: string,
     input: CreateCashExpenseInput
@@ -444,254 +443,178 @@ export const expenseRepo = {
     }
     await assertSeasonOwnership(userId, input.seasonId);
 
-    // 1) header
-    const { data: head, error: eHead } = await supabase
-      .from("expenses")
-      .insert({
-        user_id: userId,
-        season_id: input.seasonId,
-        type: "cash",
-        note: input.note ?? null,
-        ...(input.expenseDate ? { expense_date: input.expenseDate } : {}),
-      })
-      .select("id")
-      .single();
-    if (eHead) throw eHead;
-    const expenseId = head.id as string;
+    const materials = input.items
+      .filter((x) => isMaterial(x.category))
+      .map((x) => ({
+        category: x.category,
+        itemName: x.itemName ?? null,
+        unit: x.unit as Unit,
+        quantity: x.quantity,
+        unitPrice: x.unitPrice,
+        _meta: { ...(x._meta ?? {}) },
+      }));
+
+    const labors = input.items
+      .filter(
+        (x: any) => isLaborCat(x?._meta?.category) || isLaborCat(x?.category)
+      )
+      .map((x: any) => {
+        const lt = (x?._meta?.laborType ?? "daily") as "daily" | "contract";
+        return lt === "contract"
+          ? {
+              laborType: "contract",
+              itemName: x.itemName ?? "Tenaga Kerja",
+              contractPrice: x.unitPrice,
+              _meta: {
+                category: x?._meta?.category ?? null,
+                jamKerja: x?._meta?.jamKerja ?? null,
+                prevailingWage: x?._meta?.prevailingWage ?? null,
+                ...(x._meta ?? {}),
+              },
+            }
+          : {
+              laborType: "daily",
+              itemName: x.itemName ?? "Tenaga Kerja",
+              dailyWage: x.unitPrice,
+              _meta: {
+                category: x?._meta?.category ?? null,
+                peopleCount: x._meta.peopleCount,
+                days: x._meta.days,
+                jamKerja: x?._meta?.jamKerja ?? null,
+                ...(x._meta ?? {}),
+              },
+            };
+      });
+
+    const extras = input.items
+      .filter((x) => isExtra(x.category))
+      .map((x) => ({
+        type: x.category as ExtraKind,
+        amount: x.unitPrice,
+        itemName: x.itemName ?? null,
+        unit: x.unit,
+        _meta: { ...(x._meta ?? {}) },
+      }));
 
     try {
-      // Partisi items
-      const materials = input.items.filter((x) => isMaterial(x.category));
-      const extras = input.items.filter((x) => isExtra(x.category));
-      const laborish = input.items.filter(
-        (x) =>
-          isLaborCat((x as any)?._meta?.category) ||
-          isLaborCat((x as any)?.category)
-      );
+      const { data: newId, error } = await supabase.rpc("create_cash_expense", {
+        p_user_id: userId,
+        p_season_id: input.seasonId,
+        p_note: input.note ?? null,
+        p_expense_date: input.expenseDate ?? null,
+        p_materials: nullIfEmpty(materials),
+        p_labors: nullIfEmpty(labors),
+        p_extras: nullIfEmpty(extras),
+      });
+      if (error) throw error;
 
-      // 2) materials
-      if (materials.length) {
-        const rows = materials.map((x) => {
-          ensureText(x.category, "Kategori");
-          ensureText(x.unit, "Satuan");
-          ensurePosNum(x.quantity, "Jumlah");
-          ensureMoneyNum(x.unitPrice, "Harga/satuan");
-          return {
-            expense_id: expenseId,
-            category: x.category, // seed/fertilizer/...
-            item_name: x.itemName ?? null,
-            unit: x.unit as Unit,
-            quantity: x.quantity,
-            unit_price: x.unitPrice,
-            metadata: { ...(x._meta ?? {}) },
-          };
-        });
-        const { error } = await supabase
-          .from("cash_material_items")
-          .insert(rows);
-        if (error) throw error;
-      }
-
-      // 3) labor
-      if (laborish.length) {
-        const rows = laborish.map((x: any) => {
-          const lt = x?._meta?.laborType as "daily" | "contract" | undefined;
-          ensureText(lt ?? "daily", "Jenis tenaga kerja");
-
-          if (lt === "contract") {
-            ensureMoneyNum(x.unitPrice, "Harga borongan");
-            return {
-              expense_id: expenseId,
-              stage_label: x.itemName ?? "Tenaga Kerja",
-              stage_code: x?._meta?.category ?? null, // optional: labor_nursery, dll
-              labor_type: "contract",
-              people_count: null,
-              days: null,
-              daily_wage: null,
-              hours_per_day: x?._meta?.jamKerja ?? null,
-              contract_price: x.unitPrice,
-              prevailing_wage: x?._meta?.prevailingWage ?? null,
-              metadata: { ...(x._meta ?? {}) },
-            };
-          } else {
-            // daily
-            ensurePosNum(x?._meta?.peopleCount ?? 0, "Jumlah orang");
-            ensurePosNum(x?._meta?.days ?? 0, "Jumlah hari");
-            ensureMoneyNum(x.unitPrice, "Upah harian");
-            return {
-              expense_id: expenseId,
-              stage_label: x.itemName ?? "Tenaga Kerja",
-              stage_code: x?._meta?.category ?? null,
-              labor_type: "daily",
-              people_count: x._meta.peopleCount,
-              days: x._meta.days,
-              daily_wage: x.unitPrice,
-              hours_per_day: x?._meta?.jamKerja ?? null,
-              contract_price: null,
-              prevailing_wage: null,
-              metadata: { ...(x._meta ?? {}) },
-            };
-          }
-        });
-        const { error } = await supabase.from("cash_labor_items").insert(rows);
-        if (error) throw error;
-      }
-
-      // 4) extras
-      if (extras.length) {
-        const rows = extras.map((x) => {
-          ensureMoneyNum(x.unitPrice, "Nominal biaya");
-          return {
-            expense_id: expenseId,
-            extra_kind: x.category as ExtraKind, // 'tax' | 'land_rent' | 'transport'
-            amount: x.unitPrice,
-            note: x.itemName ?? null,
-            metadata: { unit: x.unit, ...(x._meta ?? {}) },
-          };
-        });
-        const { error } = await supabase.from("cash_extra_items").insert(rows);
-        if (error) throw error;
-      }
-
-      const created = await this.getById(userId, expenseId);
+      const created = await this.getById(userId, String(newId));
       if (!created)
         throw new Error("Gagal mengambil data setelah membuat expense.");
       return created;
-    } catch (e) {
-      // rollback header jika ada error
-      await supabase.from("expenses").delete().eq("id", expenseId);
+    } catch (e: any) {
+      if (
+        e?.code === "P0001" ||
+        /melebihi total penerimaan/i.test(e?.message || "")
+      ) {
+        throw new Error(
+          "Total pengeluaran melebihi total penerimaan untuk musim ini."
+        );
+      }
       throw e;
     }
   },
 
-  /** ========== CASH: update (hapus-ulang 3 tabel baru) ========== */
+  /** ========== CASH: update via RPC (atomic) ========== */
   async updateCash(
     userId: string,
     expenseId: string,
     input: CreateCashExpenseInput
   ): Promise<void> {
-    // cek ownership & type
-    const { data: row, error: e0 } = await supabase
-      .from("expenses")
-      .select("id,user_id,type")
-      .eq("id", expenseId)
-      .maybeSingle();
-    if (e0) throw e0;
-    if (!row) throw new Error("Expense tidak ditemukan.");
-    if (row.user_id !== userId) throw new Error("Data bukan milik user ini.");
-    if (row.type !== "cash") throw new Error("Jenis expense bukan cash.");
+    const materials = (input.items ?? [])
+      .filter((x) => isMaterial(x.category))
+      .map((x) => ({
+        category: x.category,
+        itemName: x.itemName ?? null,
+        unit: x.unit as Unit,
+        quantity: x.quantity,
+        unitPrice: x.unitPrice,
+        _meta: { ...(x._meta ?? {}) },
+      }));
 
-    const updates: any = {};
-    if (input.note !== undefined) updates.note = input.note;
-    if (input.expenseDate) updates.expense_date = input.expenseDate;
-    if (Object.keys(updates).length) {
-      const { error: eH } = await supabase
-        .from("expenses")
-        .update(updates)
-        .eq("id", expenseId);
-      if (eH) throw eH;
-    }
-
-    // hapus semua baris cash baru
-    const delOps = await Promise.all([
-      supabase.from("cash_material_items").delete().eq("expense_id", expenseId),
-      supabase.from("cash_labor_items").delete().eq("expense_id", expenseId),
-      supabase.from("cash_extra_items").delete().eq("expense_id", expenseId),
-    ]);
-    const delErr = delOps.find((r: any) => r.error)?.error;
-    if (delErr) throw delErr;
-
-    // ===== reinsert ke cash_* sesuai payload =====
-    const materials = input.items.filter((x) => isMaterial(x.category));
-    const extras = input.items.filter((x) => isExtra(x.category));
-    const laborish = input.items.filter(
-      (x: any) =>
-        isLaborCat(x?._meta?.category) || isLaborCat((x as any)?.category)
-    );
-
-    // materials
-    if (materials.length) {
-      const rows = materials.map((x) => {
-        ensureText(x.category, "Kategori");
-        ensureText(x.unit, "Satuan");
-        ensurePosNum(x.quantity, "Jumlah");
-        ensureMoneyNum(x.unitPrice, "Harga/satuan");
-        return {
-          expense_id: expenseId,
-          category: x.category,
-          item_name: x.itemName ?? null,
-          unit: x.unit as Unit,
-          quantity: x.quantity,
-          unit_price: x.unitPrice,
-          metadata: { ...(x._meta ?? {}) },
-        };
+    const labors = (input.items ?? [])
+      .filter(
+        (x: any) => isLaborCat(x?._meta?.category) || isLaborCat(x?.category)
+      )
+      .map((x: any) => {
+        const lt = (x?._meta?.laborType ?? "daily") as "daily" | "contract";
+        return lt === "contract"
+          ? {
+              laborType: "contract",
+              itemName: x.itemName ?? "Tenaga Kerja",
+              contractPrice: x.unitPrice,
+              _meta: {
+                category: x?._meta?.category ?? null,
+                jamKerja: x?._meta?.jamKerja ?? null,
+                prevailingWage: x?._meta?.prevailingWage ?? null,
+                ...(x._meta ?? {}),
+              },
+            }
+          : {
+              laborType: "daily",
+              itemName: x.itemName ?? "Tenaga Kerja",
+              dailyWage: x.unitPrice,
+              _meta: {
+                category: x?._meta?.category ?? null,
+                peopleCount: x._meta.peopleCount,
+                days: x._meta.days,
+                jamKerja: x?._meta?.jamKerja ?? null,
+                ...(x._meta ?? {}),
+              },
+            };
       });
-      const { error } = await supabase.from("cash_material_items").insert(rows);
-      if (error) throw error;
-    }
 
-    // labor
-    if (laborish.length) {
-      const rows = laborish.map((x: any) => {
-        const lt = x?._meta?.laborType as "daily" | "contract" | undefined;
-        ensureText(lt ?? "daily", "Jenis tenaga kerja");
+    const extras = (input.items ?? [])
+      .filter((x) => isExtra(x.category))
+      .map((x) => ({
+        type: x.category as ExtraKind,
+        amount: x.unitPrice,
+        itemName: x.itemName ?? null,
+        unit: x.unit,
+        _meta: { ...(x._meta ?? {}) },
+      }));
 
-        if (lt === "contract") {
-          ensureMoneyNum(x.unitPrice, "Harga borongan");
-          return {
-            expense_id: expenseId,
-            stage_label: x.itemName ?? "Tenaga Kerja",
-            stage_code: x?._meta?.category ?? null,
-            labor_type: "contract",
-            people_count: null,
-            days: null,
-            daily_wage: null,
-            hours_per_day: x?._meta?.jamKerja ?? null,
-            contract_price: x.unitPrice,
-            prevailing_wage: x?._meta?.prevailingWage ?? null,
-            metadata: { ...(x._meta ?? {}) },
-          };
-        } else {
-          ensurePosNum(x?._meta?.peopleCount ?? 0, "Jumlah orang");
-          ensurePosNum(x?._meta?.days ?? 0, "Jumlah hari");
-          ensureMoneyNum(x.unitPrice, "Upah harian");
-          return {
-            expense_id: expenseId,
-            stage_label: x.itemName ?? "Tenaga Kerja",
-            stage_code: x?._meta?.category ?? null,
-            labor_type: "daily",
-            people_count: x._meta.peopleCount,
-            days: x._meta.days,
-            daily_wage: x.unitPrice,
-            hours_per_day: x?._meta?.jamKerja ?? null,
-            contract_price: null,
-            prevailing_wage: null,
-            metadata: { ...(x._meta ?? {}) },
-          };
-        }
+    try {
+      const { error } = await supabase.rpc("update_cash_expense", {
+        p_user_id: userId,
+        p_expense_id: expenseId,
+        p_note: input.note ?? null,
+        p_expense_date: input.expenseDate ?? null,
+        // ⬇️ TANPA stringify
+        p_materials: nullIfEmpty(materials),
+        p_labors: nullIfEmpty(labors),
+        p_extras: nullIfEmpty(extras),
       });
-      const { error } = await supabase.from("cash_labor_items").insert(rows);
       if (error) throw error;
-    }
-
-    // extras
-    if (extras.length) {
-      const rows = extras.map((x) => {
-        ensureMoneyNum(x.unitPrice, "Nominal biaya");
-        return {
-          expense_id: expenseId,
-          extra_kind: x.category as ExtraKind,
-          amount: x.unitPrice,
-          note: x.itemName ?? null,
-          metadata: { unit: x.unit, ...(x._meta ?? {}) },
-        };
-      });
-      const { error } = await supabase.from("cash_extra_items").insert(rows);
-      if (error) throw error;
+    } catch (e: any) {
+      if (
+        e?.code === "P0001" ||
+        /melebihi total penerimaan/i.test(e?.message || "")
+      ) {
+        throw new Error(
+          "Total pengeluaran melebihi total penerimaan untuk musim ini."
+        );
+      }
+      if (e?.code === "42804") {
+        throw new Error(
+          "Tipe data tidak sesuai (enum). Periksa kategori/unit/laborType."
+        );
+      }
+      throw e;
     }
   },
 
-  /** ================= NONCASH: create/update ke tabel baru ================= */
+  /** ========== NONCASH: create via RPC (atomic) ========== */
   async createNonCash(
     userId: string,
     input: CreateNonCashExpenseInput
@@ -699,241 +622,143 @@ export const expenseRepo = {
     ensureText(input.seasonId, "Season");
     await assertSeasonOwnership(userId, input.seasonId);
 
-    const { data: head, error: eHead } = await supabase
-      .from("expenses")
-      .insert({
-        user_id: userId,
-        season_id: input.seasonId,
-        type: "noncash",
-        note: input.note ?? null,
-        ...(input.expenseDate ? { expense_date: input.expenseDate } : {}),
-      })
-      .select("id")
-      .single();
-    if (eHead) throw eHead;
-    const expenseId = head.id as string;
+    const labors = (input.labors ?? []).map((l) =>
+      l.laborType === "contract"
+        ? {
+            laborType: "contract",
+            stageLabel: l.stageLabel ?? "Tenaga Kerja",
+            contractPrice: l.contractPrice,
+            prevailingWage: l.prevailingWage,
+            jamKerja: null,
+          }
+        : {
+            laborType: "daily",
+            stageLabel: l.stageLabel ?? "Tenaga Kerja",
+            peopleCount: l.peopleCount,
+            days: l.days,
+            dailyWage: l.dailyWage,
+            jamKerja: l.jamKerja ?? null,
+          }
+    );
+
+    const tools = (input.tools ?? []).map((t) => ({
+      toolName: t.toolName,
+      quantity: t.quantity,
+      purchasePrice: t.purchasePrice,
+      usefulLifeYears: t.usefulLifeYears ?? null,
+      salvageValue: t.salvageValue ?? null,
+      note: t.note ?? null,
+    }));
+
+    const extras = (input.extras ?? []).map((e) => ({
+      type: e.type as "tax" | "land_rent",
+      amount: e.amount,
+      note: e.note ?? null,
+    }));
 
     try {
-      // labor
-      if (input.labors?.length) {
-        const rows = input.labors.map((l) => {
-          ensureText(l.laborType, "Jenis tenaga kerja");
-          if (l.laborType === "contract") {
-            ensureMoneyNum(l.contractPrice, "Harga borongan"); // reuse field
-            ensureMoneyNum(l.prevailingWage, "Upah berlaku");
-          } else {
-            ensurePosNum(l.peopleCount, "Jumlah orang");
-            ensurePosNum(l.days, "Jumlah hari");
-            ensureMoneyNum(l.dailyWage, "Upah harian");
-          }
-          return l.laborType === "contract"
-            ? {
-                expense_id: expenseId,
-                stage_label: l.stageLabel ?? "Tenaga Kerja",
-                labor_type: "contract",
-                contract_price: l.contractPrice,
-                prevailing_wage: l.prevailingWage,
-                people_count: null,
-                days: null,
-                daily_wage: null,
-                hours_per_day: null,
-                metadata: {
-                  category: l.stageLabel ?? null,
-                },
-              }
-            : {
-                expense_id: expenseId,
-                stage_label: l.stageLabel ?? "Tenaga Kerja",
-                labor_type: "daily",
-                people_count: l.peopleCount,
-                days: l.days,
-                daily_wage: l.dailyWage,
-                hours_per_day: l.jamKerja ?? null,
-                contract_price: null,
-                prevailing_wage: null,
-                metadata: {
-                  category: l.stageLabel ?? null,
-                },
-              };
-        });
-        const { error } = await supabase
-          .from("noncash_labor_items")
-          .insert(rows);
-        if (error) throw error;
-      }
+      const { data: newId, error } = await supabase.rpc(
+        "create_noncash_expense",
+        {
+          p_user_id: userId,
+          p_season_id: input.seasonId,
+          p_note: input.note ?? null,
+          p_expense_date: input.expenseDate ?? null,
+          p_labors: nullIfEmpty(labors),
+          p_tools: nullIfEmpty(tools),
+          p_extras: nullIfEmpty(extras),
+        }
+      );
+      if (error) throw error;
 
-      // tools
-      if (input.tools?.length) {
-        const rows = input.tools.map((t) => {
-          ensureText(t.toolName, "Nama alat");
-          ensurePosNum(t.quantity, "Jumlah alat");
-          ensureMoneyNum(t.purchasePrice, "Harga beli");
-          if (t.usefulLifeYears != null)
-            ensurePosNum(t.usefulLifeYears, "Umur ekonomis");
-          if (t.salvageValue != null)
-            ensureMoneyNum(t.salvageValue, "Nilai sisa");
-          return {
-            expense_id: expenseId,
-            tool_name: t.toolName,
-            quantity: t.quantity,
-            purchase_price: t.purchasePrice,
-            useful_life_years: t.usefulLifeYears ?? null,
-            salvage_value: t.salvageValue ?? null,
-            metadata: {
-              category: t.toolName ?? null,
-            },
-          };
-        });
-        const { error } = await supabase
-          .from("noncash_tool_items")
-          .insert(rows);
-        if (error) throw error;
-      }
-
-      // extras (tax, land_rent)
-      if (input.extras?.length) {
-        const rows = input.extras.map((e) => {
-          ensureText(e.type, "Jenis extras");
-          ensureMoneyNum(e.amount, "Nominal extras");
-          return {
-            expense_id: expenseId,
-            extra_kind: e.type as "tax" | "land_rent",
-            amount: e.amount,
-            note: e.note ?? null,
-            metadata: {
-              category: e.type ?? null,
-            },
-          };
-        });
-        const { error } = await supabase
-          .from("noncash_extra_items")
-          .insert(rows);
-        if (error) throw error;
-      }
-
-      const created = await this.getById(userId, expenseId);
+      const created = await this.getById(userId, String(newId));
       if (!created)
         throw new Error("Gagal mengambil data setelah membuat expense.");
       return created;
-    } catch (e) {
-      await supabase.from("expenses").delete().eq("id", expenseId);
+    } catch (e: any) {
+      if (
+        e?.code === "P0001" ||
+        /melebihi total penerimaan/i.test(e?.message || "")
+      ) {
+        throw new Error(
+          "Total pengeluaran melebihi total penerimaan untuk musim ini."
+        );
+      }
+      if (e?.code === "42804") {
+        throw new Error(
+          "Tipe data tidak sesuai (enum). Periksa laborType/type dll."
+        );
+      }
       throw e;
     }
   },
 
+  /** ========== NONCASH: update via RPC (atomic) ========== */
   async updateNonCash(
     userId: string,
     expenseId: string,
     input: CreateNonCashExpenseInput
   ): Promise<void> {
-    const { data: row, error: e0 } = await supabase
-      .from("expenses")
-      .select("id,user_id,type")
-      .eq("id", expenseId)
-      .maybeSingle();
-    if (e0) throw e0;
-    if (!row) throw new Error("Expense tidak ditemukan.");
-    if (row.user_id !== userId) throw new Error("Data bukan milik user ini.");
-    if (row.type !== "noncash") throw new Error("Jenis expense bukan noncash.");
-
-    const headUpd: any = {};
-    if (input.note !== undefined) headUpd.note = input.note;
-    if (input.expenseDate) headUpd.expense_date = input.expenseDate;
-    if (Object.keys(headUpd).length) {
-      const { error: eH } = await supabase
-        .from("expenses")
-        .update(headUpd)
-        .eq("id", expenseId);
-      if (eH) throw eH;
-    }
-
-    // hapus isi noncash lama
-    const dels = await Promise.all([
-      supabase.from("noncash_labor_items").delete().eq("expense_id", expenseId),
-      supabase.from("noncash_tool_items").delete().eq("expense_id", expenseId),
-      supabase.from("noncash_extra_items").delete().eq("expense_id", expenseId),
-    ]);
-    const delErr = dels.find((r: any) => r.error)?.error;
-    if (delErr) throw delErr;
-
-    // reinsert
-    if (input.labors?.length) {
-      const rows = input.labors.map((l) => {
-        ensureText(l.laborType, "Jenis tenaga kerja");
-        if (l.laborType === "contract") {
-          ensureMoneyNum(l.contractPrice, "Harga borongan");
-          ensureMoneyNum(l.prevailingWage, "Upah berlaku");
-          return {
-            expense_id: expenseId,
-            stage_label: l.stageLabel ?? "Tenaga Kerja",
-            labor_type: "contract",
-            contract_price: l.contractPrice,
-            prevailing_wage: l.prevailingWage,
-            people_count: null,
-            days: null,
-            daily_wage: null,
-            hours_per_day: l.jamKerja ?? null,
-            metadata: {},
-          };
-        } else {
-          ensurePosNum(l.peopleCount, "Jumlah orang");
-          ensurePosNum(l.days, "Jumlah hari");
-          ensureMoneyNum(l.dailyWage, "Upah harian");
-          return {
-            expense_id: expenseId,
-            stage_label: l.stageLabel ?? "Tenaga Kerja",
-            labor_type: "daily",
-            people_count: l.peopleCount,
+    const labors = (input.labors ?? []).map((l) =>
+      l.laborType === "contract"
+        ? {
+            laborType: "contract",
+            stageLabel: l.stageLabel ?? "Tenaga Kerja",
+            contractPrice: l.contractPrice,
+            prevailingWage: l.prevailingWage,
+            jamKerja: null,
+          }
+        : {
+            laborType: "daily",
+            stageLabel: l.stageLabel ?? "Tenaga Kerja",
+            peopleCount: l.peopleCount,
             days: l.days,
-            daily_wage: l.dailyWage,
-            hours_per_day: l.jamKerja ?? null,
-            contract_price: null,
-            prevailing_wage: null,
-            metadata: {},
-          };
-        }
-      });
-      const { error } = await supabase.from("noncash_labor_items").insert(rows);
-      if (error) throw error;
-    }
+            dailyWage: l.dailyWage,
+            jamKerja: l.jamKerja ?? null,
+          }
+    );
 
-    if (input.tools?.length) {
-      const rows = input.tools.map((t) => {
-        ensureText(t.toolName, "Nama alat");
-        ensurePosNum(t.quantity, "Jumlah alat");
-        ensureMoneyNum(t.purchasePrice, "Harga beli");
-        if (t.usefulLifeYears != null)
-          ensurePosNum(t.usefulLifeYears, "Umur ekonomis");
-        if (t.salvageValue != null)
-          ensureMoneyNum(t.salvageValue, "Nilai sisa");
-        return {
-          expense_id: expenseId,
-          tool_name: t.toolName,
-          quantity: t.quantity,
-          purchase_price: t.purchasePrice,
-          useful_life_years: t.usefulLifeYears ?? null,
-          salvage_value: t.salvageValue ?? null,
-          metadata: { note: t.note ?? null },
-        };
-      });
-      const { error } = await supabase.from("noncash_tool_items").insert(rows);
-      if (error) throw error;
-    }
+    const tools = (input.tools ?? []).map((t) => ({
+      toolName: t.toolName,
+      quantity: t.quantity,
+      purchasePrice: t.purchasePrice,
+      usefulLifeYears: t.usefulLifeYears ?? null,
+      salvageValue: t.salvageValue ?? null,
+      note: t.note ?? null,
+    }));
 
-    if (input.extras?.length) {
-      const rows = input.extras.map((e) => {
-        ensureText(e.type, "Jenis extras");
-        ensureMoneyNum(e.amount, "Nominal extras");
-        return {
-          expense_id: expenseId,
-          extra_kind: e.type as "tax" | "land_rent",
-          amount: e.amount,
-          note: e.note ?? null,
-          metadata: {},
-        };
+    const extras = (input.extras ?? []).map((e) => ({
+      type: e.type as "tax" | "land_rent",
+      amount: e.amount,
+      note: e.note ?? null,
+    }));
+
+    try {
+      const { error } = await supabase.rpc("update_noncash_expense", {
+        p_user_id: userId,
+        p_expense_id: expenseId,
+        p_note: input.note ?? null,
+        p_expense_date: input.expenseDate ?? null,
+        p_labors: nullIfEmpty(labors),
+        p_tools: nullIfEmpty(tools),
+        p_extras: nullIfEmpty(extras),
       });
-      const { error } = await supabase.from("noncash_extra_items").insert(rows);
       if (error) throw error;
+    } catch (e: any) {
+      if (
+        e?.code === "P0001" ||
+        /melebihi total penerimaan/i.test(e?.message || "")
+      ) {
+        throw new Error(
+          "Total pengeluaran melebihi total penerimaan untuk musim ini."
+        );
+      }
+      if (e?.code === "42804") {
+        throw new Error(
+          "Tipe data tidak sesuai (enum). Periksa laborType/type dll."
+        );
+      }
+      throw e;
     }
   },
 

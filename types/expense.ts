@@ -226,3 +226,10 @@ export type CreateNonCashExpenseInput = {
   note?: string | null;
   expenseDate?: string; // optional override (YYYY-MM-DD)
 };
+
+export type SeedLine = {
+  kind: "seed" | "seedling";
+  cropName: string;
+  qty: string;
+  price: string;
+};

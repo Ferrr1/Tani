@@ -15,3 +15,6 @@ export const ensureText = (s: unknown, name: string) => {
     throw new Error(`${name} wajib diisi.`);
   }
 };
+
+export const nullIfEmpty = <T>(arr: T[] | undefined | null) =>
+  arr && arr.length ? arr : null;

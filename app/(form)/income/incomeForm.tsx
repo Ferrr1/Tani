@@ -38,7 +38,16 @@ export default function IncomeForm() {
         createReceipt,
         updateReceipt,
         getReceiptById,
+        listReceipts, // ambil list dari service (akan distabilkan via ref)
     } = useReceiptService();
+
+    const getReceiptByIdRef = useRef(getReceiptById);
+    const listReceiptsRef = useRef(listReceipts);
+    useEffect(() => {
+        // update ref tanpa memicu efek lain
+        getReceiptByIdRef.current = getReceiptById;
+        listReceiptsRef.current = listReceipts;
+    }, [getReceiptById, listReceipts]);
 
     const {
         loading: seasonLoading,
@@ -50,6 +59,12 @@ export default function IncomeForm() {
     const [openUnit, setOpenUnit] = useState(false);
     const [openSeason, setOpenSeason] = useState(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(isEdit);
+
+    // --- Batasi 1 income per season ---
+    const [usedSeasonIds, setUsedSeasonIds] = useState<Set<string>>(new Set());
+    const [usedLoading, setUsedLoading] = useState<boolean>(false);
+    const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
+    // -----------------------------------
 
     const {
         control,
@@ -96,22 +111,63 @@ export default function IncomeForm() {
     const didHydrateEdit = useRef(false);
     const didSetDefaultSeason = useRef(false);
 
+    // fetch seasons sekali (fungsi dari hook biasanya stabil, aman)
     useEffect(() => {
         fetchSeasons();
     }, [fetchSeasons]);
 
+    // Ambil daftar receipts user → tandai season yang sudah terpakai.
+    // Gunakan request-id guard agar tidak race/spam.
+    const usedReqIdRef = useRef(0);
+    useEffect(() => {
+        let alive = true;
+        const reqId = ++usedReqIdRef.current;
+
+        const loadUsed = async () => {
+            setUsedLoading(true);
+            try {
+                const receipts = await listReceiptsRef.current(); // tanpa filter season → semua receipts user
+                if (!alive || reqId !== usedReqIdRef.current) return;
+
+                const set = new Set<string>();
+                (receipts ?? []).forEach((r: any) => {
+                    if (r?.season_id) set.add(String(r.season_id));
+                });
+                // Saat edit, izinkan musim milik baris ini tetap dipilih
+                if (editingSeasonId) set.delete(editingSeasonId);
+
+                setUsedSeasonIds(set);
+            } catch (e) {
+                if (!alive || reqId !== usedReqIdRef.current) return;
+                console.warn("loadUsed receipts", e);
+            } finally {
+                if (!alive || reqId !== usedReqIdRef.current) return;
+                setUsedLoading(false);
+            }
+        };
+
+        loadUsed();
+        return () => {
+            alive = false;
+        };
+        // Hanya tergantung pada 'editingSeasonId' dan 'seasonRows' selesai diload (implisit lewat mount).
+        // Jangan taruh listReceipts di deps agar tidak spam (identitas berubah).
+    }, [editingSeasonId]);
+
+    // Hydrate saat edit — sekali saja setelah seasons tersedia
+    const hydrateReqIdRef = useRef(0);
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
-            if (!isEdit || !receiptId) {
-                return;
-            }
+            if (!isEdit || !receiptId) return;
             if (!seasons.length || didHydrateEdit.current) return;
 
+            const myReq = ++hydrateReqIdRef.current;
             try {
                 setInitialLoading(true);
-                const row = await getReceiptById(receiptId);
-                if (!alive) return;
+
+                const row = await getReceiptByIdRef.current(receiptId);
+                if (!alive || myReq !== hydrateReqIdRef.current) return;
 
                 if (!row) {
                     Alert.alert("Tidak ditemukan", "Data penerimaan tidak ditemukan.");
@@ -126,36 +182,53 @@ export default function IncomeForm() {
                     seasonId: row.season_id ?? seasons[0]?.id ?? "",
                 });
 
+                // simpan musim yang sedang dipakai record ini
+                setEditingSeasonId(row.season_id ?? null);
+
                 didHydrateEdit.current = true;
                 didSetDefaultSeason.current = true;
             } catch (e: any) {
-                if (!alive) return;
+                if (!alive || myReq !== hydrateReqIdRef.current) return;
                 Alert.alert("Gagal", e?.message ?? "Tidak dapat memuat data.");
                 router.replace("/(tabs)/income");
             } finally {
-                if (alive) setInitialLoading(false);
+                if (!alive || myReq !== hydrateReqIdRef.current) return;
+                setInitialLoading(false);
             }
         };
         hydrate();
         return () => {
             alive = false;
         };
-    }, [isEdit, receiptId, seasons, getReceiptById, reset, router]);
+        // Depend hanya pada penentu yang benar2 perlu:
+    }, [isEdit, receiptId, seasons, reset, router]);
 
+    // Set default season saat create:
+    // 1) coba pakai ?seasonId kalau tersedia & belum dipakai
+    // 2) kalau sudah dipakai, pilih season pertama yang masih kosong
     useEffect(() => {
         if (!seasons.length) return;
         if (isEdit) return;
         if (didSetDefaultSeason.current) return;
 
-        const defaultSeasonId =
-            (typeof seasonIdFromQuery === "string" && seasonIdFromQuery) ||
-            seasons[0]?.id;
+        const isDisabled = (id?: string) => !!id && usedSeasonIds.has(id);
+
+        let defaultSeasonId: string | undefined =
+            (typeof seasonIdFromQuery === "string" && seasonIdFromQuery) || undefined;
+
+        if (!defaultSeasonId || isDisabled(defaultSeasonId)) {
+            const firstFree = seasons.find((s) => !usedSeasonIds.has(s.id));
+            defaultSeasonId = firstFree?.id;
+        }
 
         if (defaultSeasonId) {
             setValue("seasonId", defaultSeasonId, { shouldValidate: true });
             didSetDefaultSeason.current = true;
+        } else {
+            // Semua season sudah terisi income
+            setValue("seasonId", "", { shouldValidate: true });
         }
-    }, [seasons, isEdit, seasonIdFromQuery, setValue]);
+    }, [seasons, isEdit, seasonIdFromQuery, usedSeasonIds, setValue]);
 
     const onSubmit = async (v: IncomeFormValues) => {
         const q = parseFloat((v.quantity || "").replace(",", "."));
@@ -167,6 +240,15 @@ export default function IncomeForm() {
             return Alert.alert("Validasi", "Kuantitas harus angka > 0.");
         if (!Number.isFinite(p) || p < 0)
             return Alert.alert("Validasi", "Harga/satuan harus angka ≥ 0.");
+
+        // Satu income per season (kecuali saat edit dan tidak mengganti musim)
+        const changingSeason = !isEdit || (isEdit && v.seasonId !== editingSeasonId);
+        if (changingSeason && usedSeasonIds.has(v.seasonId)) {
+            return Alert.alert(
+                "Validasi",
+                "Setiap musim hanya boleh satu penerimaan. Pilih musim lain."
+            );
+        }
 
         try {
             setSaving(true);
@@ -188,18 +270,22 @@ export default function IncomeForm() {
             }
             router.replace("/(tabs)/income");
         } catch (e: any) {
-            Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan data.");
+            if (e?.code === "23505") {
+                Alert.alert("Validasi", "Setiap musim hanya boleh satu penerimaan.");
+            } else {
+                Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan data.");
+            }
         } finally {
             setSaving(false);
         }
     };
 
     const showBlocking =
-        initialLoading || (seasonLoading && seasons.length === 0);
+        initialLoading || (seasonLoading && seasons.length === 0) || usedLoading;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header gradien (gaya profile) */}
+            {/* Header gradien */}
             <LinearGradient
                 colors={[C.gradientFrom, C.gradientTo]}
                 start={{ x: 0, y: 0 }}
@@ -241,7 +327,7 @@ export default function IncomeForm() {
                     enableAutomaticScroll
                     extraScrollHeight={Platform.select({ ios: 80, android: 120 })}
                 >
-                    {/* Card form (gaya profile) */}
+                    {/* Card form */}
                     <View
                         style={[
                             styles.card,
@@ -432,38 +518,44 @@ export default function IncomeForm() {
 
                         {openSeason && (
                             <View style={[styles.dropdown, { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12 }]}>
-                                {seasons.map((s) => (
-                                    <Pressable
-                                        key={s.id}
-                                        onPress={() => {
-                                            setValue("seasonId", s.id, { shouldValidate: true, shouldDirty: true });
-                                            setOpenSeason(false);
-                                        }}
-                                        style={({ pressed }) => [
-                                            styles.dropdownItem,
-                                            {
-                                                backgroundColor: pressed ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
-                                                borderColor: C.border,
-                                            },
-                                        ]}
-                                    >
-                                        <Ionicons name="calendar-outline" size={14} color={C.tint} />
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ color: C.text, fontWeight: (selSeasonId === s.id ? "800" : "700") as any }}>
-                                                Musim Ke-{s.season_no} ({yearOf(s.start_date)})
-                                            </Text>
-                                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                                {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
-                                            </Text>
-                                        </View>
-                                    </Pressable>
-                                ))}
+                                {seasons.map((s) => {
+                                    const disabled =
+                                        usedSeasonIds.has(s.id) && !(isEdit && editingSeasonId === s.id);
+                                    return (
+                                        <Pressable
+                                            key={s.id}
+                                            disabled={disabled}
+                                            onPress={() => {
+                                                setValue("seasonId", s.id, { shouldValidate: true, shouldDirty: true });
+                                                setOpenSeason(false);
+                                            }}
+                                            style={({ pressed }) => [
+                                                styles.dropdownItem,
+                                                {
+                                                    backgroundColor: pressed ? (scheme === "light" ? C.surfaceSoft : C.surface) : "transparent",
+                                                    borderColor: C.border,
+                                                    opacity: disabled ? 0.5 : 1,
+                                                },
+                                            ]}
+                                        >
+                                            <Ionicons name="calendar-outline" size={14} color={C.tint} />
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: C.text, fontWeight: (selSeasonId === s.id ? "800" : "700") as any }}>
+                                                    Musim Ke-{s.season_no} ({yearOf(s.start_date)}){disabled ? " | Data penerimaan sudah tersedia" : ""}
+                                                </Text>
+                                                <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                                    {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
+                                                </Text>
+                                            </View>
+                                        </Pressable>
+                                    );
+                                })}
                             </View>
                         )}
                         {errors.seasonId && <Text style={[styles.err, { color: C.danger }]}>{errors.seasonId.message as string}</Text>}
                     </View>
 
-                    {/* Tombol simpan (gaya profile) */}
+                    {/* Tombol simpan */}
                     <Pressable
                         onPress={handleSubmit(onSubmit)}
                         disabled={saving}
