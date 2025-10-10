@@ -13,7 +13,7 @@ export type ExpenseItemRow = {
   type: "cash" | "noncash";
   expense_group: "cash" | "noncash";
   row_key: string; // unik per baris di view
-  item_kind: "material" | "labor" | "extra" | "tool" | "tax";
+  item_kind: "material" | "labor" | "extra" | "tool" | "tax"; // jika view kamu ikut mengeluarkan 'hok', tambahkan 'hok' di union ini
   item_label: string | null;
   item_name: string | null;
   base_amount: number | null;
@@ -91,10 +91,14 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
     setLoadingItems(true);
     const myReq = ++reqItemsRef.current;
     try {
-      let q = supabase
-        .from("v_expense_items_screen")
-        .select("*")
-        .eq("user_id", user.id);
+      // Pilih view berdasarkan mode:
+      // - ada seasonId  -> PRORATA (per-musim)
+      // - tidak ada     -> RAW (per-tahun)
+      const viewName = seasonId
+        ? "v_expense_chart_screen_season"
+        : "v_expense_chart_screen_year";
+
+      let q = supabase.from(viewName).select("*").eq("user_id", user.id);
 
       // Prioritize explicit season filter
       if (seasonId) {
@@ -102,6 +106,8 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
       } else if (seasonIdsForYear) {
         // When filtering by year, use overlapping season ids (align with Report)
         q = q.in("season_id", seasonIdsForYear);
+        // Opsional (bisa mempercepat jika ada index di kolom 'year'):
+        if (year !== "all") q = q.eq("year", Number(year));
       }
 
       const { data, error } = await q.order("expense_date", {
@@ -110,7 +116,6 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
       if (error) throw error;
 
       const rows = (data || []) as ExpenseItemRow[];
-      // console.log("expenseChartService.fetchItems", rows);
       if (!mounted.current || myReq !== reqItemsRef.current) return;
       setItems(rows);
     } catch (e) {
@@ -121,7 +126,7 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
       if (!mounted.current || myReq !== reqItemsRef.current) return;
       setLoadingItems(false);
     }
-  }, [user, seasonId, seasonIdsForYear]);
+  }, [user, seasonId, seasonIdsForYear, year]);
 
   useEffect(() => {
     fetchSeasons();
@@ -129,7 +134,7 @@ export function useExpenseChartData(initialSeasonId?: string | "all") {
 
   useEffect(() => {
     if (user) fetchItems();
-  }, [user?.id, seasonId, seasonIdsForYear, fetchItems]);
+  }, [user?.id, seasonId, seasonIdsForYear, year, fetchItems]);
 
   /** ===== Build pie summary ===== */
   const expensePieSummary = useMemo(
