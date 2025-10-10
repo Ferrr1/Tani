@@ -39,7 +39,7 @@ const TZ_ABBR: Record<string, string> = {
 export default function HomeScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, reloadProfile } = useAuth();
   const C = Colors[scheme];
   const S = Tokens;
 
@@ -54,6 +54,10 @@ export default function HomeScreen() {
 
   const [wx, setWx] = useState<WeatherNow | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    reloadProfile();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -17,6 +17,7 @@ export default function TabLayout() {
     return <LoadingScreen title="Menyiapkan navigasi" subtitle="Memuat sesi pengguna…" />;
   }
   if (!session) return <Redirect href="/(auth)" />;
+  if (role === "superadmin") return <Redirect href="/(superadmin)/(tabs)" />;
   if (role === "admin") return <Redirect href="/(admin)/(tabs)" />;
 
   return (

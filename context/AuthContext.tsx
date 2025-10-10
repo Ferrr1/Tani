@@ -224,7 +224,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
                 console.log(TAG, "register: mother_name set (hashed)");
             }
-            await reloadProfile();
             console.log(TAG, "register: done for", email);
         },
         []
