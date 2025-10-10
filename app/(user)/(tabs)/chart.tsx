@@ -1,11 +1,13 @@
+// screens/ChartScreen.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useSeasonFilter } from "@/context/SeasonFilterContext";
 import { useExpenseChartData } from "@/services/chartService";
 import { CATEGORY_LABEL } from "@/types/chart";
 import { currency } from "@/utils/currency";
 import { fmtDate } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
@@ -24,24 +26,25 @@ export default function ChartScreen() {
     const C = Colors[scheme];
     const S = Tokens;
 
+    // ===== Global season filter (persisted)
+    const { seasonId: seasonIdGlobal, setSeasonId: setSeasonIdGlobal, ready } = useSeasonFilter();
+
+    // ===== Service (pass initial from global)
     const {
         seasons,
-        seasonId,
-        setSeasonId,
-        year,
-        setYear,
-        yearOptions,
+        seasonId: seasonIdSvc,
+        setSeasonId: setSeasonIdSvc,
         expensePieSummary,
         totalOut,
         loading,
-    } = useExpenseChartData();
-    console.log("ChartScreen: expensePieSummary:", expensePieSummary);
-    console.log("ChartScreen: totalOut:", totalOut);
+    } = useExpenseChartData(seasonIdGlobal ?? undefined);
+
+    // keep a local computed seasonId for rendering (prefer global if available)
+    const seasonId = seasonIdGlobal ?? seasonIdSvc;
 
     const [openSeason, setOpenSeason] = useState(false);
-    const [openYear, setOpenYear] = useState(false);
 
-    // urutkan musim
+    // ===== Urutkan musim terbaru dulu
     const orderedSeasons = useMemo(
         () =>
             [...seasons].sort(
@@ -56,24 +59,39 @@ export default function ChartScreen() {
     );
     const currentSeason = currentIdx >= 0 ? orderedSeasons[currentIdx] : undefined;
 
-    // navigasi musim
+    // ===== Auto-pick latest season once: when global not set yet
+    useEffect(() => {
+        if (!ready) return;
+        if (!seasonIdGlobal && orderedSeasons.length > 0) {
+            const latestId = orderedSeasons[0].id;
+            setSeasonIdGlobal(latestId);
+            setSeasonIdSvc(latestId);
+        }
+    }, [ready, seasonIdGlobal, orderedSeasons, setSeasonIdGlobal, setSeasonIdSvc]);
+
+    // ===== Navigasi musim
     const canPrev = currentIdx >= 0 && currentIdx < orderedSeasons.length - 1;
     const canNext = currentIdx > 0;
+
+    const pickSeason = (id: string) => {
+        setSeasonIdGlobal(id);
+        setSeasonIdSvc(id);
+    };
+
     const goPrev = () => {
         if (!canPrev) return;
-        setSeasonId(orderedSeasons[currentIdx + 1].id);
-        setYear("all");
+        pickSeason(orderedSeasons[currentIdx + 1].id);
     };
     const goNext = () => {
         if (!canNext) return;
-        setSeasonId(orderedSeasons[currentIdx - 1].id);
-        setYear("all");
+        pickSeason(orderedSeasons[currentIdx - 1].id);
     };
 
+    // ===== Chart sizing
     const chartWidth = Dimensions.get("window").width - S.spacing.lg * 2;
     const pieSize = Math.min(chartWidth - 24, 280);
 
-    // palet warna
+    // ===== Palet warna
     const palette =
         scheme === "light"
             ? [
@@ -96,12 +114,9 @@ export default function ChartScreen() {
                 "#bcb800", "#8a8500", "#5a5300", "#2f2a00",
             ];
 
+    const categoryLabel = (raw?: string) => (!raw ? "Lainnya" : CATEGORY_LABEL[raw] ?? raw.replace(/_/g, " "));
 
-    const categoryLabel = (raw?: string) => {
-        if (!raw) return "Lainnya";
-        return CATEGORY_LABEL[raw] ?? raw.replace(/_/g, " ");
-    };
-
+    // ===== Transform untuk legend (gabung no-name)
     const combinedSummary = useMemo(() => {
         const noNameMap = new Map<string, number>();
         const withName: { label: string; name: string; amount: number }[] = [];
@@ -110,12 +125,8 @@ export default function ChartScreen() {
             const amount = Number(s.amount) || 0;
             const label = String(s.label ?? "");
             const name = String(s.name ?? "").trim();
-
-            if (!name) {
-                noNameMap.set(label, (noNameMap.get(label) ?? 0) + amount);
-            } else {
-                withName.push({ label, name, amount });
-            }
+            if (!name) noNameMap.set(label, (noNameMap.get(label) ?? 0) + amount);
+            else withName.push({ label, name, amount });
         }
 
         const noNameEntries = Array.from(noNameMap.entries()).map(([label, sum]) => ({
@@ -149,10 +160,7 @@ export default function ChartScreen() {
                     label: displayLabel,
                     name: s.name,
                     amount: Number(s.amount) || 0,
-                    pct:
-                        expenseGrandTotal > 0
-                            ? ((Number(s.amount) || 0) / expenseGrandTotal) * 100
-                            : 0,
+                    pct: expenseGrandTotal > 0 ? ((Number(s.amount) || 0) / expenseGrandTotal) * 100 : 0,
                     color: palette[i % palette.length],
                     idx: i,
                 };
@@ -162,11 +170,12 @@ export default function ChartScreen() {
 
     const showBlocking = loading && expenseGrandTotal === 0;
 
-    const activeFilterText = seasonId
-        ? `Filter: Musim Ke-${currentSeason?.season_no ?? "?"}`
-        : year !== "all"
-            ? `Filter: Tahun ${year}`
-            : "Filter: Semua data";
+    const activeFilterText =
+        seasonId && currentSeason
+            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(currentSeason.start_date)} — ${fmtDate(
+                currentSeason.end_date
+            )}`
+            : "Pilih Musim";
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -188,7 +197,7 @@ export default function ChartScreen() {
 
                 {/* Body */}
                 <View style={{ paddingHorizontal: S.spacing.lg }}>
-                    {/* === Season Selector === */}
+                    {/* === Season Selector (global) === */}
                     <View
                         style={[
                             styles.selectorCard,
@@ -218,10 +227,7 @@ export default function ChartScreen() {
                             </Pressable>
 
                             <Pressable
-                                onPress={() => {
-                                    setOpenSeason((v) => !v);
-                                    setOpenYear(false);
-                                }}
+                                onPress={() => setOpenSeason((v) => !v)}
                                 style={({ pressed }) => [
                                     styles.seasonRow,
                                     { borderColor: C.border, opacity: pressed ? 0.96 : 1, flex: 1 },
@@ -229,7 +235,7 @@ export default function ChartScreen() {
                             >
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.seasonTitle, { color: C.text }]}>
-                                        {seasonId && currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Semua Musim"}
+                                        {seasonId && currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
                                     </Text>
                                     {seasonId && currentSeason && (
                                         <Text style={[styles.seasonRange, { color: C.textMuted }]}>
@@ -258,25 +264,11 @@ export default function ChartScreen() {
 
                         {openSeason && (
                             <View style={[styles.seasonList, { borderColor: C.border }]}>
-                                <Pressable
-                                    onPress={() => {
-                                        setSeasonId(undefined);
-                                        setYear("all");
-                                        setOpenSeason(false);
-                                    }}
-                                    style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
-                                >
-                                    <Text style={{ color: C.text, fontWeight: (!seasonId ? "800" : "600") as any }}>
-                                        Semua Musim
-                                    </Text>
-                                </Pressable>
-
                                 {orderedSeasons.map((s) => (
                                     <Pressable
                                         key={s.id}
                                         onPress={() => {
-                                            setSeasonId(s.id);
-                                            setYear("all");
+                                            pickSeason(s.id);
                                             setOpenSeason(false);
                                         }}
                                         style={({ pressed }) => [
@@ -298,74 +290,6 @@ export default function ChartScreen() {
                                         </Text>
                                         <Text style={{ color: C.textMuted, fontSize: 12 }}>
                                             {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
-                                        </Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
-                    </View>
-
-                    {/* === Year Selector === */}
-                    <View
-                        style={[
-                            styles.selectorCard,
-                            {
-                                backgroundColor: C.surface,
-                                borderColor: C.border,
-                                borderRadius: S.radius.lg,
-                                marginTop: S.spacing.md,
-                            },
-                            scheme === "light" ? S.shadow.light : S.shadow.dark,
-                        ]}
-                    >
-                        <Pressable
-                            onPress={() => {
-                                setOpenYear((v) => !v);
-                                setOpenSeason(false);
-                            }}
-                            style={({ pressed }) => [
-                                styles.seasonRow,
-                                { borderColor: C.border, opacity: pressed ? 0.96 : 1 },
-                            ]}
-                        >
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.seasonTitle, { color: C.text }]}>
-                                    {year === "all" ? "Semua Tahun" : `Tahun ${year}`}
-                                </Text>
-                                <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                                    {seasonId ? "Filter Tahun nonaktif saat memilih Musim" : "Saring data berdasarkan tahun"}
-                                </Text>
-                            </View>
-                            <Ionicons name={openYear ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
-                        </Pressable>
-
-                        {openYear && (
-                            <View style={[styles.seasonList, { borderColor: C.border }]}>
-                                <Pressable
-                                    onPress={() => {
-                                        setYear("all");
-                                        setSeasonId(undefined);
-                                        setOpenYear(false);
-                                    }}
-                                    style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
-                                >
-                                    <Text style={{ color: C.text, fontWeight: (year === "all" ? "800" : "600") as any }}>
-                                        Semua Tahun
-                                    </Text>
-                                </Pressable>
-
-                                {yearOptions.map((y) => (
-                                    <Pressable
-                                        key={y}
-                                        onPress={() => {
-                                            setYear(y);
-                                            setSeasonId(undefined);
-                                            setOpenYear(false);
-                                        }}
-                                        style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
-                                    >
-                                        <Text style={{ color: C.text, fontWeight: ((year === y ? "800" : "600") as any) }}>
-                                            {y}
                                         </Text>
                                     </Pressable>
                                 ))}
@@ -404,7 +328,7 @@ export default function ChartScreen() {
                                 </View>
                             </View>
 
-                            {/* Kartu Chart (Komposisi Pengeluaran) */}
+                            {/* Kartu Chart */}
                             <View
                                 style={[
                                     styles.chartCard,
@@ -417,26 +341,23 @@ export default function ChartScreen() {
                                 ]}
                             >
                                 <Text style={[styles.chartTitle, { color: C.text, fontFamily: Fonts.rounded as any }]}>
-                                    Komposisi Pengeluaran{" "}
-                                    {seasonId && currentSeason ? `(Musim Ke-${currentSeason.season_no})` : ""}
-                                    {year !== "all" ? (seasonId ? ` | ${year}` : `(${year})`) : ""}
+                                    Komposisi Pengeluaran {seasonId && currentSeason ? `(Musim Ke-${currentSeason.season_no})` : ""}
                                 </Text>
 
                                 {expenseGrandTotal === 0 ? (
                                     <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                                        <Text style={{ color: C.textMuted }}>Belum ada data pengeluaran untuk filter ini.</Text>
+                                        <Text style={{ color: C.textMuted }}>Belum ada data pengeluaran untuk musim ini.</Text>
                                     </View>
                                 ) : (
                                     <>
                                         <View style={{ alignItems: "center", gap: 12 }}>
-                                            {/* PASTIKAN format series: [{ value, color }] */}
                                             <PieChart widthAndHeight={pieSize} series={series} />
                                             <Text style={{ color: C.textMuted }}>
                                                 Total Pengeluaran: {currency(expenseGrandTotal)}
                                             </Text>
                                         </View>
 
-                                        {/* Legend dinamis (Label | Nama) dengan agregasi no-name */}
+                                        {/* Legend */}
                                         <View style={{ marginTop: 12, gap: 8 }}>
                                             {slicesWithPct.map((s) => (
                                                 <View
@@ -462,7 +383,7 @@ export default function ChartScreen() {
                                                         </Text>
                                                     </View>
                                                     <Text style={{ color: C.textMuted, fontWeight: "800" }}>
-                                                        {currency(s.amount)}  ·  {(s.pct).toFixed(2)}%
+                                                        {currency(s.amount)} · {s.pct.toFixed(2)}%
                                                     </Text>
                                                 </View>
                                             ))}
@@ -517,7 +438,6 @@ const styles = StyleSheet.create({
     summaryItem: { flex: 1, gap: 4 },
     summaryLabel: { fontSize: 11, fontWeight: "700" },
     summaryValue: { fontSize: 14, fontWeight: "800" },
-    sep: { width: 1, height: 32, opacity: 0.6 },
     chartCard: { marginTop: 16, padding: 12, borderWidth: 1 },
     chartTitle: { fontSize: 16, fontWeight: "800", marginBottom: 8 },
 });
