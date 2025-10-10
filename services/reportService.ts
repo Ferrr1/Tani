@@ -21,27 +21,19 @@ export type ReportDataset = {
     unitPrice: number;
   }[];
   cashByCategory: {
-    category: string; // contoh "seed|Urea" atau "seed" atau "TK Luar Keluarga" atau extra/tax
-    quantity: number | null; // quantity (termasuk HOK utk TK cash), sudah diskalakan landFactor
-    unit: string | null; // "kg", "gram", "HOK", dll
-    unitPrice: number; // harga satuan (avg) atau nominal langsung (extras/tax)
+    category: string;
+    quantity: number | null;
+    unit: string | null;
+    unitPrice: number;
   }[];
   labor: {
     stageKey?: string;
-    stageLabel?: string; // "TK Dalam Keluarga"
+    stageLabel?: string;
     laborType: "daily" | "contract";
-    value: number; // nominal total noncash labor (sudah diskalakan landFactor)
+    value: number;
   }[];
-  tools: {
-    toolName: string;
-    quantity: number; // sudah diskalakan landFactor
-    purchasePrice: number;
-  }[];
-  extras: {
-    category: string; // label/kategori noncash extras/tax
-    label: string; // siap tampil di UI
-    amount: number; // nominal (sudah diskalakan landFactor)
-  }[];
+  tools: { toolName: string; quantity: number; purchasePrice: number }[];
+  extras: { category: string; label: string; amount: number }[];
 
   laborCashDetail?: {
     qty: number | null;
@@ -58,11 +50,11 @@ export type ReportDataset = {
 
   totalReceipts: number;
   totalCash: number;
-  totalLabor: number; // noncash labor
-  totalTools: number; // noncash tools
-  totalExtras: number; // noncash extras (termasuk tax noncash)
-  totalNonCash: number; // labor + tools + extras noncash
-  totalCost: number; // totalCash + totalNonCash
+  totalLabor: number;
+  totalTools: number;
+  totalExtras: number;
+  totalNonCash: number;
+  totalCost: number;
 };
 
 export function useReportData(initialSeasonId?: string | "all") {
@@ -77,6 +69,7 @@ export function useReportData(initialSeasonId?: string | "all") {
   const [yearOptions, setYearOptions] = useState<number[]>([]);
   const reqRef = useRef(0);
 
+  // Bootstrap seasons + year options
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -86,19 +79,27 @@ export function useReportData(initialSeasonId?: string | "all") {
       try {
         const ss = await seasonRepo.list(user.id);
         if (!alive || myReq !== reqRef.current) return;
-        setSeasons(ss || []);
+
+        const ordered = (ss || []).sort(
+          (a: any, b: any) =>
+            new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+        );
+        setSeasons(ordered);
 
         const years = new Set<number>();
-        (ss || []).forEach((s: any) => {
+        ordered.forEach((s: any) => {
           if (s?.start_date) years.add(new Date(s.start_date).getFullYear());
           if (s?.end_date) years.add(new Date(s.end_date).getFullYear());
         });
-        const opts = Array.from(years).sort((a, b) => a - b);
-        setYearOptions(opts);
+        setYearOptions(Array.from(years).sort((a, b) => a - b));
+
+        if (!seasonId && year === "all" && ordered.length > 0) {
+          setSeasonId(ordered[0].id);
+        }
       } catch (e) {
         console.warn("reportService bootstrap", e);
       } finally {
-        if (alive && reqRef.current) setLoading(false);
+        if (alive && myReq === reqRef.current) setLoading(false);
       }
     })();
     return () => {
@@ -106,6 +107,7 @@ export function useReportData(initialSeasonId?: string | "all") {
     };
   }, [user?.id]);
 
+  // season ids yang overlap tahun (untuk mode per-tahun)
   const seasonIdsForYear = useMemo(() => {
     if (year === "all" || !seasons?.length) return undefined;
     const y = Number(year);
@@ -115,12 +117,13 @@ export function useReportData(initialSeasonId?: string | "all") {
         const y2 = new Date(s.end_date).getFullYear();
         const minY = Math.min(y1, y2);
         const maxY = Math.max(y1, y2);
-        return y >= minY && y <= maxY; // overlap by year
+        return y >= minY && y <= maxY;
       })
       .map((s: any) => s.id);
-    return ids.length ? ids : ["__none__"]; // hindari .in([]) error
+    return ids.length ? ids : ["__none__"];
   }, [year, seasons]);
 
+  // === Builder utama: pilih view berdasarkan filter (season vs year)
   const buildDataset = useCallback(
     async (opts?: { landFactor?: number }): Promise<ReportDataset> => {
       if (!user) return emptyDataset();
@@ -137,30 +140,36 @@ export function useReportData(initialSeasonId?: string | "all") {
           | "noncash_labor_total"
           | "noncash_tool_detail"
           | "noncash_detail";
-        label: string | null; // ex: 'seed', 'fertilizer', 'transport', 'Penerimaan', 'TK Luar Keluarga', 'Tax'
-        name: string | null; // nama item (material/tool)
-        qty: number | null; // qty (termasuk HOK utk labor_total)
-        unit: string | null; // 'kg', 'gram', 'HOK', dst
-        unit_price: number | null; // harga satuan; utk labor_total = avg biaya/HOK
-        amount: number | null; // total nominal
+        label: string | null;
+        name: string | null;
+        qty: number | null;
+        unit: string | null;
+        unit_price: number | null;
+        amount: number | null;
       };
 
-      let q = supabase
-        .from("v_report_source")
-        .select("*")
-        .eq("user_id", user.id);
+      // ⬇️ Di sini perbedaannya: auto-switch view
+      const viewName = seasonId
+        ? "v_report_source_season"
+        : "v_report_source_year";
 
+      let q = supabase.from(viewName).select("*").eq("user_id", user.id);
+
+      // • Jika seasonId aktif: pakai 1 musim (view sudah mem-prorata kalau perlu)
+      // • Jika tidak, dan year dipilih: pakai daftar seasonIdsForYear + eq(year, y)
       if (seasonId) {
         q = q.eq("season_id", seasonId);
       } else if (seasonIdsForYear) {
         q = q.in("season_id", seasonIdsForYear);
+        if (year !== "all") q = q.eq("year", Number(year));
       }
 
       const { data, error } = await q;
       if (error) throw error;
 
       const rows: Row[] = (data || []) as any[];
-      // Kelompok per section
+
+      // ====== Kelompok per section
       const productionRows = rows.filter((r) => r.section === "production");
       const cashDetailRows = rows.filter((r) => r.section === "cash_detail");
       const cashLaborTotalRows = rows.filter(
@@ -174,15 +183,15 @@ export function useReportData(initialSeasonId?: string | "all") {
       );
       const noncashDetailRows = rows.filter(
         (r) => r.section === "noncash_detail"
-      ); // extras & tax noncash
+      );
 
       // ===== PRODUKSI =====
       const production: ReportDataset["production"] = productionRows.map(
         (r) => {
           const baseQty = r.qty != null ? num(r.qty) : null;
           return {
-            label: "Penerimaan",
-            quantity: baseQty != null ? baseQty * landFactor : null, // skala qty
+            label: "Produksi",
+            quantity: baseQty != null ? baseQty * landFactor : null,
             unitType: r.unit ?? null,
             unitPrice:
               r.unit_price != null
@@ -196,17 +205,17 @@ export function useReportData(initialSeasonId?: string | "all") {
 
       // ===== CASH (material/extras/tax) =====
       type AggMat = {
-        qty: number; // total qty (material)
-        amt: number; // total nominal yg terkait qty
+        qty: number;
+        amt: number;
         unit: string | null;
         multiUnit: boolean;
       };
       const matAggMap = new Map<string, AggMat>();
-      const nominalMap = new Map<string, number>(); // for extras/tax (nominal)
+      const nominalMap = new Map<string, number>();
 
       for (const r of cashDetailRows) {
-        const rawLabel = (r.label ?? "").trim(); // 'seed', 'fertilizer', 'transport', 'Tax', dll
-        const rawName = (r.name ?? "").trim(); // 'Urea', 'Mospilan', ...
+        const rawLabel = (r.label ?? "").trim();
+        const rawName = (r.name ?? "").trim();
         const key = rawName ? `${rawLabel}|${rawName}` : rawLabel;
 
         const hasQtyOrUnitPrice = r.qty != null || r.unit_price != null;
@@ -230,18 +239,17 @@ export function useReportData(initialSeasonId?: string | "all") {
           prev.amt += av;
           matAggMap.set(key, prev);
         } else {
-          // pure nominal (extras/tax)
           nominalMap.set(key, (nominalMap.get(key) ?? 0) + num(r.amount));
         }
       }
 
       const cashByCategory: ReportDataset["cashByCategory"] = [];
 
-      // material (punya qty)
+      // material (qty ada)
       for (const [key, ag] of matAggMap.entries()) {
         const qtyScaled = ag.qty * landFactor;
         const normalizedUnit = ag.multiUnit ? null : ag.unit ?? null;
-        const avgUnitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt; // rata-rata tertimbang
+        const avgUnitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt;
         cashByCategory.push({
           category: key,
           quantity: qtyScaled,
@@ -250,7 +258,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         });
       }
 
-      // extras/tax (nominal → taruh sebagai unitPrice dengan quantity=null)
+      // extras/tax nominal
       for (const [key, amount] of nominalMap.entries()) {
         cashByCategory.push({
           category: key,
@@ -260,7 +268,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         });
       }
 
-      // ===== TK CASH (Luar Keluarga) → kategori khusus di cashByCategory =====
+      // ===== TK CASH (Luar Keluarga) =====
       const laborCashDetail = (() => {
         if (!cashLaborTotalRows.length) return null;
         const qty = sum(
@@ -282,12 +290,11 @@ export function useReportData(initialSeasonId?: string | "all") {
         if (qty > 0) {
           cashByCategory.push({
             category: "TK Luar Keluarga",
-            quantity: qty * landFactor, // skala HOK
-            unit: unit,
-            unitPrice: unitPrice ?? 0, // rata-rata biaya/HOK
+            quantity: qty * landFactor,
+            unit,
+            unitPrice: unitPrice ?? 0,
           });
         } else if (amount > 0) {
-          // fallback nominal-only
           cashByCategory.push({
             category: "TK Luar Keluarga",
             quantity: null,
@@ -296,14 +303,14 @@ export function useReportData(initialSeasonId?: string | "all") {
           });
         }
         return {
-          qty: qty > 0 ? qty * landFactor : qty, // kalau mau tampilkan sesuai skala
+          qty: qty > 0 ? qty * landFactor : qty,
           unit,
           unitPrice: unitPrice ?? null,
           amount: amount * landFactor,
         };
       })();
 
-      // ===== NONCASH TK (Dalam Keluarga) → bucket labor =====
+      // ===== NONCASH TK (Dalam Keluarga) =====
       const laborNonCashDetail = (() => {
         if (!noncashLaborTotalRows.length) return null;
         const qty = sum(
@@ -329,16 +336,13 @@ export function useReportData(initialSeasonId?: string | "all") {
         };
       })();
 
-      const noncashLaborNominal =
-        laborNonCashDetail?.amount != null ? laborNonCashDetail.amount : 0;
-
+      const noncashLaborNominal = laborNonCashDetail?.amount ?? 0;
       const labor: ReportDataset["labor"] =
         noncashLaborNominal > 0
           ? [
               {
-                stageKey: undefined,
                 stageLabel: "TK Dalam Keluarga",
-                laborType: "daily", // tampilan saja; view sudah agregat
+                laborType: "daily",
                 value: noncashLaborNominal,
               },
             ]
@@ -351,7 +355,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         purchasePrice: r.unit_price != null ? num(r.unit_price) : 0,
       }));
 
-      // ===== NONCASH EXTRAS & TAX (agar tampil di Biaya Non Tunai → Biaya Lain) =====
+      // ===== NONCASH EXTRAS/TAX =====
       const extras: ReportDataset["extras"] = noncashDetailRows.map((r) => ({
         category: (r.label ?? "").trim(),
         label: (r.label ?? "").trim(),
@@ -370,8 +374,8 @@ export function useReportData(initialSeasonId?: string | "all") {
         )
       );
       const totalTools = sum(tools.map((t) => t.quantity * t.purchasePrice));
-      const totalLabor = sum(labor.map((l) => l.value)); // noncash labor
-      const totalExtras = sum(extras.map((e) => e.amount)); // noncash extras (termasuk tax noncash)
+      const totalLabor = sum(labor.map((l) => l.value));
+      const totalExtras = sum(extras.map((e) => e.amount));
       const totalNonCash = totalLabor + totalTools + totalExtras;
       const totalCost = totalCash + totalNonCash;
 
@@ -381,11 +385,8 @@ export function useReportData(initialSeasonId?: string | "all") {
         labor,
         tools,
         extras,
-
-        // detail opsional (bisa dipakai UI)
         laborCashDetail,
         laborNonCashDetail,
-
         totalReceipts,
         totalCash,
         totalLabor,
@@ -395,17 +396,22 @@ export function useReportData(initialSeasonId?: string | "all") {
         totalCost,
       };
     },
-    [user?.id, seasonId, seasonIdsForYear]
+    [user?.id, seasonId, seasonIdsForYear, year]
   );
 
   return {
+    // sumber & filter
     seasons,
     seasonId,
     setSeasonId,
     year,
     setYear,
     yearOptions,
+
+    // status
     loading,
+
+    // builder dataset
     buildDataset,
   };
 }

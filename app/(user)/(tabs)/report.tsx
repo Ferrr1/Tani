@@ -29,7 +29,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 function prettyLabel(raw: string): string {
     const [rawCat, name] = raw.split("|");
 
-    // biarkan kapitalisasi label TK apa adanya (cash & noncash)
     if (rawCat?.trim() === "TK Luar Keluarga" || rawCat?.trim() === "TK Dalam Keluarga") {
         return name ? `${rawCat.trim()} | ${name.trim()}` : rawCat.trim();
     }
@@ -86,6 +85,7 @@ export default function ReportScreen() {
     const [openSeason, setOpenSeason] = useState(false);
     const [openYear, setOpenYear] = useState(false);
 
+    // Urutkan musim terbaru dulu
     const orderedSeasons = useMemo(
         () =>
             [...seasons].sort(
@@ -99,24 +99,48 @@ export default function ReportScreen() {
     );
     const currentSeason = currentIdx >= 0 ? orderedSeasons[currentIdx] : undefined;
 
-    const canPrev = currentIdx >= 0 && currentIdx < orderedSeasons.length - 1;
-    const canNext = currentIdx > 0;
+    // Year-active => disable season nav
+    const yearActive = year !== "all";
+    const canPrev = !yearActive && currentIdx >= 0 && currentIdx < orderedSeasons.length - 1;
+    const canNext = !yearActive && currentIdx > 0;
+
+    const pickSeason = (id: string) => {
+        setYear("all" as any); // saat pilih musim, matikan filter tahun
+        setSeasonId(id);
+    };
+
     const goPrev = () => {
         if (!canPrev) return;
-        setSeasonId(orderedSeasons[currentIdx + 1].id);
-        setYear("all" as any);
+        pickSeason(orderedSeasons[currentIdx + 1].id);
     };
     const goNext = () => {
         if (!canNext) return;
-        setSeasonId(orderedSeasons[currentIdx - 1].id);
-        setYear("all" as any);
+        pickSeason(orderedSeasons[currentIdx - 1].id);
     };
 
-    const activeFilterText = seasonId
-        ? `Filter: Musim Ke-${currentSeason?.season_no ?? "?"}`
-        : year !== "all"
-            ? `Filter: Tahun ${year}`
-            : "Filter: Semua data";
+    // Pilih tahun => nonaktifkan season (mode RAW)
+    const pickYear = (y: number) => {
+        setSeasonId(undefined);
+        setYear(y as any);
+    };
+
+    // Matikan filter tahun => pilih musim terbaru
+    const clearYearFilter = () => {
+        setYear("all" as any);
+        if (orderedSeasons.length > 0) {
+            setSeasonId(orderedSeasons[0].id);
+        }
+    };
+
+    const activeFilterText =
+        seasonId && currentSeason
+            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(currentSeason.start_date)} — ${fmtDate(
+                currentSeason.end_date
+            )}`
+            : yearActive
+                ? `Filter: Tahun ${year}`
+                : "Pilih Musim atau Tahun";
+
     const seasonCropType = seasonId ? currentSeason?.crop_type : "";
 
     const [overrideAreaStr, setOverrideAreaStr] = useState<string>("");
@@ -253,14 +277,28 @@ export default function ReportScreen() {
     const musimLabel =
         seasonId && currentSeason ? `Musim-${currentSeason.season_no}` : "Semua-Musim";
 
-    const tahunLabel =
-        year !== "all" ? String(year) : (currentSeason
-            ? `${new Date(currentSeason.start_date).getFullYear()}`
-            : "Semua-Tahun");
+    const tahunLabel = yearActive
+        ? String(year)
+        : (currentSeason ? `${new Date(currentSeason.start_date).getFullYear()}` : "Semua-Tahun");
 
-    // Contoh format: Report_Musim-1_2025
     const pdfFileName = `Laporan ${musimLabel} ${tahunLabel}`;
-    console.log("pdfFileName:", pdfFileName);
+
+    // ===== Row sederhana untuk Year Mode (tanpa Satuan & Harga) =====
+    const SimpleRow = ({
+        label,
+        qty,
+        value,
+    }: {
+        label: string;
+        qty?: number | null;
+        value: number;
+    }) => (
+        <View style={[styles.simpleRow, { borderColor: C.border }]}>
+            <Text style={[styles.tdUraian, { color: C.text }]} numberOfLines={2}>{label}</Text>
+            <Text style={[styles.tdSmall, { color: C.text }]}>{qty != null ? Math.round(qty) : "-"}</Text>
+            <Text style={[styles.tdRight, { color: C.text }]}>{value.toLocaleString("id-ID")}</Text>
+        </View>
+    );
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -292,7 +330,7 @@ export default function ReportScreen() {
                                     perHaTitle: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} ha`,
                                     profileAreaHa,
                                     effectiveArea: effectiveArea != null ? effectiveArea : profileAreaHa,
-                                    landFactor, // metadata PDF; dataset sudah terskalakan
+                                    landFactor,
                                     production: base.production,
                                     cash: base.cash,
                                     tools: base.tools,
@@ -324,6 +362,7 @@ export default function ReportScreen() {
                                 borderColor: C.border,
                                 borderRadius: S.radius.lg,
                                 marginTop: S.spacing.lg,
+                                opacity: yearActive ? 0.6 : 1,
                             },
                             scheme === "light" ? S.shadow.light : S.shadow.dark,
                         ]}
@@ -345,7 +384,9 @@ export default function ReportScreen() {
                             </Pressable>
 
                             <Pressable
+                                disabled={yearActive}
                                 onPress={() => {
+                                    if (yearActive) return;
                                     setOpenSeason((v) => !v);
                                     setOpenYear(false);
                                 }}
@@ -356,7 +397,7 @@ export default function ReportScreen() {
                             >
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.seasonTitle, { color: C.text }]}>
-                                        {seasonId && currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Semua Musim"}
+                                        {seasonId && currentSeason ? `Musim Ke-${currentSeason.season_no}` : "Pilih Musim"}
                                     </Text>
                                     {seasonId && currentSeason && (
                                         <Text style={[styles.seasonRange, { color: C.textMuted }]}>
@@ -364,7 +405,11 @@ export default function ReportScreen() {
                                         </Text>
                                     )}
                                 </View>
-                                <Ionicons name={openSeason ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+                                <Ionicons
+                                    name={openSeason ? "chevron-up" : "chevron-down"}
+                                    size={18}
+                                    color={yearActive ? C.textMuted : C.icon}
+                                />
                             </Pressable>
 
                             <Pressable
@@ -383,27 +428,13 @@ export default function ReportScreen() {
                             </Pressable>
                         </View>
 
-                        {openSeason && (
+                        {openSeason && !yearActive && (
                             <View style={[styles.seasonList, { borderColor: C.border }]}>
-                                <Pressable
-                                    onPress={() => {
-                                        setSeasonId(undefined);
-                                        setYear("all" as any);
-                                        setOpenSeason(false);
-                                    }}
-                                    style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
-                                >
-                                    <Text style={{ color: C.text, fontWeight: (!seasonId ? "800" : "600") as any }}>
-                                        Semua Musim
-                                    </Text>
-                                </Pressable>
-
                                 {orderedSeasons.map((s) => (
                                     <Pressable
                                         key={s.id}
                                         onPress={() => {
-                                            setSeasonId(s.id);
-                                            setYear("all" as any);
+                                            pickSeason(s.id);
                                             setOpenSeason(false);
                                         }}
                                         style={({ pressed }) => [
@@ -434,6 +465,12 @@ export default function ReportScreen() {
                                 ))}
                             </View>
                         )}
+
+                        {yearActive && (
+                            <Text style={{ marginTop: 8, fontSize: 12, color: C.textMuted, fontWeight: "700" }}>
+                                Filter Musim nonaktif saat Filter Tahun aktif.
+                            </Text>
+                        )}
                     </View>
 
                     {/* === Year Selector === */}
@@ -449,6 +486,28 @@ export default function ReportScreen() {
                             scheme === "light" ? S.shadow.light : S.shadow.dark,
                         ]}
                     >
+                        {yearActive && (
+                            <View style={{ marginBottom: 8, flexDirection: "row", justifyContent: "flex-end" }}>
+                                <Pressable
+                                    onPress={clearYearFilter}
+                                    style={({ pressed }) => [
+                                        {
+                                            width: 30,
+                                            height: 30,
+                                            borderRadius: 8,
+                                            borderWidth: 1,
+                                            borderColor: C.border,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            backgroundColor: pressed ? C.surfaceSoft : C.surface,
+                                        },
+                                    ]}
+                                    accessibilityLabel="Matikan filter tahun"
+                                >
+                                    <Text style={{ color: C.textMuted, fontWeight: "900" }}>✕</Text>
+                                </Pressable>
+                            </View>
+                        )}
                         <Pressable
                             onPress={() => {
                                 setOpenYear((v) => !v);
@@ -461,10 +520,7 @@ export default function ReportScreen() {
                         >
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.seasonTitle, { color: C.text }]}>
-                                    {year === "all" ? "Semua Tahun" : `Tahun ${year}`}
-                                </Text>
-                                <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                                    {seasonId ? "Filter Tahun nonaktif saat memilih Musim" : "Saring data berdasarkan tahun"}
+                                    {yearActive ? `Tahun ${year}` : "Pilih Tahun"}
                                 </Text>
                             </View>
                             <Ionicons name={openYear ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
@@ -472,30 +528,16 @@ export default function ReportScreen() {
 
                         {openYear && (
                             <View style={[styles.seasonList, { borderColor: C.border }]}>
-                                <Pressable
-                                    onPress={() => {
-                                        setYear("all" as any);
-                                        setSeasonId(undefined);
-                                        setOpenYear(false);
-                                    }}
-                                    style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
-                                >
-                                    <Text style={{ color: C.text, fontWeight: (year === "all" ? "800" : "600") as any }}>
-                                        Semua Tahun
-                                    </Text>
-                                </Pressable>
-
                                 {yearOptions.map((y) => (
                                     <Pressable
                                         key={y}
                                         onPress={() => {
-                                            setYear(y as any);
-                                            setSeasonId(undefined);
+                                            pickYear(y);
                                             setOpenYear(false);
                                         }}
                                         style={({ pressed }) => [styles.seasonItem, { opacity: pressed ? 0.96 : 1 }]}
                                     >
-                                        <Text style={{ color: C.text, fontWeight: ((year === y ? "800" : "600") as any) }}>
+                                        <Text style={{ color: C.text, fontWeight: (year === y ? "800" : "600") as any }}>
                                             {y}
                                         </Text>
                                     </Pressable>
@@ -532,97 +574,148 @@ export default function ReportScreen() {
                     {!showBlocking && !bootLoading && (
                         <>
                             {/* Header Kolom */}
-                            <View style={[styles.tableHead, { borderColor: C.border }]}>
-                                <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
-                                <Text style={[styles.thSmall, { color: C.textMuted }]}>Jumlah</Text>
-                                <Text style={[styles.thSmall, { color: C.textMuted }]}>Satuan</Text>
-                                <Text style={[styles.thSmall, { color: C.textMuted }]}>Harga (Rp)</Text>
-                                <Text style={[styles.thRight, { color: C.textMuted }]}>Nilai (Rp)</Text>
-                            </View>
+                            {!yearActive ? (
+                                <View style={[styles.tableHead, { borderColor: C.border }]}>
+                                    <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
+                                    <Text style={[styles.thSmall, { color: C.textMuted }]}>Jumlah</Text>
+                                    <Text style={[styles.thSmall, { color: C.textMuted }]}>Satuan</Text>
+                                    <Text style={[styles.thSmall, { color: C.textMuted }]}>Harga (Rp)</Text>
+                                    <Text style={[styles.thRight, { color: C.textMuted }]}>Nilai (Rp)</Text>
+                                </View>
+                            ) : (
+                                <View style={[styles.tableHead, { borderColor: C.border }]}>
+                                    <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
+                                    <Text style={[styles.thSmall, { color: C.textMuted }]}>Jumlah</Text>
+                                    <Text style={[styles.thRightSlim, { color: C.textMuted }]}>Nilai (Rp)</Text>
+                                </View>
+                            )}
 
-                            {/* PRODUKSI */}
-                            <SectionTitle text="Produksi" C={C} />
-                            {base.production.map((p, i) => {
-                                const value = prodValue(p);
-                                return (
-                                    <RowView
-                                        key={`prod-${i}`}
-                                        C={C}
-                                        label={p.label ?? "Penerimaan"}
-                                        qty={Number((p.quantity)?.toFixed(0)) ?? undefined}
-                                        unit={p.unitType ?? null}
-                                        price={p.unitPrice ?? undefined}
-                                        value={value}
-                                    />
-                                );
-                            })}
+                            {/* Penerimaan */}
+                            <SectionTitle text="Penerimaan" C={C} />
+                            {!yearActive
+                                ? base.production.map((p, i) => {
+                                    const value = prodValue(p);
+                                    return (
+                                        <RowView
+                                            key={`prod-${i}`}
+                                            C={C}
+                                            label={p.label ?? "Produksi"}
+                                            qty={Number((p.quantity)?.toFixed(0)) ?? undefined}
+                                            unit={p.unitType ?? null}
+                                            price={p.unitPrice ?? undefined}
+                                            value={value}
+                                        />
+                                    );
+                                })
+                                : base.production.map((p, i) => {
+                                    const value = prodValue(p);
+                                    return (
+                                        <SimpleRow
+                                            key={`prod-y-${i}`}
+                                            label={p.label ?? "Produksi"}
+                                            qty={p.quantity != null ? Number(p.quantity.toFixed(0)) : null}
+                                            value={value}
+                                        />
+                                    );
+                                })}
 
                             {/* BIAYA PRODUKSI */}
                             <SectionTitle text="Biaya Produksi" C={C} />
                             <SubTitle text="I. Biaya Tunai" C={C} />
-                            {base.cash.map((c, i) => {
-                                const label = prettyLabel(c.category || "");
-                                const value = cashValue(c);
-                                return (
-                                    <RowView
-                                        key={`bt-${i}`}
-                                        C={C}
-                                        label={label}
-                                        qty={Number((c.quantity)?.toFixed(0)) ?? undefined}
-                                        unit={c.unit ?? undefined}
-                                        price={c.quantity != null ? c.unitPrice : undefined}
-                                        value={value}
-                                    />
-                                );
-                            })}
+                            {!yearActive
+                                ? base.cash.map((c, i) => {
+                                    const label = prettyLabel(c.category || "");
+                                    const value = cashValue(c);
+                                    return (
+                                        <RowView
+                                            key={`bt-${i}`}
+                                            C={C}
+                                            label={label}
+                                            qty={Number((c.quantity)?.toFixed(0)) ?? undefined}
+                                            unit={c.unit ?? undefined}
+                                            price={c.quantity != null ? c.unitPrice : undefined}
+                                            value={value}
+                                        />
+                                    );
+                                })
+                                : base.cash.map((c, i) => {
+                                    const label = prettyLabel(c.category || "");
+                                    const value = cashValue(c);
+                                    return (
+                                        <SimpleRow
+                                            key={`bt-y-${i}`}
+                                            label={label}
+                                            qty={c.quantity != null ? Number(c.quantity.toFixed(0)) : null}
+                                            value={value}
+                                        />
+                                    );
+                                })}
 
                             <SubTitle text="II. Biaya Non Tunai" C={C} />
 
-                            {/* TK Non Tunai (detail qty HOK + harga/HOK bila tersedia) */}
-                            {base.laborNonCashDetail?.amount ? (
-                                <RowView
-                                    C={C}
-                                    label={prettyLabel("TK Dalam Keluarga")}
-                                    qty={base.laborNonCashDetail.qty ?? undefined}
-                                    unit={base.laborNonCashDetail.unit ?? undefined}
-                                    price={
-                                        base.laborNonCashDetail.unitPrice != null
-                                            ? base.laborNonCashDetail.unitPrice
-                                            : undefined
-                                    }
-                                    value={base.laborNonCashDetail.amount}
-                                />
-                            ) : (
-                                totalBiayaNonTunaiTK > 0 && (
+                            {/* TK Non Tunai */}
+                            {!yearActive ? (
+                                base.laborNonCashDetail?.amount ? (
                                     <RowView
                                         C={C}
                                         label={prettyLabel("TK Dalam Keluarga")}
-                                        value={totalBiayaNonTunaiTK}
+                                        qty={base.laborNonCashDetail.qty ?? undefined}
+                                        unit={base.laborNonCashDetail.unit ?? undefined}
+                                        price={
+                                            base.laborNonCashDetail.unitPrice != null
+                                                ? base.laborNonCashDetail.unitPrice
+                                                : undefined
+                                        }
+                                        value={base.laborNonCashDetail.amount}
                                     />
+                                ) : (
+                                    totalBiayaNonTunaiTK > 0 && (
+                                        <RowView C={C} label={prettyLabel("TK Dalam Keluarga")} value={totalBiayaNonTunaiTK} />
+                                    )
+                                )
+                            ) : (
+                                base.laborNonCashDetail?.amount ? (
+                                    <SimpleRow
+                                        label={prettyLabel("TK Dalam Keluarga")}
+                                        qty={base.laborNonCashDetail.qty ?? null}
+                                        value={base.laborNonCashDetail.amount}
+                                    />
+                                ) : (
+                                    totalBiayaNonTunaiTK > 0 && (
+                                        <SimpleRow label={prettyLabel("TK Dalam Keluarga")} qty={null} value={totalBiayaNonTunaiTK} />
+                                    )
                                 )
                             )}
 
-
                             <SubMini text="Biaya Lain" C={C} />
-                            {/* Tools detail */}
-                            {totalTools > 0 && (
-                                <RowView
-                                    C={C}
-                                    label="Alat"
-                                    qty={totalToolsQty}
-                                    value={totalTools}
-                                />
-                            )}
-                            {/* Extras nominal (termasuk tax noncash) */}
-                            {base.extras.map((e, i) => (
-                                <RowView
-                                    key={`extra-${i}`}
-                                    C={C}
-                                    label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
-                                    value={extraValue(e)}
-                                />
-                            ))}
 
+                            {/* Tools */}
+                            {!yearActive ? (
+                                totalTools > 0 && (
+                                    <RowView C={C} label="Penyusutan Alat" qty={totalToolsQty} value={totalTools} />
+                                )
+                            ) : (
+                                totalTools > 0 && <SimpleRow label="Penyusutan Alat" qty={totalToolsQty} value={totalTools} />
+                            )}
+
+                            {/* Extras noncash */}
+                            {!yearActive
+                                ? base.extras.map((e, i) => (
+                                    <RowView
+                                        key={`extra-${i}`}
+                                        C={C}
+                                        label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
+                                        value={extraValue(e)}
+                                    />
+                                ))
+                                : base.extras.map((e, i) => (
+                                    <SimpleRow
+                                        key={`extra-y-${i}`}
+                                        label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
+                                        qty={null}
+                                        value={extraValue(e)}
+                                    />
+                                ))}
 
                             {/* TOTALS */}
                             <TotalLine label="Total Biaya Tunai" value={totalBiayaTunai} C={C} />
@@ -718,7 +811,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
 
-    // Table
+    // Table (full)
     tableHead: {
         flexDirection: "row",
         borderBottomWidth: 1,
@@ -728,6 +821,18 @@ const styles = StyleSheet.create({
     thUraian: { flex: 1.8, fontSize: 12, fontWeight: "800" },
     thSmall: { flex: 1, fontSize: 12, fontWeight: "800" },
     thRight: { width: 110, fontSize: 12, fontWeight: "800", textAlign: "right" },
+
+    // Table (year mode)
+    thRightSlim: { width: 130, fontSize: 12, fontWeight: "800", textAlign: "right" },
+    simpleRow: {
+        flexDirection: "row",
+        borderBottomWidth: 1,
+        paddingVertical: 8,
+    },
+    tdUraian: { flex: 1.8, fontSize: 12 },
+    tdSmall: { flex: 1, fontSize: 12 },
+    tdRight: { width: 130, fontSize: 12, textAlign: "right" },
+
     // Convert area
     convertWrap: {
         borderTopWidth: 1,

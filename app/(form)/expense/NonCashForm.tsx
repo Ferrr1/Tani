@@ -303,8 +303,12 @@ export default function NonCashForm({
 
     // watches
     const laborW = watch("labor");
-    const extrasW = watch("extras");
+    const taxW = watch("extras.tax");
+    const landRentW = watch("extras.landRent");
 
+    const extrasSubtotal = useMemo(() => {
+        return toNum(landRentW) + toNum(taxW);
+    }, [landRentW, taxW]);
     const total = useMemo(() => {
         const laborTotal =
             calcLaborSubtotal(laborW.nursery) +
@@ -323,10 +327,9 @@ export default function NonCashForm({
             return sum + (qty > 0 && price >= 0 ? qty * price : 0);
         }, 0);
 
-        const extras = toNum(extrasW.landRent) + toNum(extrasW.tax);
-        const totalNonCash = toolsTotal + laborTotal + extras;
+        const totalNonCash = toolsTotal + laborTotal + extrasSubtotal;
         return totalNonCash;
-    }, [calcLaborSubtotal, laborW, tools, extrasW]);
+    }, [calcLaborSubtotal, laborW, tools, extrasSubtotal]);
 
     /** ===== Build payload (sesuai service baru) ===== */
     const buildPayload = (fv: NonCashFormValues) => {
@@ -678,6 +681,12 @@ export default function NonCashForm({
                                         (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
                                 }}
                             />
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Subtotal Biaya Lain ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(extrasSubtotal || 0)}
+                                </Text>
+                            </Text>
                         </View>
                     )}
 
