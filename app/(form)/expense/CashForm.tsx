@@ -418,7 +418,9 @@ export default function CashForm({
     }, []);
 
     const L = watch("labor");
-    const extrasW = watch("extras");
+    const taxW = watch("extras.tax");
+    const landRentW = watch("extras.landRent");
+    const TransportW = watch("extras.transport");
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const seedsW = (watch("seeds") || []) as SeedLine[];
 
@@ -450,8 +452,8 @@ export default function CashForm({
     }, [L, calcLaborSubtotal]);
 
     const extrasSubtotal = useMemo(() => {
-        return toNum(extrasW.landRent) + toNum(extrasW.transport) + toNum(extrasW.tax);
-    }, [extrasW]);
+        return toNum(landRentW) + toNum(taxW) + toNum(TransportW);
+    }, [landRentW, taxW, TransportW]);
 
     const total = useMemo(() => {
         return seedSubtotal + chemOthersTotal + laborTotal + extrasSubtotal;
