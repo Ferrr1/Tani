@@ -22,40 +22,45 @@ export type ToolRow = {
 };
 export type ExtraRow = { category: string; label: string; amount: number };
 
+// ====== Year mode types (mengikuti screen) ======
+export type YearRow = {
+  section: "penerimaan" | "biaya" | "pendapatan" | "rc";
+  label: string;
+  amount: number;
+};
+
 export type GenerateReportPdfParams = {
   fileName?: string;
-  title?: string; // default: "Report"
-  profileAreaHa: number; // luas profil
-  effectiveArea: number; // luas konversi aktif
-  landFactor: number; // faktor konversi (hanya ditampilkan)
-  perHaTitle?: string; // default: `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`
+  title?: string;
+  profileAreaHa: number;
+  effectiveArea: number;
+  landFactor: number;
+  perHaTitle?: string;
   production: ProductionRow[];
   cash: CashRow[];
   tools: ToolRow[];
   extras: ExtraRow[];
-  // NONCASH TK:
-  laborNonCashNom: number; // total nominal (fallback)
+  laborNonCashNom: number;
   laborNonCashDetail?: {
-    // opsional: kalau ada, tampil qty/unit/harga/nilai persis seperti UI
     qty: number | null;
     unit: string | null;
     unitPrice: number | null;
     amount: number;
   };
 
-  // Tambahan metadata yang diminta
-  cropType?: string | null; // jenis tanaman
-  village?: string | null; // nama desa
+  // Metadata tambahan
+  cropType?: string | null;
+  village?: string | null;
+
+  // Year mode (opsional) — jika diisi, PDF akan pakai layout Year Mode (tanpa kolom "Jumlah")
+  yearRows?: YearRow[];
 
   // Utilities
   prettyLabel: (raw: string) => string;
   share?: boolean;
 };
 
-type AnyFS = typeof FS & {
-  Directory?: any;
-  File?: any;
-};
+type AnyFS = typeof FS & { Directory?: any; File?: any };
 
 function prodValue(p: ProductionRow) {
   return p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
@@ -68,6 +73,17 @@ function toolValue(t: ToolRow) {
 }
 function extraValue(e: ExtraRow) {
   return e.amount || 0;
+}
+
+// ===== Helpers Year Mode =====
+function extractMtNo(label: string): number | null {
+  const m = label.match(/MT\s*(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+function yr(yearRows: YearRow[] | undefined, lbl: string): number {
+  if (!yearRows?.length) return 0;
+  const row = yearRows.find((r) => r.label.toLowerCase() === lbl.toLowerCase());
+  return row ? Number(row.amount || 0) : 0;
 }
 
 export async function generateReportPdf({
@@ -86,18 +102,18 @@ export async function generateReportPdf({
   laborNonCashNom,
   laborNonCashDetail,
   prettyLabel,
+  yearRows, // <== NEW
   share = true,
 }: GenerateReportPdfParams): Promise<{ uri: string }> {
   const _perHaTitle =
     perHaTitle ?? `Tabel Analisis Kelayakan Usaha Tani per ${profileAreaHa} Ha`;
 
-  // Totals (tanpa * landFactor)
+  // Totals untuk season mode
   const totalProduksi = production.reduce((acc, p) => acc + prodValue(p), 0);
   const totalBiayaTunai = cash.reduce((acc, c) => acc + cashValue(c), 0);
   const totalTools = tools.reduce((acc, t) => acc + toolValue(t), 0);
   const totalExtras = extras.reduce((acc, e) => acc + extraValue(e), 0);
 
-  // TK Non Tunai: gunakan detail jika tersedia; kalau tidak, pakai nominal total
   const tkDetailAmount = laborNonCashDetail?.amount ?? null;
   const totalBiayaNonTunaiTK =
     tkDetailAmount != null ? tkDetailAmount : laborNonCashNom;
@@ -118,14 +134,20 @@ export async function generateReportPdf({
     .filter(Boolean)
     .join(" | ");
 
-  const html = `
-<!doctype html>
-<html lang="id">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${title}</title>
-<style>
+  // ===== Year mode detection
+  const isYearMode = !!(yearRows && yearRows.length > 0);
+  const mtList = isYearMode
+    ? Array.from(
+        new Set(
+          yearRows!
+            .map((r) => extractMtNo(r.label || ""))
+            .filter((n): n is number => Number.isFinite(n))
+        )
+      ).sort((a, b) => a - b)
+    : [];
+
+  // ===== HTML parts =====
+  const baseStyles = `
   @page { size: A4; margin: 18mm; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111827; }
   h1 { font-size: 20px; margin: 0 0 8px; }
@@ -143,7 +165,244 @@ export async function generateReportPdf({
   .totals .row { display:flex; justify-content:space-between; margin-top:6px; }
   .bold { font-weight:900; }
   .meta { font-size: 12px; }
-</style>
+  `;
+
+  // ===== TABLE HEADERS
+  const headSeason = `
+    <thead>
+      <tr>
+        <th class="td-uraian">Uraian</th>
+        <th class="td-small">Jumlah</th>
+        <th class="td-small">Satuan</th>
+        <th class="td-small">Harga (Rp)</th>
+        <th class="td-right">Nilai (Rp)</th>
+      </tr>
+    </thead>
+  `;
+
+  const headYear = `
+    <thead>
+      <tr>
+        <th class="td-uraian">Uraian</th>
+        <th class="td-right">Nilai (Rp)</th>
+      </tr>
+    </thead>
+  `;
+
+  // ===== BODY: Season mode rows (sama seperti screen)
+  const bodySeason = `
+    <!-- PRODUKSI -->
+    <tr><td colspan="5" class="section-title">Penerimaan</td></tr>
+    ${production
+      .map((p) => {
+        const value = prodValue(p);
+        const qtyStr =
+          p.quantity != null ? Number(p.quantity)?.toFixed(0) : "-";
+        const unitStr = p.unitType ?? "-";
+        const priceStr = p.unitPrice != null ? currency(p.unitPrice) : "-";
+        return `
+          <tr>
+            <td>${p.label ?? "Penerimaan"}</td>
+            <td>${qtyStr}</td>
+            <td>${unitStr}</td>
+            <td>${priceStr}</td>
+            <td class="td-right">${currency(value)}</td>
+          </tr>
+        `;
+      })
+      .join("")}
+
+    <!-- BIAYA PRODUKSI -->
+    <tr><td colspan="5" class="section-title">Biaya Produksi</td></tr>
+    <tr><td colspan="5" class="sub-title">I. Biaya Tunai</td></tr>
+    ${cash
+      .map((c) => {
+        const label = prettyLabel(c.category || "");
+        const value = cashValue(c);
+        const qtyStr =
+          c.quantity != null ? Number(c.quantity)?.toFixed(0) : "-";
+        const unitStr = c.unit ?? "-";
+        const priceStr =
+          c.quantity != null && c.unitPrice != null
+            ? currency(c.unitPrice)
+            : "-";
+        return `
+          <tr>
+            <td>${label}</td>
+            <td>${qtyStr}</td>
+            <td>${unitStr}</td>
+            <td>${priceStr}</td>
+            <td class="td-right">${currency(value)}</td>
+          </tr>
+        `;
+      })
+      .join("")}
+
+    <tr><td colspan="5" class="sub-title">II. Biaya Non Tunai</td></tr>
+
+    ${
+      laborNonCashDetail && laborNonCashDetail.amount > 0
+        ? `
+      <tr>
+        <td>TK Dalam Keluarga</td>
+        <td>${laborNonCashDetail.qty?.toFixed(0) ?? "-"}</td>
+        <td>${laborNonCashDetail.unit ?? "-"}</td>
+        <td>${
+          laborNonCashDetail.unitPrice != null
+            ? currency(laborNonCashDetail.unitPrice)
+            : "-"
+        }</td>
+        <td class="td-right">${currency(laborNonCashDetail.amount)}</td>
+      </tr>`
+        : totalBiayaNonTunaiTK > 0
+        ? `
+      <tr>
+        <td>TK Dalam Keluarga</td>
+        <td>-</td>
+        <td>-</td>
+        <td>-</td>
+        <td class="td-right">${currency(totalBiayaNonTunaiTK)}</td>
+      </tr>`
+        : ""
+    }
+
+    <tr><td colspan="5" class="sub-mini">Biaya Lain</td></tr>
+    ${tools
+      .map((t) => {
+        const value = toolValue(t);
+        return `
+          <tr>
+            <td>Alat${t.toolName ? ` | ${t.toolName}` : ""}</td>
+            <td>${t.quantity.toFixed(0)}</td>
+            <td>-</td>
+            <td>${currency(t.purchasePrice)}</td>
+            <td class="td-right">${currency(value)}</td>
+          </tr>
+        `;
+      })
+      .join("")}
+    ${extras
+      .map((e) => {
+        const value = extraValue(e);
+        const label = prettyLabel(e.label ?? e.category ?? "Biaya Lain");
+        return `
+          <tr>
+            <td>${label}</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td class="td-right">${currency(value)}</td>
+          </tr>
+        `;
+      })
+      .join("")}
+  `;
+
+  // ===== BODY: Year mode rows (tanpa kolom Jumlah)
+  const bodyYear = `
+    <!-- PENERIMAAN -->
+    <tr><td colspan="2" class="section-title">Penerimaan</td></tr>
+    ${mtList
+      .map(
+        (n) => `
+      <tr>
+        <td>Penerimaan MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Penerimaan MT ${n}`)
+        )}</td>
+      </tr>`
+      )
+      .join("")}
+
+    <!-- BIAYA PRODUKSI -->
+    <tr><td colspan="2" class="section-title">Biaya Produksi</td></tr>
+    ${mtList
+      .map(
+        (n) => `
+      <tr><td class="sub-title" colspan="2">MT ${n}</td></tr>
+      <tr>
+        <td>Biaya Non Tunai MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Biaya Non Tunai MT ${n}`)
+        )}</td>
+      </tr>
+      <tr>
+        <td>Biaya Tunai MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Biaya Tunai MT ${n}`)
+        )}</td>
+      </tr>
+      <tr>
+        <td>Biaya Total MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Biaya Total MT ${n}`)
+        )}</td>
+      </tr>`
+      )
+      .join("")}
+
+    <!-- PENDAPATAN -->
+    <tr><td colspan="2" class="section-title">Pendapatan</td></tr>
+    ${mtList
+      .map(
+        (n) => `
+      <tr>
+        <td>Pendapatan Atas Biaya Tunai MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Pendapatan Atas Biaya Tunai MT ${n}`)
+        )}</td>
+      </tr>
+      <tr>
+        <td>Pendapatan Atas Biaya Non Tunai MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Pendapatan Atas Biaya Non Tunai MT ${n}`)
+        )}</td>
+      </tr>
+      <tr>
+        <td>Pendapatan Atas Biaya Total MT ${n}</td>
+        <td class="td-right">${currency(
+          yr(yearRows, `Pendapatan Atas Biaya Total MT ${n}`)
+        )}</td>
+      </tr>`
+      )
+      .join("")}
+
+    <!-- R/C -->
+    <tr><td colspan="2" class="section-title">R/C</td></tr>
+    ${mtList
+      .map(
+        (n) => `
+      <tr>
+        <td>R/C Biaya Tunai MT ${n}</td>
+        <td class="td-right">${(
+          yr(yearRows, `R/C Biaya Tunai MT ${n}`) || 0
+        ).toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td>R/C Biaya Non Tunai MT ${n}</td>
+        <td class="td-right">${(
+          yr(yearRows, `R/C Biaya Non Tunai MT ${n}`) || 0
+        ).toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td>R/C Biaya Total MT ${n}</td>
+        <td class="td-right">${(
+          yr(yearRows, `R/C Biaya Total MT ${n}`) || 0
+        ).toFixed(2)}</td>
+      </tr>`
+      )
+      .join("")}
+  `;
+
+  // ===== FINAL HTML =====
+  const html = `
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${title}</title>
+<style>${baseStyles}</style>
 </head>
 <body>
 
@@ -158,131 +417,17 @@ export async function generateReportPdf({
     <p style="margin-top:-4px">Faktor: <b>${landFactor.toFixed(2)}</b></p>
   </div>
 
-  <!-- Header Kolom -->
   <table style="margin-top:12px">
-    <thead>
-      <tr>
-        <th class="td-uraian">Uraian</th>
-        <th class="td-small">Jumlah</th>
-        <th class="td-small">Satuan</th>
-        <th class="td-small">Harga (Rp)</th>
-        <th class="td-right">Nilai (Rp)</th>
-      </tr>
-    </thead>
+    ${isYearMode ? headYear : headSeason}
     <tbody>
-
-      <!-- PRODUKSI -->
-      <tr><td colspan="5" class="section-title">Produksi</td></tr>
-      ${production
-        .map((p) => {
-          const value = prodValue(p);
-          const qtyStr =
-            p.quantity != null ? Number(p.quantity)?.toFixed(0) : "-";
-          const unitStr = p.unitType ?? "-";
-          const priceStr = p.unitPrice != null ? currency(p.unitPrice) : "-";
-          return `
-            <tr>
-              <td>${p.label ?? "Penerimaan"}</td>
-              <td>${qtyStr}</td>
-              <td>${unitStr}</td>
-              <td>${priceStr}</td>
-              <td class="td-right">${currency(value)}</td>
-            </tr>
-          `;
-        })
-        .join("")}
-
-      <!-- BIAYA PRODUKSI -->
-      <tr><td colspan="5" class="section-title">Biaya Produksi</td></tr>
-      <tr><td colspan="5" class="sub-title">I. Biaya Tunai</td></tr>
-      ${cash
-        .map((c) => {
-          const label = prettyLabel(c.category || "");
-          const value = cashValue(c);
-          const qtyStr =
-            c.quantity != null ? Number(c.quantity)?.toFixed(0) : "-";
-          const unitStr = c.unit ?? "-";
-          // harga hanya bila ada qty (konsisten UI)
-          const priceStr =
-            c.quantity != null && c.unitPrice != null
-              ? currency(c.unitPrice)
-              : "-";
-          return `
-            <tr>
-              <td>${label}</td>
-              <td>${qtyStr}</td>
-              <td>${unitStr}</td>
-              <td>${priceStr}</td>
-              <td class="td-right">${currency(value)}</td>
-            </tr>
-          `;
-        })
-        .join("")}
-
-      <tr><td colspan="5" class="sub-title">II. Biaya Non Tunai</td></tr>
-
-      <!-- TK Dalam Keluarga -->
-      ${
-        laborNonCashDetail && laborNonCashDetail.amount > 0
-          ? `
-        <tr>
-          <td>TK Dalam Keluarga</td>
-          <td>${laborNonCashDetail.qty?.toFixed(0) ?? "-"}</td>
-          <td>${laborNonCashDetail.unit ?? "-"}</td>
-          <td>${
-            laborNonCashDetail.unitPrice != null
-              ? currency(laborNonCashDetail.unitPrice)
-              : "-"
-          }</td>
-          <td class="td-right">${currency(laborNonCashDetail.amount)}</td>
-        </tr>`
-          : totalBiayaNonTunaiTK > 0
-          ? `
-        <tr>
-          <td>TK Dalam Keluarga</td>
-          <td>-</td>
-          <td>-</td>
-          <td>-</td>
-          <td class="td-right">${currency(totalBiayaNonTunaiTK)}</td>
-        </tr>`
-          : ""
-      }
-
-      <tr><td colspan="5" class="sub-mini">Biaya Lain</td></tr>
-      ${tools
-        .map((t) => {
-          const value = toolValue(t);
-          return `
-            <tr>
-              <td>Alat${t.toolName ? ` | ${t.toolName}` : ""}</td>
-              <td>${t.quantity.toFixed(0)}</td>
-              <td>-</td>
-              <td>${currency(t.purchasePrice)}</td>
-              <td class="td-right">${currency(value)}</td>
-            </tr>
-          `;
-        })
-        .join("")}
-      ${extras
-        .map((e) => {
-          const value = extraValue(e);
-          const label = prettyLabel(e.label ?? e.category ?? "Biaya Lain");
-          return `
-            <tr>
-              <td>${label}</td>
-              <td>-</td>
-              <td>-</td>
-              <td>-</td>
-              <td class="td-right">${currency(value)}</td>
-            </tr>
-          `;
-        })
-        .join("")}
-
+      ${isYearMode ? bodyYear : bodySeason}
     </tbody>
   </table>
 
-  <!-- TOTALS -->
+  ${
+    isYearMode
+      ? "" // Year mode tidak menampilkan blok totals terpisah (sudah ada per-MT).
+      : `
   <div class="totals">
     <div class="row"><div>Total Biaya Tunai</div><div>${currency(
       totalBiayaTunai
@@ -308,51 +453,38 @@ export async function generateReportPdf({
       2
     )}</div></div>
   </div>
+  `
+  }
 
 </body>
 </html>
 `.trim();
 
-  // 1) Print to a temporary file
+  // Cetak & simpan (sama seperti sebelumnya)
   const { uri: tmpUri } = await Print.printToFileAsync({ html });
 
-  // 2) Save under a deterministic name using the **new FS API** if present; otherwise fall back to legacy API
   const FSAny = FS as AnyFS;
   let outUri = tmpUri;
 
   if (FSAny.Directory && FSAny.File) {
-    // ===== New API path (SDK 54+): Directory / File classes =====
     try {
       const { Directory, File } = FSAny;
-
-      // Use the cache scope for generated documents (safe & ephemeral)
-      // Create (or ensure) a "reports" directory in cache
-      // NOTE: the exact method names come from the new object-based API.
-      // These have stable names in SDK 54+ docs/blog.
       const reportsDir = await Directory.cache.createDirectoryAsync("reports", {
         intermediates: true,
       });
-
-      // Create a file handle with your final name
       const finalName = (fileName || title) + ".pdf";
       const target = await reportsDir.createFileAsync(finalName, {
         overwrite: true,
       });
-
-      // Move the tmp print result to the target file
       await File.fromUri(tmpUri).moveAsync(target.uri);
       outUri = target.uri;
     } catch (e) {
-      // If something goes wrong with the new API, we’ll fall back to legacy below.
       console.warn("New FS API failed, falling back to legacy:", e);
     }
   }
 
   if (outUri === tmpUri) {
-    // ===== Legacy API path (explicit, no warnings) =====
-    // Import from "expo-file-system/legacy" so your app doesn't show deprecation warnings.
     const Legacy = await import("expo-file-system/legacy");
-
     const reportsDir = Legacy.cacheDirectory + "reports/";
     try {
       const info = await Legacy.getInfoAsync(reportsDir);
@@ -360,15 +492,12 @@ export async function generateReportPdf({
         await Legacy.makeDirectoryAsync(reportsDir, { intermediates: true });
       }
     } catch {}
-
     const finalName = (fileName || title) + ".pdf";
     const target = reportsDir + finalName;
-
     try {
       await Legacy.moveAsync({ from: tmpUri, to: target });
       outUri = target;
     } catch {
-      // keep tmpUri if move fails
       outUri = tmpUri;
     }
   }

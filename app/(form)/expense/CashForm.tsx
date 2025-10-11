@@ -38,7 +38,9 @@ import {
     Unit,
     UNIT_FERTILIZER,
 } from "@/types/expense";
+import { calcLaborSubtotal, sumChem } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
+import { toNum } from "@/utils/number";
 
 type Mode = "create" | "edit";
 
@@ -392,30 +394,7 @@ export default function CashForm({
         watch,
     ]);
 
-    // ===== Helpers
-    const toNum = (s?: string) => {
-        const v = parseFloat((s || "0").replace(",", "."));
-        return Number.isFinite(v) ? v : 0;
-    };
 
-    const calcLaborSubtotal = useCallback((lf: LaborForm) => {
-        if (lf.tipe === "borongan") {
-            const kontrak = toNum(lf.hargaBorongan);
-            return kontrak >= 0 ? kontrak : 0;
-        }
-        const orang = toNum(lf.jumlahOrang);
-        const hari = toNum(lf.jumlahHari);
-        const upah = toNum(lf.upahHarian);
-        return orang > 0 && hari > 0 && upah >= 0 ? orang * hari * upah : 0;
-    }, []);
-
-    const sumChem = useCallback((rows: ChemItem[]) => {
-        return rows.reduce((acc, r) => {
-            const q = toNum(r.qty);
-            const p = toNum(r.price);
-            return acc + (q > 0 && p >= 0 ? q * p : 0);
-        }, 0);
-    }, []);
 
     const L = watch("labor");
     const taxW = watch("extras.tax");

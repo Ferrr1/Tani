@@ -28,7 +28,9 @@ import {
     NonCashToolInput,
     ToolForm,
 } from "@/types/expense";
+import { calcLaborSubtotal } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
+import { toNum } from "@/utils/number";
 
 export default function NonCashForm({
     seasonId,
@@ -100,31 +102,8 @@ export default function NonCashForm({
         mode === "edit"
     );
 
-    /** ===== Helpers ===== */
-    const toNum = (x?: unknown) => {
-        if (x === null || x === undefined) return 0;
-        if (typeof x === "number") return Number.isFinite(x) ? x : 0;
-        if (typeof x === "string") {
-            const v = parseFloat(x.replace(",", "."));
-            return Number.isFinite(v) ? v : 0;
-        }
-        return 0;
-    };
-
     const toStr = (v: any) => (v === null || v === undefined ? "" : String(v));
 
-    const calcLaborSubtotal = useCallback((lf: LaborForm) => {
-        if (lf.tipe === "borongan") {
-            const kontrak = toNum(lf.hargaBorongan);
-            return kontrak >= 0 ? kontrak : 0;
-        }
-        const orang = toNum(lf.jumlahOrang);
-        const hari = toNum(lf.jumlahHari);
-        const upah = toNum(lf.upahHarian);
-        return orang > 0 && hari > 0 && upah >= 0 ? orang * hari * upah : 0;
-    }, []);
-
-    /** ===== Hydrate (edit) ===== */
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
@@ -150,6 +129,7 @@ export default function NonCashForm({
                         nilaiSisa: toStr(t.salvage_value),
                     }))
                 );
+                console.log(toolsRows)
 
                 // extras
                 setValue("extras.tax", "");
@@ -161,6 +141,7 @@ export default function NonCashForm({
                     if (kind === "tax") setValue("extras.tax", toStr(amount));
                     if (kind === "land_rent") setValue("extras.landRent", toStr(amount));
                 });
+                console.log(extras)
 
                 const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = {
                     persemaian: "nursery",

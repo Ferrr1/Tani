@@ -40,6 +40,13 @@ function prettyLabel(raw: string): string {
     return name ? `${label} | ${name.trim()}` : label;
 }
 
+// ===== Tambahan untuk Year Mode =====
+type YearRow = {
+    section: "penerimaan" | "biaya" | "pendapatan" | "rc";
+    label: string;
+    amount: number;
+};
+
 export default function ReportScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme] as Theme;
@@ -134,9 +141,9 @@ export default function ReportScreen() {
 
     const activeFilterText =
         seasonId && currentSeason
-            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(currentSeason.start_date)} — ${fmtDate(
-                currentSeason.end_date
-            )}`
+            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(
+                currentSeason.start_date
+            )} — ${fmtDate(currentSeason.end_date)}`
             : yearActive
                 ? `Filter: Tahun ${year}`
                 : "Pilih Musim atau Tahun";
@@ -162,6 +169,7 @@ export default function ReportScreen() {
         return target / base;
     }, [profileAreaHa, effectiveArea]);
 
+    const [yearRows, setYearRows] = useState<YearRow[]>([]); // <== sumber year-mode
     const [base, setBase] = useState({
         production: [] as {
             label: string;
@@ -203,6 +211,8 @@ export default function ReportScreen() {
                     tools: d.tools || [],
                     extras: d.extras || [],
                 });
+                // set untuk year-mode
+                setYearRows(d.yearRows || []);
             } catch (e) {
                 console.warn("report dataset error:", e);
                 if (!alive) return;
@@ -214,6 +224,7 @@ export default function ReportScreen() {
                     tools: [],
                     extras: [],
                 });
+                setYearRows([]);
             } finally {
                 if (alive) setBootLoading(false);
             }
@@ -243,18 +254,15 @@ export default function ReportScreen() {
         [base.cash]
     );
 
-    const totalBiayaNonTunaiTK = useMemo(
-        () => base.laborNonCashNom,
-        [base.laborNonCashNom]
-    );
+    const totalBiayaNonTunaiTK = useMemo(() => base.laborNonCashNom, [base.laborNonCashNom]);
 
     const totalTools = useMemo(
-        () => base.tools.reduce((acc, t) => acc + (t.quantity * t.purchasePrice), 0),
+        () => base.tools.reduce((acc, t) => acc + t.quantity * t.purchasePrice, 0),
         [base.tools]
     );
 
     const totalToolsQty = useMemo(
-        () => base.tools.reduce((acc, t) => acc + (t.quantity), 0),
+        () => base.tools.reduce((acc, t) => acc + t.quantity, 0),
         [base.tools]
     );
 
@@ -274,31 +282,49 @@ export default function ReportScreen() {
 
     const showBlocking = (loadingService || profileLoading) && totalProduksi === 0;
 
-    const musimLabel =
-        seasonId && currentSeason ? `Musim-${currentSeason.season_no}` : "Semua-Musim";
+    const musimLabel = seasonId && currentSeason ? `Musim-${currentSeason.season_no}` : "Semua-Musim";
 
     const tahunLabel = yearActive
         ? String(year)
-        : (currentSeason ? `${new Date(currentSeason.start_date).getFullYear()}` : "Semua-Tahun");
+        : currentSeason
+            ? `${new Date(currentSeason.start_date).getFullYear()}`
+            : "Semua-Tahun";
 
     const pdfFileName = `Laporan ${musimLabel} ${tahunLabel}`;
 
     // ===== Row sederhana untuk Year Mode (tanpa Satuan & Harga) =====
     const SimpleRow = ({
         label,
-        qty,
         value,
     }: {
         label: string;
-        qty?: number | null;
         value: number;
     }) => (
         <View style={[styles.simpleRow, { borderColor: C.border }]}>
-            <Text style={[styles.tdUraian, { color: C.text }]} numberOfLines={2}>{label}</Text>
-            <Text style={[styles.tdSmall, { color: C.text }]}>{qty != null ? Math.round(qty) : "-"}</Text>
+            <Text style={[styles.tdUraian, { color: C.text }]} numberOfLines={2}>
+                {label}
+            </Text>
             <Text style={[styles.tdRight, { color: C.text }]}>{value.toLocaleString("id-ID")}</Text>
         </View>
     );
+
+    // ===== Helpers untuk YEAR MODE =====
+    const yr = (lbl: string) => {
+        const row = yearRows.find((r) => r.label.toLowerCase() === lbl.toLowerCase());
+        return row ? Number(row.amount || 0) : 0;
+    };
+    const extractMtNo = (label: string): number | null => {
+        const m = label.match(/MT\s*(\d+)/i);
+        return m ? Number(m[1]) : null;
+    };
+    const mtList = useMemo(() => {
+        const set = new Set<number>();
+        yearRows.forEach((r) => {
+            const n = extractMtNo(r.label || "");
+            if (n != null && Number.isFinite(n)) set.add(n);
+        });
+        return Array.from(set).sort((a, b) => a - b);
+    }, [yearRows]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -338,8 +364,11 @@ export default function ReportScreen() {
                                     laborNonCashNom: base.laborNonCashNom,
                                     laborNonCashDetail: base.laborNonCashDetail ?? undefined,
                                     prettyLabel,
+                                    // tambahkan ini saat Year Mode:
+                                    yearRows: yearActive ? yearRows : undefined,
                                     share: true,
                                 });
+
                             }}
                             style={({ pressed }) => [
                                 styles.iconBtn,
@@ -574,7 +603,12 @@ export default function ReportScreen() {
                     {!showBlocking && !bootLoading && (
                         <>
                             {/* Header Kolom */}
-                            {!yearActive ? (
+                            {yearActive ? (
+                                <View style={[styles.tableHead, { borderColor: C.border }]}>
+                                    <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
+                                    <Text style={[styles.thRightSlim, { color: C.textMuted }]}>Nilai (Rp)</Text>
+                                </View>
+                            ) : (
                                 <View style={[styles.tableHead, { borderColor: C.border }]}>
                                     <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
                                     <Text style={[styles.thSmall, { color: C.textMuted }]}>Jumlah</Text>
@@ -582,152 +616,185 @@ export default function ReportScreen() {
                                     <Text style={[styles.thSmall, { color: C.textMuted }]}>Harga (Rp)</Text>
                                     <Text style={[styles.thRight, { color: C.textMuted }]}>Nilai (Rp)</Text>
                                 </View>
-                            ) : (
-                                <View style={[styles.tableHead, { borderColor: C.border }]}>
-                                    <Text style={[styles.thUraian, { color: C.textMuted }]}>Uraian</Text>
-                                    <Text style={[styles.thSmall, { color: C.textMuted }]}>Jumlah</Text>
-                                    <Text style={[styles.thRightSlim, { color: C.textMuted }]}>Nilai (Rp)</Text>
-                                </View>
                             )}
 
-                            {/* Penerimaan */}
-                            <SectionTitle text="Penerimaan" C={C} />
-                            {!yearActive
-                                ? base.production.map((p, i) => {
-                                    const value = prodValue(p);
-                                    return (
-                                        <RowView
-                                            key={`prod-${i}`}
-                                            C={C}
-                                            label={p.label ?? "Produksi"}
-                                            qty={Number((p.quantity)?.toFixed(0)) ?? undefined}
-                                            unit={p.unitType ?? null}
-                                            price={p.unitPrice ?? undefined}
-                                            value={value}
-                                        />
-                                    );
-                                })
-                                : base.production.map((p, i) => {
-                                    const value = prodValue(p);
-                                    return (
+                            {/* ====== YEAR MODE CONTENT ====== */}
+                            {yearActive ? (
+                                <>
+                                    {/* PENERIMAAN */}
+                                    <SectionTitle text="Penerimaan" C={C} />
+                                    {mtList.map((n) => (
                                         <SimpleRow
-                                            key={`prod-y-${i}`}
-                                            label={p.label ?? "Produksi"}
-                                            qty={p.quantity != null ? Number(p.quantity.toFixed(0)) : null}
-                                            value={value}
+                                            key={`pen-mt-${n}`}
+                                            label={`Penerimaan MT ${n}`}
+                                            value={yr(`Penerimaan MT ${n}`)}
                                         />
-                                    );
-                                })}
+                                    ))}
 
-                            {/* BIAYA PRODUKSI */}
-                            <SectionTitle text="Biaya Produksi" C={C} />
-                            <SubTitle text="I. Biaya Tunai" C={C} />
-                            {!yearActive
-                                ? base.cash.map((c, i) => {
-                                    const label = prettyLabel(c.category || "");
-                                    const value = cashValue(c);
-                                    return (
+                                    {/* BIAYA PRODUKSI */}
+                                    <SectionTitle text="Biaya Produksi" C={C} />
+                                    {mtList.map((n) => (
+                                        <React.Fragment key={`biaya-mt-${n}`}>
+                                            <SubTitle text={`MT ${n}`} C={C} />
+                                            <SimpleRow
+                                                label={`Biaya Non Tunai MT ${n}`}
+                                                value={yr(`Biaya Non Tunai MT ${n}`)}
+                                            />
+                                            <SimpleRow
+                                                label={`Biaya Tunai MT ${n}`}
+                                                value={yr(`Biaya Tunai MT ${n}`)}
+                                            />
+                                            <SimpleRow
+                                                label={`Biaya Total MT ${n}`}
+                                                value={yr(`Biaya Total MT ${n}`)}
+                                            />
+                                        </React.Fragment>
+                                    ))}
+
+                                    {/* PENDAPATAN */}
+                                    <SectionTitle text="Pendapatan" C={C} />
+                                    {mtList.map((n) => (
+                                        <React.Fragment key={`pend-mt-${n}`}>
+                                            <SimpleRow
+                                                label={`Pendapatan Atas Biaya Tunai MT ${n}`}
+                                                value={yr(`Pendapatan Atas Biaya Tunai MT ${n}`)}
+                                            />
+                                            <SimpleRow
+                                                label={`Pendapatan Atas Biaya Non Tunai MT ${n}`}
+                                                value={yr(`Pendapatan Atas Biaya Non Tunai MT ${n}`)}
+                                            />
+                                            <SimpleRow
+                                                label={`Pendapatan Atas Biaya Total MT ${n}`}
+                                                value={yr(`Pendapatan Atas Biaya Total MT ${n}`)}
+                                            />
+                                        </React.Fragment>
+                                    ))}
+
+                                    {/* R/C */}
+                                    <SectionTitle text="R/C" C={C} />
+                                    {mtList.map((n) => (
+                                        <React.Fragment key={`rc-mt-${n}`}>
+                                            <TotalLine
+                                                label={`R/C Biaya Tunai MT ${n}`}
+                                                valueStr={yr(`R/C Biaya Tunai MT ${n}`).toFixed(2)}
+                                                C={C}
+                                            />
+                                            <TotalLine
+                                                label={`R/C Biaya Non Tunai MT ${n}`}
+                                                valueStr={yr(`R/C Biaya Non Tunai MT ${n}`).toFixed(2)}
+                                                C={C}
+                                            />
+                                            <TotalLine
+                                                label={`R/C Biaya Total MT ${n}`}
+                                                valueStr={yr(`R/C Biaya Total MT ${n}`).toFixed(2)}
+                                                C={C}
+                                            />
+                                        </React.Fragment>
+                                    ))}
+                                </>
+                            ) : (
+                                // ====== SEASON MODE CONTENT (tetap seperti sebelumnya) ======
+                                <>
+                                    {/* Penerimaan */}
+                                    <SectionTitle text="Penerimaan" C={C} />
+                                    {base.production.map((p, i) => {
+                                        const value = p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
+                                        return (
+                                            <RowView
+                                                key={`prod-${i}`}
+                                                C={C}
+                                                label={p.label ?? "Produksi"}
+                                                qty={Number(p.quantity?.toFixed(0)) ?? undefined}
+                                                unit={p.unitType ?? null}
+                                                price={p.unitPrice ?? undefined}
+                                                value={value}
+                                            />
+                                        );
+                                    })}
+
+                                    {/* BIAYA PRODUKSI */}
+                                    <SectionTitle text="Biaya Produksi" C={C} />
+                                    <SubTitle text="I. Biaya Tunai" C={C} />
+                                    {base.cash.map((c, i) => {
+                                        const label = prettyLabel(c.category || "");
+                                        const value = c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
+                                        return (
+                                            <RowView
+                                                key={`bt-${i}`}
+                                                C={C}
+                                                label={label}
+                                                qty={Number(c.quantity?.toFixed(0)) ?? undefined}
+                                                unit={c.unit ?? undefined}
+                                                price={c.quantity != null ? c.unitPrice : undefined}
+                                                value={value}
+                                            />
+                                        );
+                                    })}
+
+                                    <SubTitle text="II. Biaya Non Tunai" C={C} />
+
+                                    {/* TK Non Tunai */}
+                                    {base.laborNonCashDetail?.amount ? (
                                         <RowView
-                                            key={`bt-${i}`}
                                             C={C}
-                                            label={label}
-                                            qty={Number((c.quantity)?.toFixed(0)) ?? undefined}
-                                            unit={c.unit ?? undefined}
-                                            price={c.quantity != null ? c.unitPrice : undefined}
-                                            value={value}
+                                            label={prettyLabel("TK Dalam Keluarga")}
+                                            qty={base.laborNonCashDetail.qty ?? undefined}
+                                            unit={base.laborNonCashDetail.unit ?? undefined}
+                                            price={
+                                                base.laborNonCashDetail.unitPrice != null
+                                                    ? base.laborNonCashDetail.unitPrice
+                                                    : undefined
+                                            }
+                                            value={base.laborNonCashDetail.amount}
                                         />
-                                    );
-                                })
-                                : base.cash.map((c, i) => {
-                                    const label = prettyLabel(c.category || "");
-                                    const value = cashValue(c);
-                                    return (
-                                        <SimpleRow
-                                            key={`bt-y-${i}`}
-                                            label={label}
-                                            qty={c.quantity != null ? Number(c.quantity.toFixed(0)) : null}
-                                            value={value}
+                                    ) : (
+                                        totalBiayaNonTunaiTK > 0 && (
+                                            <RowView
+                                                C={C}
+                                                label={prettyLabel("TK Dalam Keluarga")}
+                                                value={totalBiayaNonTunaiTK}
+                                            />
+                                        )
+                                    )}
+
+                                    <SubMini text="Biaya Lain" C={C} />
+
+                                    {/* Tools */}
+                                    {totalTools > 0 && (
+                                        <RowView C={C} label="Penyusutan Alat" qty={totalToolsQty} value={totalTools} />
+                                    )}
+
+                                    {/* Extras noncash */}
+                                    {base.extras.map((e, i) => (
+                                        <RowView
+                                            key={`extra-${i}`}
+                                            C={C}
+                                            label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
+                                            value={extraValue(e)}
                                         />
-                                    );
-                                })}
+                                    ))}
 
-                            <SubTitle text="II. Biaya Non Tunai" C={C} />
+                                    {/* TOTALS */}
+                                    <TotalLine label="Total Biaya Tunai" value={totalBiayaTunai} C={C} />
+                                    <TotalLine label="Total Biaya Non Tunai" value={totalBiayaNonTunai} C={C} />
+                                    <TotalLine label="Total Biaya" value={totalBiaya} C={C} bold />
 
-                            {/* TK Non Tunai */}
-                            {!yearActive ? (
-                                base.laborNonCashDetail?.amount ? (
-                                    <RowView
+                                    {/* PENDAPATAN */}
+                                    <SectionTitle text="Pendapatan" C={C} />
+                                    <TotalLine
+                                        label="Pendapatan Atas Biaya Tunai"
+                                        value={pendapatanAtasBiayaTunai}
                                         C={C}
-                                        label={prettyLabel("TK Dalam Keluarga")}
-                                        qty={base.laborNonCashDetail.qty ?? undefined}
-                                        unit={base.laborNonCashDetail.unit ?? undefined}
-                                        price={
-                                            base.laborNonCashDetail.unitPrice != null
-                                                ? base.laborNonCashDetail.unitPrice
-                                                : undefined
-                                        }
-                                        value={base.laborNonCashDetail.amount}
                                     />
-                                ) : (
-                                    totalBiayaNonTunaiTK > 0 && (
-                                        <RowView C={C} label={prettyLabel("TK Dalam Keluarga")} value={totalBiayaNonTunaiTK} />
-                                    )
-                                )
-                            ) : (
-                                base.laborNonCashDetail?.amount ? (
-                                    <SimpleRow
-                                        label={prettyLabel("TK Dalam Keluarga")}
-                                        qty={base.laborNonCashDetail.qty ?? null}
-                                        value={base.laborNonCashDetail.amount}
-                                    />
-                                ) : (
-                                    totalBiayaNonTunaiTK > 0 && (
-                                        <SimpleRow label={prettyLabel("TK Dalam Keluarga")} qty={null} value={totalBiayaNonTunaiTK} />
-                                    )
-                                )
-                            )}
-
-                            <SubMini text="Biaya Lain" C={C} />
-
-                            {/* Tools */}
-                            {!yearActive ? (
-                                totalTools > 0 && (
-                                    <RowView C={C} label="Penyusutan Alat" qty={totalToolsQty} value={totalTools} />
-                                )
-                            ) : (
-                                totalTools > 0 && <SimpleRow label="Penyusutan Alat" qty={totalToolsQty} value={totalTools} />
-                            )}
-
-                            {/* Extras noncash */}
-                            {!yearActive
-                                ? base.extras.map((e, i) => (
-                                    <RowView
-                                        key={`extra-${i}`}
+                                    <TotalLine
+                                        label="Pendapatan Atas Biaya Total"
+                                        value={pendapatanAtasBiayaTotal}
                                         C={C}
-                                        label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
-                                        value={extraValue(e)}
                                     />
-                                ))
-                                : base.extras.map((e, i) => (
-                                    <SimpleRow
-                                        key={`extra-y-${i}`}
-                                        label={prettyLabel(e.label ?? e.category ?? "Biaya Lain")}
-                                        qty={null}
-                                        value={extraValue(e)}
-                                    />
-                                ))}
-
-                            {/* TOTALS */}
-                            <TotalLine label="Total Biaya Tunai" value={totalBiayaTunai} C={C} />
-                            <TotalLine label="Total Biaya Non Tunai" value={totalBiayaNonTunai} C={C} />
-                            <TotalLine label="Total Biaya" value={totalBiaya} C={C} bold />
-
-                            {/* PENDAPATAN */}
-                            <SectionTitle text="Pendapatan" C={C} />
-                            <TotalLine label="Pendapatan Atas Biaya Tunai" value={pendapatanAtasBiayaTunai} C={C} />
-                            <TotalLine label="Pendapatan Atas Biaya Total" value={pendapatanAtasBiayaTotal} C={C} />
-                            <TotalLine label="R/C Biaya Tunai" valueStr={rcTunai.toFixed(2)} C={C} />
-                            <TotalLine label="R/C Biaya Total" valueStr={rcTotal.toFixed(2)} C={C} />
+                                    <TotalLine label="R/C Biaya Tunai" valueStr={rcTunai.toFixed(2)} C={C} />
+                                    <TotalLine label="R/C Biaya Total" valueStr={rcTotal.toFixed(2)} C={C} />
+                                </>
+                            )}
 
                             {/* ===== Konversi Input ===== */}
                             <View style={[styles.convertWrap, { borderTopColor: C.border }]}>
@@ -830,7 +897,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
     },
     tdUraian: { flex: 1.8, fontSize: 12 },
-    tdSmall: { flex: 1, fontSize: 12 },
+    tdSmall: { flex: 1, textAlign: "center", fontSize: 12 },
     tdRight: { width: 130, fontSize: 12, textAlign: "right" },
 
     // Convert area

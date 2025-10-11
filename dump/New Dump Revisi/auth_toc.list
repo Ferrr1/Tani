@@ -1,0 +1,33 @@
+;
+; Archive created at 2025-10-10 22:52:02
+;     dbname: postgres
+;     TOC Entries: 24
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 17.6
+;     Dumped by pg_dump version: 17.4
+;
+;
+; Selected TOC Entries:
+;
+;348; 1259 16495 TABLE auth users supabase_auth_admin
+;4146; 0 0 COMMENT auth TABLE users supabase_auth_admin
+;4147; 0 0 COMMENT auth COLUMN users.is_sso_user supabase_auth_admin
+;3978; 2606 16921 CONSTRAINT auth users users_phone_key supabase_auth_admin
+;3980; 2606 16501 CONSTRAINT auth users users_pkey supabase_auth_admin
+;3968; 1259 16748 INDEX auth confirmation_token_idx supabase_auth_admin
+;3969; 1259 16750 INDEX auth email_change_token_current_idx supabase_auth_admin
+;3970; 1259 16751 INDEX auth email_change_token_new_idx supabase_auth_admin
+;3971; 1259 16752 INDEX auth reauthentication_token_idx supabase_auth_admin
+;3972; 1259 16749 INDEX auth recovery_token_idx supabase_auth_admin
+;3973; 1259 16908 INDEX auth users_email_partial_key supabase_auth_admin
+;4148; 0 0 COMMENT auth INDEX users_email_partial_key supabase_auth_admin
+;3974; 1259 16746 INDEX auth users_instance_id_email_idx supabase_auth_admin
+;3975; 1259 16505 INDEX auth users_instance_id_idx supabase_auth_admin
+;3976; 1259 16963 INDEX auth users_is_anonymous_idx supabase_auth_admin
+3981; 2620 17434 TRIGGER auth users on_auth_user_created supabase_auth_admin
+3982; 2620 17436 TRIGGER auth users on_auth_user_updated_email supabase_auth_admin
+;4136; 0 16495 ROW SECURITY auth users supabase_auth_admin
