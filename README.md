@@ -119,3 +119,9 @@ Catatan: Anda juga bisa membuka aplikasi di perangkat fisik menggunakan Expo Go 
    ```
 
 4. Sudah Selesai Terima Kasih :)
+
+Note: Ketika Error pada saat pertama kali build karena projectId harus di ubah manual. dan pastikan env tidak terkena didalam .gitignore pada saat build
+
+```bash
+projectId: "YOUR-PROJECT-ID",
+```
