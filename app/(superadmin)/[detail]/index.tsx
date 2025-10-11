@@ -1,6 +1,7 @@
+// app/(superadmin)/users/[detail].tsx (atau lokasi komponen detail kamu)
 import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
-import { AdminUserRow, useAdminUserService } from "@/services/adminUserService";
+import { SuperAdminUserRow, useSuperAdminUserService } from "@/services/superAdminService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
@@ -8,7 +9,7 @@ import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
@@ -25,17 +26,19 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AdminUserDetail() {
-    const { detail } = useLocalSearchParams<{ detail: string }>();
-    const userId = detail;
+    const { detail } = useLocalSearchParams<{ detail?: string }>();
+    const userId = detail && detail !== "new" ? detail : undefined;
+    const isCreate = !userId; // "new" atau tanpa param → create
 
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
 
-    const { getUserById, updateUser } = useAdminUserService();
+    const { getUserById, createUser, updateUser, deleteUser } =
+        useSuperAdminUserService();
 
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!isCreate);
     const [saving, setSaving] = useState(false);
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
@@ -57,17 +60,19 @@ export default function AdminUserDetail() {
         mode: "onChange",
     });
 
+    // ===== LOAD (edit only)
     const load = useCallback(async () => {
         if (!userId) return;
         setLoading(true);
         try {
-            const row = (await getUserById(userId)) as AdminUserRow | null;
+            const row = (await getUserById(userId)) as SuperAdminUserRow | null;
             if (!row) {
                 Alert.alert("Tidak ditemukan", "Pengguna tidak ditemukan.");
                 router.back();
                 return;
             }
-            const fetchedRole = row.role === "admin" ? "admin" : "user";
+            const fetchedRole: Role =
+                row.role === "superadmin" ? "superadmin" : row.role === "admin" ? "admin" : "user";
             setRole(fetchedRole);
 
             reset({
@@ -87,18 +92,60 @@ export default function AdminUserDetail() {
     }, [userId, getUserById, router, reset]);
 
     useEffect(() => {
-        load();
-    }, [load]);
+        if (!isCreate) load();
+    }, [isCreate, load]);
 
+    // ===== Submit
     const onSubmit = async (v: DetailForm) => {
-        if (!userId) return;
         setSaving(true);
         try {
-            const luas = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
-            if (Number.isNaN(luas) || luas <= 0) {
-                Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
-                setSaving(false);
+            if (isCreate) {
+                // Validasi create: password wajib
+                const pwd = (v.password || "").trim();
+                if (pwd.length < 6) {
+                    Alert.alert("Validasi", "Password minimal 6 karakter.");
+                    setSaving(false);
+                    return;
+                }
+
+                // Luas lahan hanya relevan untuk role "user"
+                let luas: number | undefined = undefined;
+                if (role === "user") {
+                    const parsed = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+                    if (Number.isNaN(parsed) || parsed <= 0) {
+                        Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
+                        setSaving(false);
+                        return;
+                    }
+                    luas = parsed;
+                }
+
+                await createUser({
+                    email: v.email.trim(),
+                    password: pwd,
+                    fullName: v.fullName.trim(),
+                    namaDesa: v.village.trim(),
+                    luasLahan: luas, // ignored by server if role != 'user'
+                    role,
+                });
+
+                Alert.alert("Berhasil", "User baru berhasil dibuat.");
+                router.back();
                 return;
+            }
+
+            // UPDATE
+            if (!userId) return;
+
+            let luas: number | undefined = undefined;
+            if (role === "user") {
+                const parsed = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+                if (Number.isNaN(parsed) || parsed <= 0) {
+                    Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
+                    setSaving(false);
+                    return;
+                }
+                luas = parsed;
             }
 
             await updateUser({
@@ -107,19 +154,56 @@ export default function AdminUserDetail() {
                 newPassword: (v.password || "").trim() ? v.password : undefined,
                 newFullName: v.fullName.trim(),
                 newNamaDesa: v.village.trim(),
-                newLuasLahan: luas,
-                newRole: role
+                newLuasLahan: luas, // server akan set null jika role != 'user'
+                newRole: role,
             });
 
             Alert.alert("Tersimpan", "Profil pengguna berhasil diperbarui.");
             router.back();
         } catch (e: any) {
             console.log(e);
-            Alert.alert("Gagal menyimpan", e?.message ?? "Terjadi kesalahan.");
+            Alert.alert("Gagal", e?.message ?? "Terjadi kesalahan.");
         } finally {
             setSaving(false);
         }
     };
+
+    // ===== Delete (edit only)
+    const onDelete = useCallback(() => {
+        if (!userId) return;
+        Alert.alert(
+            "Hapus Pengguna?",
+            "Tindakan ini tidak dapat dibatalkan.",
+            [
+                { text: "Batal", style: "cancel" },
+                {
+                    text: "Hapus",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setSaving(true);
+                            await deleteUser(userId);
+                            Alert.alert("Terhapus", "Pengguna berhasil dihapus.");
+                            router.back();
+                        } catch (e: any) {
+                            console.log(e);
+                            Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus pengguna.");
+                        } finally {
+                            setSaving(false);
+                        }
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    }, [deleteUser, router, userId]);
+
+    // ===== UI bits
+    const headerTitle = isCreate ? "Buat Pengguna" : "Edit Pengguna";
+    const initials = useMemo(
+        () => getInitialsName(watch("fullName") || watch("email") || "U"),
+        [watch]
+    );
 
     if (loading) {
         return (
@@ -157,7 +241,7 @@ export default function AdminUserDetail() {
                             <Ionicons name="arrow-back" size={18} color={C.text} />
                         </Pressable>
                         <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>
-                            Edit Pengguna
+                            {headerTitle}
                         </Text>
                         <View style={{ width: 36 }} />
                     </View>
@@ -173,9 +257,7 @@ export default function AdminUserDetail() {
                     {/* Avatar + Nama singkat */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
                         <View style={[styles.bigAvatar, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
-                            <Text style={{ color: C.text, fontSize: 18, fontWeight: "900" }}>
-                                {getInitialsName(watch("fullName") || watch("email") || "U")}
-                            </Text>
+                            <Text style={{ color: C.text, fontSize: 18, fontWeight: "900" }}>{initials}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={{ color: C.text, fontSize: 16, fontWeight: "900" }}>
@@ -184,7 +266,6 @@ export default function AdminUserDetail() {
                         </View>
                     </View>
 
-                    {/* === Form (mirip register) === */}
                     {/* Nama Lengkap */}
                     <Text style={[styles.label, { color: C.text }]}>Nama Lengkap</Text>
                     <Controller
@@ -211,9 +292,7 @@ export default function AdminUserDetail() {
                             />
                         )}
                     />
-                    {errors.fullName && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.fullName.message}</Text>
-                    )}
+                    {errors.fullName && <Text style={[styles.err, { color: C.danger }]}>{errors.fullName.message}</Text>}
 
                     {/* Email */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Email</Text>
@@ -247,25 +326,22 @@ export default function AdminUserDetail() {
                             />
                         )}
                     />
-                    {errors.email && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.email.message as string}</Text>
-                    )}
+                    {errors.email && <Text style={[styles.err, { color: C.danger }]}>{errors.email.message as string}</Text>}
 
-                    {/* Password (opsional) */}
+                    {/* Password */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Password (opsional)
+                        Password {isCreate ? "" : "(opsional)"}
                     </Text>
                     <Controller
                         control={control}
                         name="password"
                         rules={{
-                            validate: (v) =>
-                                !v || v.length >= 6 || "Jika diisi, minimal 6 karakter",
+                            validate: (v) => (isCreate ? (v && v.length >= 6) || "Minimal 6 karakter" : !v || v.length >= 6 || "Jika diisi, minimal 6 karakter"),
                         }}
                         render={({ field: { onChange, onBlur, value } }) => (
                             <View style={{ position: "relative" }}>
                                 <TextInput
-                                    placeholder="Kosongkan jika tidak ingin mengubah"
+                                    placeholder={isCreate ? "Wajib diisi (min. 6)" : "Kosongkan jika tidak ingin mengubah"}
                                     placeholderTextColor={C.icon}
                                     secureTextEntry={!showPwd}
                                     onBlur={onBlur}
@@ -293,22 +369,18 @@ export default function AdminUserDetail() {
                             </View>
                         )}
                     />
-                    {errors.password && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>
-                    )}
+                    {errors.password && <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>}
 
                     {/* Role */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Role
-                    </Text>
+                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Role</Text>
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                         <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
                         <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
+                        <Chip label="Super Admin" active={role === "superadmin"} onPress={() => setRole("superadmin")} C={C} />
                     </View>
+
                     {/* Nama Desa/Kelurahan */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Nama Desa/Kelurahan
-                    </Text>
+                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Nama Desa/Kelurahan</Text>
                     <Controller
                         control={control}
                         name="village"
@@ -333,9 +405,7 @@ export default function AdminUserDetail() {
                             />
                         )}
                     />
-                    {errors.village && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>
-                    )}
+                    {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>}
 
                     {/* Luas Lahan hanya untuk role user */}
                     {role === "user" && (
@@ -378,37 +448,60 @@ export default function AdminUserDetail() {
                         </>
                     )}
 
-                    {/* Save */}
-                    <Pressable
-                        onPress={handleSubmit(onSubmit)}
-                        disabled={saving}
-                        style={({ pressed }) => [
-                            styles.button,
-                            {
-                                backgroundColor: C.tint,
-                                borderRadius: S.radius.md,
-                                opacity: pressed || saving ? 0.85 : 1,
-                                marginTop: S.spacing.lg,
-                            },
-                        ]}
-                    >
-                        {saving ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <>
-                                <Ionicons name="save-outline" size={18} color="#fff" />
-                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
-                                    Simpan Perubahan
-                                </Text>
-                            </>
+                    {/* Footer buttons */}
+                    <View style={{ flexDirection: "row", gap: 12, marginTop: S.spacing.lg }}>
+                        {/* Save */}
+                        <Pressable
+                            onPress={handleSubmit(onSubmit)}
+                            disabled={saving}
+                            style={({ pressed }) => [
+                                styles.button,
+                                {
+                                    flex: 1,
+                                    backgroundColor: C.tint,
+                                    borderRadius: S.radius.md,
+                                    opacity: pressed || saving ? 0.85 : 1,
+                                },
+                            ]}
+                        >
+                            {saving ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="save-outline" size={18} color="#fff" />
+                                    <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
+                                        {isCreate ? "Buat Pengguna" : "Simpan Perubahan"}
+                                    </Text>
+                                </>
+                            )}
+                        </Pressable>
+
+                        {/* Delete (edit only) */}
+                        {!isCreate && (
+                            <Pressable
+                                onPress={onDelete}
+                                disabled={saving}
+                                style={({ pressed }) => [
+                                    styles.button,
+                                    {
+                                        backgroundColor: C.danger,
+                                        borderRadius: S.radius.md,
+                                        opacity: pressed || saving ? 0.85 : 1,
+                                        paddingHorizontal: 14,
+                                    },
+                                ]}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#fff" />
+                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>Hapus</Text>
+                            </Pressable>
                         )}
-                    </Pressable>
+                    </View>
                 </View>
             </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }
-/** ===== Styles ===== */
+
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -421,17 +514,6 @@ const styles = StyleSheet.create({
 
     label: { fontSize: 13, marginBottom: 6, fontWeight: "600" },
     input: { borderWidth: 1, fontSize: 15, backgroundColor: "transparent" },
-    selectInput: { borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-
-    dropdown: { borderWidth: 1, marginTop: 8, overflow: "hidden" },
-    dropdownItem: {
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderBottomWidth: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-    },
 
     err: { marginTop: 6, fontSize: 12 },
 

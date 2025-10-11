@@ -11,7 +11,7 @@ export type ExpenseItemRow = {
   expense_date: string; // ISO
   year: number;
   type: "cash" | "noncash";
-  expense_group: "cash" | "noncash";
+  expense_group: "cash" | "noncash" | "TK";
   row_key: string;
   item_kind: "material" | "labor" | "extra" | "tool" | "tax" | "hok";
   item_label: string | null;
@@ -21,10 +21,17 @@ export type ExpenseItemRow = {
   final_amount: number;
 };
 
+type SeasonLite = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  season_no?: number | null;
+};
+
 export function useExpenseChartData(initialSeasonId?: string) {
   const { user } = useAuth();
 
-  const [seasons, setSeasons] = useState<any[]>([]);
+  const [seasons, setSeasons] = useState<SeasonLite[]>([]);
   const [seasonId, setSeasonId] = useState<string | undefined>(initialSeasonId);
   const [year, setYear] = useState<number | "all">("all");
 
@@ -49,18 +56,17 @@ export function useExpenseChartData(initialSeasonId?: string) {
     setLoadingSeasons(true);
     const myReq = ++reqSeasonsRef.current;
     try {
-      const data = await seasonRepo.list(user.id);
+      const data = (await seasonRepo.list(user.id)) as SeasonLite[];
       if (!mounted.current || myReq !== reqSeasonsRef.current) return;
       setSeasons(data);
-      // Auto-pick latest season if none & not using year filter
+
+      // Auto-pick season terbaru jika belum dipilih & year = "all"
       if (!seasonId && year === "all" && data?.length) {
-        setSeasonId(
-          data.sort(
-            (a: any, b: any) =>
-              new Date(b.start_date).getTime() -
-              new Date(a.start_date).getTime()
-          )[0].id
-        );
+        const latest = [...data].sort(
+          (a, b) =>
+            new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+        )[0];
+        setSeasonId(latest.id);
       }
     } finally {
       if (!mounted.current || myReq !== reqSeasonsRef.current) return;
@@ -72,7 +78,7 @@ export function useExpenseChartData(initialSeasonId?: string) {
     fetchSeasons();
   }, [fetchSeasons]);
 
-  // ===== Tahun dari seasons
+  // ===== Tahun options dari seasons
   const yearOptions = useMemo(() => {
     const ys = new Set<number>();
     for (const s of seasons) {
@@ -82,7 +88,7 @@ export function useExpenseChartData(initialSeasonId?: string) {
     return Array.from(ys).sort((a, b) => a - b);
   }, [seasons]);
 
-  // ===== Season ids yang overlap tahun
+  // ===== Season IDs yang overlap tahun terpilih
   const seasonIdsForYear = useMemo(() => {
     if (year === "all" || !seasons.length) return undefined;
     const y = Number(year);
@@ -95,10 +101,10 @@ export function useExpenseChartData(initialSeasonId?: string) {
         return y >= minY && y <= maxY;
       })
       .map((s) => s.id);
-    return ids.length ? ids : ["__none__"];
+    return ids.length ? ids : ["__none__"]; // jaga supaya IN() tetap valid
   }, [year, seasons]);
 
-  // ===== Fetch items (auto pilih view)
+  // ===== Fetch items (auto pilih chart view: season vs year)
   const fetchItems = useCallback(async () => {
     if (!user) return;
     setLoadingItems(true);
@@ -150,7 +156,7 @@ export function useExpenseChartData(initialSeasonId?: string) {
     if (user) fetchItems();
   }, [user?.id, seasonId, seasonIdsForYear, year, fetchItems]);
 
-  // ===== ringkas untuk chart
+  // ===== ringkasan untuk chart
   const expensePieSummary = useMemo(
     () =>
       items.map((r) => ({
@@ -159,7 +165,7 @@ export function useExpenseChartData(initialSeasonId?: string) {
         name: r.item_name,
         amount: Number(r.final_amount) || 0,
         kind: r.item_kind,
-        group: r.expense_group,
+        group: r.expense_group, // 'cash' | 'noncash' | 'TK'
       })),
     [items]
   );
@@ -172,6 +178,7 @@ export function useExpenseChartData(initialSeasonId?: string) {
   const loading = loadingSeasons || loadingItems;
 
   return {
+    // Filters
     seasons,
     seasonId,
     setSeasonId,
@@ -179,14 +186,17 @@ export function useExpenseChartData(initialSeasonId?: string) {
     setYear,
     yearOptions,
 
+    // Data chart (RAW)
     expenseItems: items,
     expensePieSummary,
     totalOut,
 
+    // Loading
     loading,
     loadingSeasons,
     loadingItems,
 
+    // Actions
     refetch,
     forceRefetch,
   };

@@ -1,5 +1,7 @@
+// services/reportService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { normalizeUnitLabel } from "@/utils/unitLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seasonRepo } from "./seasonService";
 
@@ -13,7 +15,17 @@ function sum(arr: number[]) {
   return arr.reduce((a, b) => a + b, 0);
 }
 
+export type YearSummaryRow = {
+  user_id: string;
+  season_id: string;
+  year: number | null;
+  section: "penerimaan" | "biaya" | "pendapatan" | "rc";
+  label: string;
+  amount: number;
+};
+
 export type ReportDataset = {
+  // === Season mode (detail) ===
   production: {
     label: string;
     quantity: number | null;
@@ -48,6 +60,14 @@ export type ReportDataset = {
     amount: number;
   } | null;
 
+  // === Pajak (diambil dari kedua sisi, tidak masuk total biaya) ===
+  taxCash?: number; // total pajak sisi cash (sudah dikalikan landFactor)
+  taxNonCash?: number; // total pajak sisi noncash (sudah dikalikan landFactor)
+
+  // === Year mode (summary) ===
+  yearRows?: YearSummaryRow[];
+
+  // === Totals (selalu ada) ===
   totalReceipts: number;
   totalCash: number;
   totalLabor: number;
@@ -129,6 +149,99 @@ export function useReportData(initialSeasonId?: string | "all") {
       if (!user) return emptyDataset();
       const landFactor = Number(opts?.landFactor ?? 1) || 1;
 
+      // =========================
+      // MODE YEAR (summary only)
+      // =========================
+      if (!seasonId) {
+        type YRow = {
+          user_id: string;
+          season_id: string;
+          year: number | null;
+          section: "penerimaan" | "biaya" | "pendapatan" | "rc";
+          label: string | null;
+          amount: number | null;
+        };
+
+        let q = supabase
+          .from("v_report_source_year")
+          .select("*")
+          .eq("user_id", user.id);
+
+        if (seasonIdsForYear) {
+          q = q.in("season_id", seasonIdsForYear);
+          if (year !== "all") q = q.eq("year", Number(year));
+        }
+
+        const { data, error } = await q;
+        if (error) throw error;
+
+        const rows = (data || []) as YRow[];
+
+        const yearRows: YearSummaryRow[] = rows.map((r) => ({
+          user_id: r.user_id,
+          season_id: r.season_id,
+          year: r.year,
+          section: r.section,
+          label: (r.label ?? "").trim(),
+          amount: num(r.amount),
+        }));
+
+        const totalReceipts = sum(
+          yearRows
+            .filter((x) => x.section === "penerimaan")
+            .map((x) => x.amount)
+        );
+        const totalCash = sum(
+          yearRows
+            .filter(
+              (x) => x.section === "biaya" && /^Biaya Tunai MT /i.test(x.label)
+            )
+            .map((x) => x.amount)
+        );
+        const totalNonCash = sum(
+          yearRows
+            .filter(
+              (x) =>
+                x.section === "biaya" && /^Biaya Non Tunai MT /i.test(x.label)
+            )
+            .map((x) => x.amount)
+        );
+        const totalCost = sum(
+          yearRows
+            .filter(
+              (x) => x.section === "biaya" && /^Biaya Total MT /i.test(x.label)
+            )
+            .map((x) => x.amount)
+        );
+
+        return {
+          production: [],
+          cashByCategory: [],
+          labor: [],
+          tools: [],
+          extras: [],
+          laborCashDetail: null,
+          laborNonCashDetail: null,
+
+          // pajak tidak disediakan di year summary (sesuai view)
+          taxCash: 0,
+          taxNonCash: 0,
+
+          yearRows,
+
+          totalReceipts,
+          totalCash,
+          totalLabor: 0,
+          totalTools: 0,
+          totalExtras: 0,
+          totalNonCash,
+          totalCost,
+        };
+      }
+
+      // =========================
+      // MODE SEASON (detail)
+      // =========================
       type Row = {
         user_id: string;
         season_id: string;
@@ -139,7 +252,9 @@ export function useReportData(initialSeasonId?: string | "all") {
           | "cash_labor_total"
           | "noncash_labor_total"
           | "noncash_tool_detail"
-          | "noncash_detail";
+          | "noncash_detail"
+          | "cash_tax_info" // <— pajak cash (info-only)
+          | "noncash_tax_info"; // <— pajak noncash (info-only)
         label: string | null;
         name: string | null;
         qty: number | null;
@@ -148,28 +263,17 @@ export function useReportData(initialSeasonId?: string | "all") {
         amount: number | null;
       };
 
-      // ⬇️ Di sini perbedaannya: auto-switch view
-      const viewName = seasonId
-        ? "v_report_source_season"
-        : "v_report_source_year";
-
-      let q = supabase.from(viewName).select("*").eq("user_id", user.id);
-
-      // • Jika seasonId aktif: pakai 1 musim (view sudah mem-prorata kalau perlu)
-      // • Jika tidak, dan year dipilih: pakai daftar seasonIdsForYear + eq(year, y)
-      if (seasonId) {
-        q = q.eq("season_id", seasonId);
-      } else if (seasonIdsForYear) {
-        q = q.in("season_id", seasonIdsForYear);
-        if (year !== "all") q = q.eq("year", Number(year));
-      }
+      let q = supabase
+        .from("v_report_source_season")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("season_id", seasonId);
 
       const { data, error } = await q;
       if (error) throw error;
 
       const rows: Row[] = (data || []) as any[];
 
-      // ====== Kelompok per section
       const productionRows = rows.filter((r) => r.section === "production");
       const cashDetailRows = rows.filter((r) => r.section === "cash_detail");
       const cashLaborTotalRows = rows.filter(
@@ -185,7 +289,23 @@ export function useReportData(initialSeasonId?: string | "all") {
         (r) => r.section === "noncash_detail"
       );
 
-      // ===== PRODUKSI =====
+      // === Pajak (info only, tidak masuk total biaya)
+      const cashTaxRows = rows.filter((r) => r.section === "cash_tax_info");
+      const noncashTaxRows = rows.filter(
+        (r) => r.section === "noncash_tax_info"
+      );
+      const taxCash = sum(
+        cashTaxRows.map((r) =>
+          r.amount != null ? num(r.amount) * landFactor : 0
+        )
+      );
+      const taxNonCash = sum(
+        noncashTaxRows.map((r) =>
+          r.amount != null ? num(r.amount) * landFactor : 0
+        )
+      );
+
+      // PRODUKSI
       const production: ReportDataset["production"] = productionRows.map(
         (r) => {
           const baseQty = r.qty != null ? num(r.qty) : null;
@@ -203,7 +323,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         }
       );
 
-      // ===== CASH (material/extras/tax) =====
+      // CASH (material/extras) — pajak sudah dikeluarkan ke section khusus
       type AggMat = {
         qty: number;
         amt: number;
@@ -245,10 +365,11 @@ export function useReportData(initialSeasonId?: string | "all") {
 
       const cashByCategory: ReportDataset["cashByCategory"] = [];
 
-      // material (qty ada)
       for (const [key, ag] of matAggMap.entries()) {
         const qtyScaled = ag.qty * landFactor;
-        const normalizedUnit = ag.multiUnit ? null : ag.unit ?? null;
+        const normalizedUnit = ag.multiUnit
+          ? null
+          : normalizeUnitLabel(ag.unit) ?? null;
         const avgUnitPrice = ag.qty > 0 ? ag.amt / ag.qty : ag.amt;
         cashByCategory.push({
           category: key,
@@ -258,7 +379,6 @@ export function useReportData(initialSeasonId?: string | "all") {
         });
       }
 
-      // extras/tax nominal
       for (const [key, amount] of nominalMap.entries()) {
         cashByCategory.push({
           category: key,
@@ -268,7 +388,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         });
       }
 
-      // ===== TK CASH (Luar Keluarga) =====
+      // TK CASH (Luar Keluarga)
       const laborCashDetail = (() => {
         if (!cashLaborTotalRows.length) return null;
         const qty = sum(
@@ -310,7 +430,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         };
       })();
 
-      // ===== NONCASH TK (Dalam Keluarga) =====
+      // NONCASH TK (Dalam Keluarga)
       const laborNonCashDetail = (() => {
         if (!noncashLaborTotalRows.length) return null;
         const qty = sum(
@@ -348,21 +468,21 @@ export function useReportData(initialSeasonId?: string | "all") {
             ]
           : [];
 
-      // ===== NONCASH TOOLS =====
+      // NONCASH TOOLS
       const tools: ReportDataset["tools"] = noncashToolRows.map((r) => ({
         toolName: r.name || "Alat",
         quantity: (r.qty != null ? num(r.qty) : 0) * landFactor,
         purchasePrice: r.unit_price != null ? num(r.unit_price) : 0,
       }));
 
-      // ===== NONCASH EXTRAS/TAX =====
+      // NONCASH EXTRAS (sudah exclude pajak karena pajak keluar di *_tax_info)
       const extras: ReportDataset["extras"] = noncashDetailRows.map((r) => ({
         category: (r.label ?? "").trim(),
         label: (r.label ?? "").trim(),
         amount: (r.amount != null ? num(r.amount) : 0) * landFactor,
       }));
 
-      // ===== TOTALS =====
+      // TOTALS (pajak tidak dihitung di sini)
       const totalReceipts = sum(
         production.map((p) =>
           p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice
@@ -387,6 +507,12 @@ export function useReportData(initialSeasonId?: string | "all") {
         extras,
         laborCashDetail,
         laborNonCashDetail,
+
+        taxCash,
+        taxNonCash,
+
+        yearRows: undefined,
+
         totalReceipts,
         totalCash,
         totalLabor,
@@ -425,6 +551,9 @@ function emptyDataset(): ReportDataset {
     extras: [],
     laborCashDetail: null,
     laborNonCashDetail: null,
+    taxCash: 0,
+    taxNonCash: 0,
+    yearRows: [],
     totalReceipts: 0,
     totalCash: 0,
     totalLabor: 0,

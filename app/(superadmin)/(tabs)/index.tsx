@@ -1,6 +1,6 @@
 import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
-import { useAdminUserList } from "@/services/adminUserService";
+import { useSuperAdminUserList } from "@/services/superAdminService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -36,7 +36,8 @@ export default function HomeAdminScreen() {
     const S = Tokens;
     const router = useRouter();
 
-    const { rows, loading, refreshing, fetchOnce, refresh } = useAdminUserList();
+    const { rows, loading, refreshing, fetchOnce, refresh } = useSuperAdminUserList();
+
     const users: AppUser[] = useMemo(
         () =>
             rows.map((r) => ({
@@ -78,9 +79,18 @@ export default function HomeAdminScreen() {
         }, [fetchOnce])
     );
 
+    const gotoCreate = () => {
+        router.push("/(superadmin)/new");
+    };
+
     const renderItem = ({ item }: { item: AppUser }) => (
         <Pressable
-            onPress={() => router.push({ pathname: "/(admin)/[detail]", params: { detail: item.id } })}
+            onPress={() =>
+                router.push({
+                    pathname: "/(superadmin)/[detail]",
+                    params: { detail: item.id },
+                })
+            }
             style={({ pressed }) => [
                 styles.row,
                 {
@@ -93,7 +103,12 @@ export default function HomeAdminScreen() {
             ]}
         >
             {/* avatar */}
-            <View style={[styles.avatarWrap, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
+            <View
+                style={[
+                    styles.avatarWrap,
+                    { borderColor: C.border, backgroundColor: C.surfaceSoft },
+                ]}
+            >
                 {item.avatar ? (
                     <Image source={{ uri: item.avatar }} style={styles.avatar} />
                 ) : (
@@ -118,15 +133,29 @@ export default function HomeAdminScreen() {
 
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
                     {!!item.cropType && (
-                        <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
+                        <View
+                            style={[
+                                styles.badge,
+                                { borderColor: C.border, backgroundColor: C.surfaceSoft },
+                            ]}
+                        >
                             <Ionicons name="leaf-outline" size={12} color={C.tint} />
-                            <Text style={[styles.badgeText, { color: C.text }]}>{item.cropType}</Text>
+                            <Text style={[styles.badgeText, { color: C.text }]}>
+                                {item.cropType}
+                            </Text>
                         </View>
                     )}
                     {item.landAreaHa != null && (
-                        <View style={[styles.badge, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
+                        <View
+                            style={[
+                                styles.badge,
+                                { borderColor: C.border, backgroundColor: C.surfaceSoft },
+                            ]}
+                        >
                             <Ionicons name="map-outline" size={12} color={C.info} />
-                            <Text style={[styles.badgeText, { color: C.text }]}>{item.landAreaHa} ha</Text>
+                            <Text style={[styles.badgeText, { color: C.text }]}>
+                                {item.landAreaHa} ha
+                            </Text>
                         </View>
                     )}
                 </View>
@@ -146,14 +175,39 @@ export default function HomeAdminScreen() {
                 style={[styles.header, { paddingHorizontal: S.spacing.lg, paddingVertical: S.spacing.lg }]}
             >
                 <View style={styles.headerRow}>
-                    <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>
+                    <Text
+                        style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}
+                    >
                         Kelola Pengguna
                     </Text>
-                    <HeaderLogoutButton size={28} confirm={true} />
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                        {/* tombol tambah user */}
+                        <Pressable
+                            onPress={gotoCreate}
+                            style={({ pressed }) => [
+                                styles.headerBtn,
+                                {
+                                    borderColor: C.border,
+                                    backgroundColor: C.surface,
+                                    opacity: pressed ? 0.9 : 1,
+                                },
+                            ]}
+                        >
+                            <Ionicons name="person-add-outline" size={18} color={C.text} />
+                            <Text style={{ color: C.text, fontWeight: "800" }}>Tambah</Text>
+                        </Pressable>
+
+                        <HeaderLogoutButton size={28} confirm={true} />
+                    </View>
                 </View>
 
                 {/* search */}
-                <View style={[styles.search, { borderColor: C.border, backgroundColor: C.surface }]}>
+                <View
+                    style={[
+                        styles.search,
+                        { borderColor: C.border, backgroundColor: C.surface },
+                    ]}
+                >
                     <Ionicons name="search-outline" size={16} color={C.icon} />
                     <TextInput
                         placeholder="Cari nama, desa"
@@ -166,7 +220,9 @@ export default function HomeAdminScreen() {
             </LinearGradient>
 
             {loading && users.length === 0 ? (
-                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                <View
+                    style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+                >
                     <ActivityIndicator size="large" color={C.tint} />
                     <Text style={{ marginTop: 8, color: C.textMuted }}>Memuat data…</Text>
                 </View>
@@ -174,31 +230,129 @@ export default function HomeAdminScreen() {
                 <FlatList
                     data={filtered}
                     keyExtractor={(u) => u.id}
-                    contentContainerStyle={{ padding: S.spacing.lg, paddingBottom: S.spacing.xl, gap: S.spacing.md }}
+                    contentContainerStyle={{
+                        padding: S.spacing.lg,
+                        paddingBottom: S.spacing.xl,
+                        gap: S.spacing.md,
+                    }}
                     renderItem={renderItem}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
                     ListEmptyComponent={
-                        <View style={{ padding: 24, alignItems: "center" }}>
+                        <View style={{ padding: 24, alignItems: "center", gap: 12 }}>
                             <Text style={{ color: C.textMuted }}>Tidak ada pengguna.</Text>
+                            <Pressable
+                                onPress={gotoCreate}
+                                style={({ pressed }) => [
+                                    styles.addEmptyBtn,
+                                    {
+                                        backgroundColor: C.tint,
+                                        opacity: pressed ? 0.95 : 1,
+                                        borderRadius: S.radius.md,
+                                    },
+                                ]}
+                            >
+                                <Ionicons name="person-add-outline" size={18} color="#fff" />
+                                <Text style={{ color: "#fff", fontWeight: "900" }}>Tambah User</Text>
+                            </Pressable>
                         </View>
                     }
                 />
             )}
+
+            {/* (Opsional) FAB Tambah */}
+            {/* 
+      <Pressable
+        onPress={gotoCreate}
+        style={({ pressed }) => [
+          styles.fab,
+          { backgroundColor: C.tint, opacity: pressed ? 0.95 : 1 },
+        ]}
+      >
+        <Ionicons name="add" size={24} color="#fff" />
+      </Pressable>
+      */}
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
     title: { fontSize: 18, fontWeight: "800" },
 
-    search: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
+    headerBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        borderWidth: 1,
+        borderRadius: 999,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
 
-    row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1 },
-    avatarWrap: { width: 44, height: 44, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+    search: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+    },
+
+    row: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        padding: 12,
+        borderWidth: 1,
+    },
+    avatarWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: 999,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+    },
     avatar: { width: "100%", height: "100%" },
     name: { fontSize: 14, fontWeight: "800" },
-    badge: { flexDirection: "row", gap: 6, alignItems: "center", borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+    badge: {
+        flexDirection: "row",
+        gap: 6,
+        alignItems: "center",
+        borderWidth: 1,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
     badgeText: { fontSize: 11, fontWeight: "700" },
+
+    addEmptyBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+
+    // FAB optional
+    fab: {
+        position: "absolute",
+        right: 20,
+        bottom: 24,
+        width: 52,
+        height: 52,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        elevation: 6,
+    },
 });
