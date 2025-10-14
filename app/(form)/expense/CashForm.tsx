@@ -340,23 +340,32 @@ export default function CashForm({
                 (extras || []).forEach((e: any) => {
                     const cat: Category = e?.metadata?.category;
                     const kind = (e?.extra_kind || "").toString();
+                    const yearly = (
+                        e?.metadata?.proratedFromYearly ??
+                        e?.metadata?.prorated_from_yearly ??
+                        null
+                    );
+
                     if (cat === "tax") {
-                        setValue("extras.tax", String(e.amount || ""));
+                        // gunakan nilai tahunan untuk input, bukan amount (prorata)
+                        setValue("extras.tax", String(yearly ?? e?.amount ?? ""));
                     } else if (cat === "land_rent") {
-                        setValue("extras.landRent", String(e.amount || ""));
+                        setValue("extras.landRent", String(yearly ?? e?.amount ?? ""));
                     } else if (cat === "transport") {
-                        setValue("extras.transport", String(e.amount || ""));
+                        // transport memang tidak diprorata ketika create → pakai amount langsung
+                        setValue("extras.transport", String(e?.amount ?? ""));
                     } else {
                         setExtraItems((prev) => [
                             ...prev,
                             {
                                 id: String(Date.now() + Math.random()),
                                 label: e?.note || kind || "Biaya",
-                                amount: String(e?.amount || 0),
+                                amount: String(e?.amount ?? 0),
                             },
                         ]);
                     }
                 });
+
 
                 // Prefill labor
                 const map: Record<string, keyof CashFormValues["labor"]> = {
@@ -477,10 +486,7 @@ export default function CashForm({
 
     const transportSeason = useMemo(() => toNum(transportW), [transportW]);
 
-    const extrasSubtotal = useMemo(() => {
-        // gunakan nilai prorata (tax & land rent) + transport langsung
-        return landRentSeason + taxSeason + transportSeason;
-    }, [landRentSeason, taxSeason, transportSeason]);
+    const extrasSubtotal = landRentSeason + taxSeason + transportSeason;
 
     const extrasPanelSubtotal = useMemo(() => {
         return (extraItems || []).reduce((acc, r) => {
@@ -491,11 +497,7 @@ export default function CashForm({
 
     const total = useMemo(() => {
         return (
-            seedSubtotal +
-            chemOthersTotal +
-            laborTotal +
-            extrasSubtotal +
-            extrasPanelSubtotal
+            seedSubtotal + chemOthersTotal + laborTotal + extrasSubtotal + extrasPanelSubtotal
         );
     }, [seedSubtotal, chemOthersTotal, laborTotal, extrasSubtotal, extrasPanelSubtotal]);
 
@@ -649,13 +651,13 @@ export default function CashForm({
 
         // EXTRAS (pakai nilai PRORATA utk pajak & sewa)
         const extras: any[] = [];
-        const vTaxSeason = Math.max(0, taxSeason);
-        if (vTaxSeason > 0)
+        const vTax = toNum(fv.extras.tax);
+        if (vTax > 0)
             extras.push({
                 category: "tax",
                 unit: SERVICE_UNIT,
                 quantity: 1,
-                unitPrice: vTaxSeason,
+                unitPrice: vTax,
                 itemName: null,
                 _meta: {
                     category: "tax",
@@ -665,13 +667,13 @@ export default function CashForm({
                 },
             });
 
-        const vRentSeason = Math.max(0, landRentSeason);
-        if (vRentSeason > 0)
+        const vRent = toNum(fv.extras.landRent);
+        if (vRent > 0)
             extras.push({
                 category: "land_rent",
                 unit: SERVICE_UNIT,
                 quantity: 1,
-                unitPrice: vRentSeason,
+                unitPrice: vRent,
                 itemName: null,
                 _meta: {
                     category: "land_rent",
