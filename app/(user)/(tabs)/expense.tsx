@@ -55,8 +55,6 @@ export default function ExpenseScreen() {
         typeInfo,
     } = useExpenseList(seasonId ?? undefined);
 
-    console.log("ExpenseScreen: expenses:", expenses);
-
     const { deleteExpense } = useExpenseService();
     useFocusEffect(
         useCallback(() => {

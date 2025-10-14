@@ -15,6 +15,7 @@ export type CashRow = {
   unit: string | null;
   unitPrice: number;
 };
+export type CashExtraRow = { label: string; amount: number };
 export type ToolRow = {
   toolName: string;
   quantity: number;
@@ -38,6 +39,7 @@ export type GenerateReportPdfParams = {
   perHaTitle?: string;
   production: ProductionRow[];
   cash: CashRow[];
+  cashExtras?: CashExtraRow[];
   tools: ToolRow[];
   extras: ExtraRow[];
   laborNonCashNom: number;
@@ -49,10 +51,10 @@ export type GenerateReportPdfParams = {
   };
 
   // Metadata tambahan
-  cropType?: string | null;
+  cropType?: unknown; // bisa string atau array
   village?: string | null;
 
-  // Year mode (opsional) — jika diisi, PDF akan pakai layout Year Mode (tanpa kolom "Jumlah")
+  // Year mode
   yearRows?: YearRow[];
 
   // Utilities
@@ -67,6 +69,9 @@ function prodValue(p: ProductionRow) {
 }
 function cashValue(c: CashRow) {
   return c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
+}
+function cashExtraValue(e: CashExtraRow) {
+  return e.amount || 0;
 }
 function toolValue(t: ToolRow) {
   return t.quantity * t.purchasePrice;
@@ -86,6 +91,39 @@ function yr(yearRows: YearRow[] | undefined, lbl: string): number {
   return row ? Number(row.amount || 0) : 0;
 }
 
+// ===== Title Case helper (sederhana) =====
+function titleCase(s: string): string {
+  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ===== Format crop type (robust: string/array/nested) =====
+function formatCropTypeLine(cropType: unknown): string | null {
+  const collectParts = (input: unknown): string[] => {
+    if (Array.isArray(input)) {
+      // flatten lalu kumpulkan
+      return input.flat(Infinity as 1).flatMap(collectParts);
+    }
+    if (typeof input === "string") {
+      const raw = input.trim();
+      if (!raw) return [];
+      // pecah bila user menaruh separator campur
+      return raw
+        .split(/[,\|/]+/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    // tipe lain diabaikan
+    return [];
+  };
+
+  const parts = collectParts(cropType).map(titleCase);
+
+  if (parts.length === 0) return null;
+
+  const label = parts.length === 1 ? parts[0] : parts.join(" dan ");
+  return `Jenis Tanaman: <b>${label}</b>`;
+}
+
 export async function generateReportPdf({
   fileName,
   title = "Report",
@@ -97,12 +135,13 @@ export async function generateReportPdf({
   landFactor,
   production,
   cash,
+  cashExtras = [],
   tools,
   extras,
   laborNonCashNom,
   laborNonCashDetail,
   prettyLabel,
-  yearRows, // <== NEW
+  yearRows,
   share = true,
 }: GenerateReportPdfParams): Promise<{ uri: string }> {
   const _perHaTitle =
@@ -110,7 +149,9 @@ export async function generateReportPdf({
 
   // Totals untuk season mode
   const totalProduksi = production.reduce((acc, p) => acc + prodValue(p), 0);
-  const totalBiayaTunai = cash.reduce((acc, c) => acc + cashValue(c), 0);
+  const totalBiayaTunai =
+    cash.reduce((acc, c) => acc + cashValue(c), 0) +
+    cashExtras.reduce((acc, e) => acc + cashExtraValue(e), 0);
   const totalTools = tools.reduce((acc, t) => acc + toolValue(t), 0);
   const totalExtras = extras.reduce((acc, e) => acc + extraValue(e), 0);
 
@@ -127,12 +168,10 @@ export async function generateReportPdf({
   const rcTunai = totalBiayaTunai > 0 ? totalProduksi / totalBiayaTunai : 0;
   const rcTotal = totalBiaya > 0 ? totalProduksi / totalBiaya : 0;
 
-  const cropVillageLine = [
-    cropType ? `Jenis Tanaman: <b>${cropType}</b>` : `Jenis Tanaman: <b>-</b>`,
-    village ? `Desa: <b>${village}</b>` : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  // ===== meta atas (crop & village)
+  const cropLine = formatCropTypeLine(cropType);
+  const villageLine = village ? `Desa: <b>${village}</b>` : null;
+  const cropVillageLine = [cropLine, villageLine].filter(Boolean).join(" | ");
 
   // ===== Year mode detection
   const isYearMode = !!(yearRows && yearRows.length > 0);
@@ -189,7 +228,7 @@ export async function generateReportPdf({
     </thead>
   `;
 
-  // ===== BODY: Season mode rows (sama seperti screen)
+  // ===== BODY: Season mode rows
   const bodySeason = `
     <!-- PRODUKSI -->
     <tr><td colspan="5" class="section-title">Penerimaan</td></tr>
@@ -237,6 +276,29 @@ export async function generateReportPdf({
         `;
       })
       .join("")}
+
+    ${
+      cashExtras.length
+        ? `
+    <tr><td colspan="5" class="sub-mini">Biaya Lain</td></tr>
+    ${cashExtras
+      .map((e) => {
+        const value = cashExtraValue(e);
+        const label = prettyLabel(e.label ?? "Biaya Lain");
+        return `
+          <tr>
+            <td>${label}</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td class="td-right">${currency(value)}</td>
+          </tr>
+        `;
+      })
+      .join("")}
+    `
+        : ""
+    }
 
     <tr><td colspan="5" class="sub-title">II. Biaya Non Tunai</td></tr>
 
@@ -409,9 +471,11 @@ export async function generateReportPdf({
   <h1>${title}</h1>
   <div class="meta muted" style="display:flex; flex-direction:column;">
     ${_perHaTitle}
-    <p style="margin-top:-4px">${
-      cropVillageLine ? "<br/>" + cropVillageLine : ""
-    }<br/></p>
+    ${
+      cropVillageLine
+        ? `<p style="margin-top:-4px"><br/>${cropVillageLine}<br/></p>`
+        : ""
+    }
     <p style="margin-top:-4px">Luas Profil: <b>${profileAreaHa} Ha</b></p>
     <p style="margin-top:-4px">Luas Konversi: <b>${effectiveArea} Ha</b></p>
     <p style="margin-top:-4px">Faktor: <b>${landFactor.toFixed(2)}</b></p>
@@ -426,7 +490,7 @@ export async function generateReportPdf({
 
   ${
     isYearMode
-      ? "" // Year mode tidak menampilkan blok totals terpisah (sudah ada per-MT).
+      ? ""
       : `
   <div class="totals">
     <div class="row"><div>Total Biaya Tunai</div><div>${currency(
@@ -460,7 +524,7 @@ export async function generateReportPdf({
 </html>
 `.trim();
 
-  // Cetak & simpan (sama seperti sebelumnya)
+  // Cetak & simpan
   const { uri: tmpUri } = await Print.printToFileAsync({ html });
 
   const FSAny = FS as AnyFS;

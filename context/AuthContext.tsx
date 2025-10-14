@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AuthTokenResponsePassword, Session, User } from "@supabase/supabase-js";
+import { FunctionsHttpError } from "@supabase/supabase-js"; // ⬅️ tambah ini
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { getMyProfile, updateMyProfile } from "@/services/profileService";
@@ -26,6 +27,8 @@ export type AuthState = {
     signOut: () => Promise<void>;
     reloadProfile: () => Promise<void>;
     updateProfile: (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>) => Promise<void>;
+
+    deleteSelf: () => Promise<void>; // ⬅️ tambah API self-delete
 };
 
 const AuthCtx = createContext<AuthState | undefined>(undefined);
@@ -165,7 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, [session?.user?.id]);
 
-
     const register = useCallback(
         async (form: RegisterForm, remember: boolean = true) => {
             const { fullName, motherName, email, password, village, landAreaHa } = form;
@@ -214,7 +216,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // lanjut set mother_name walau profil gagal (tidak fatal)
             }
 
-            // 4) Set mother_name (hash di server via RPC)
             const { error: rpcErr } = await supabase.rpc("set_mother_name", {
                 p_user_id: uid,
                 p_answer: motherName,
@@ -269,7 +270,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log(TAG, "signOut: done, profile cleared");
     }, []);
 
-
     const reloadProfile = useCallback(async () => {
         const userId = session?.user?.id;
         if (!userId) {
@@ -304,6 +304,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         []
     );
 
+    const deleteSelf = useCallback(async () => {
+        const targetUserId = session?.user?.id;
+        if (!targetUserId) {
+            throw new Error("Tidak ada sesi pengguna.");
+        }
+
+        // Panggil Edge Function yang menggunakan service role untuk menghapus akun
+        const { error } = await supabase.functions.invoke("admin-delete-user", {
+            body: { targetUserId },
+        });
+
+        if (error) {
+            if (error instanceof FunctionsHttpError) {
+                const payload = await error.context.json().catch(() => ({} as any));
+                const msg = (payload as any)?.error || "Gagal menghapus akun";
+                throw new Error(msg);
+            }
+            throw error;
+        }
+
+        // Sukses → logout lokal
+        await signOut();
+    }, [session?.user?.id, signOut]);
+
     const value = useMemo<AuthState>(
         () => ({
             session,
@@ -317,8 +341,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             signOut,
             reloadProfile,
             updateProfile,
+            deleteSelf, // ⬅️ expose ke consumer
         }),
-        [session, authReady, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile]
+        [session, authReady, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile, deleteSelf]
     );
 
     console.log(

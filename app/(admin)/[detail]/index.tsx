@@ -1,5 +1,5 @@
-import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { AdminUserRow, useAdminUserService } from "@/services/adminUserService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
@@ -26,19 +26,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AdminUserDetail() {
     const { detail } = useLocalSearchParams<{ detail: string }>();
-    const userId = detail;
+    const userId = detail && detail !== "new" ? detail : undefined;
+    const isCreate = !userId;
 
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
-    const { getUserById, updateUser } = useAdminUserService();
+    const { signOut } = useAuth();
+    const { getUserById, updateUser, deleteUser } = useAdminUserService();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
+    const isUserRole = role === "user";
 
     const {
         control,
@@ -120,6 +122,34 @@ export default function AdminUserDetail() {
             setSaving(false);
         }
     };
+
+    const onDelete = useCallback(() => {
+        if (!userId) return;
+        Alert.alert(
+            "Hapus Pengguna?",
+            "Tindakan ini tidak dapat dibatalkan.",
+            [
+                { text: "Batal", style: "cancel" },
+                {
+                    text: "Hapus",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setSaving(true);
+                            const { selfDelete } = await deleteUser(userId);
+                            if (selfDelete) await signOut(); else { Alert.alert("Terhapus", "Pengguna berhasil dihapus."); router.back(); }
+                        } catch (e: any) {
+                            console.log(e);
+                            Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus pengguna.");
+                        } finally {
+                            setSaving(false);
+                        }
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    }, [deleteUser, router, userId]);
 
     if (loading) {
         return (
@@ -296,57 +326,47 @@ export default function AdminUserDetail() {
                     {errors.password && (
                         <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>
                     )}
-
-                    {/* Role */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Role
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
-                        <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
-                    </View>
-                    {/* Nama Desa/Kelurahan */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Nama Desa/Kelurahan
-                    </Text>
-                    <Controller
-                        control={control}
-                        name="village"
-                        rules={{ required: "Nama Desa/Kelurahan wajib diisi" }}
-                        render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput
-                                placeholder="Contoh: Medangan"
-                                placeholderTextColor={C.icon}
-                                onBlur={onBlur}
-                                onChangeText={onChange}
-                                value={value}
-                                style={[
-                                    styles.input,
-                                    {
-                                        borderColor: errors.village ? C.danger : C.border,
-                                        color: C.text,
-                                        borderRadius: S.radius.md,
-                                        paddingHorizontal: S.spacing.md,
-                                        paddingVertical: 10,
-                                    },
-                                ]}
-                            />
-                        )}
-                    />
-                    {errors.village && (
-                        <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>
-                    )}
-
                     {/* Luas Lahan hanya untuk role user */}
                     {role === "user" && (
                         <>
+                            {/* Nama Desa/Kelurahan */}
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Nama Desa/Kelurahan</Text>
+                            <Controller
+                                control={control}
+                                name="village"
+                                rules={{
+                                    required: isUserRole ? "Nama Desa/Kelurahan wajib diisi" : false,
+                                }}
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <TextInput
+                                        placeholder="Contoh: Medangan"
+                                        placeholderTextColor={C.icon}
+                                        onBlur={onBlur}
+                                        onChangeText={onChange}
+                                        value={value}
+                                        style={[
+                                            styles.input,
+                                            {
+                                                borderColor: errors.village ? C.danger : C.border,
+                                                color: C.text,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
+                                            },
+                                        ]}
+                                    />
+                                )}
+                            />
+                            {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>}
+
                             <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Luas Lahan (hektar)</Text>
                             <Controller
                                 control={control}
                                 name="landAreaHa"
                                 rules={{
-                                    required: "Luas lahan wajib diisi",
+                                    required: isUserRole ? "Luas lahan wajib diisi" : false,
                                     validate: (v) => {
+                                        if (!isUserRole) return true; // tidak wajib dan tidak divalidasi
                                         const n = parseFloat((v || "").toString().replace(",", "."));
                                         return !(Number.isNaN(n) || n <= 0) || "Harus angka > 0";
                                     },
@@ -378,31 +398,54 @@ export default function AdminUserDetail() {
                         </>
                     )}
 
-                    {/* Save */}
-                    <Pressable
-                        onPress={handleSubmit(onSubmit)}
-                        disabled={saving}
-                        style={({ pressed }) => [
-                            styles.button,
-                            {
-                                backgroundColor: C.tint,
-                                borderRadius: S.radius.md,
-                                opacity: pressed || saving ? 0.85 : 1,
-                                marginTop: S.spacing.lg,
-                            },
-                        ]}
-                    >
-                        {saving ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <>
-                                <Ionicons name="save-outline" size={18} color="#fff" />
-                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
-                                    Simpan Perubahan
-                                </Text>
-                            </>
+                    {/* Footer buttons */}
+                    <View style={{ flexDirection: "row", gap: 12, marginTop: S.spacing.lg }}>
+                        {/* Save */}
+                        <Pressable
+                            onPress={handleSubmit(onSubmit)}
+                            disabled={saving}
+                            style={({ pressed }) => [
+                                styles.button,
+                                {
+                                    flex: 1,
+                                    backgroundColor: C.tint,
+                                    borderRadius: S.radius.md,
+                                    opacity: pressed || saving ? 0.85 : 1,
+                                },
+                            ]}
+                        >
+                            {saving ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="save-outline" size={18} color="#fff" />
+                                    <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
+                                        {isCreate ? "Buat Pengguna" : "Simpan Perubahan"}
+                                    </Text>
+                                </>
+                            )}
+                        </Pressable>
+
+                        {/* Delete (edit only) */}
+                        {!isCreate && (
+                            <Pressable
+                                onPress={onDelete}
+                                disabled={saving}
+                                style={({ pressed }) => [
+                                    styles.button,
+                                    {
+                                        backgroundColor: C.danger,
+                                        borderRadius: S.radius.md,
+                                        opacity: pressed || saving ? 0.85 : 1,
+                                        paddingHorizontal: 14,
+                                    },
+                                ]}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#fff" />
+                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>Hapus</Text>
+                            </Pressable>
                         )}
-                    </Pressable>
+                    </View>
                 </View>
             </KeyboardAwareScrollView>
         </SafeAreaView>

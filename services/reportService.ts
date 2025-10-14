@@ -38,6 +38,8 @@ export type ReportDataset = {
     unit: string | null;
     unitPrice: number;
   }[];
+  cashExtras: { label: string; amount: number }[]; // ⬅️ Biaya Lain (Tunai) terpisah
+
   labor: {
     stageKey?: string;
     stageLabel?: string;
@@ -60,14 +62,14 @@ export type ReportDataset = {
     amount: number;
   } | null;
 
-  // === Pajak (diambil dari kedua sisi, tidak masuk total biaya) ===
-  taxCash?: number; // total pajak sisi cash (sudah dikalikan landFactor)
-  taxNonCash?: number; // total pajak sisi noncash (sudah dikalikan landFactor)
+  // === Pajak
+  taxCash?: number;
+  taxNonCash?: number;
 
-  // === Year mode (summary) ===
+  // === Year mode (summary)
   yearRows?: YearSummaryRow[];
 
-  // === Totals (selalu ada) ===
+  // === Totals
   totalReceipts: number;
   totalCash: number;
   totalLabor: number;
@@ -217,6 +219,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         return {
           production: [],
           cashByCategory: [],
+          cashExtras: [], // year mode tak butuh rincian ini
           labor: [],
           tools: [],
           extras: [],
@@ -323,7 +326,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         }
       );
 
-      // CASH (material/extras) — pajak sudah dikeluarkan ke section khusus
+      // ====== CASH (Material vs Cash Extras terpisah) ======
       type AggMat = {
         qty: number;
         amt: number;
@@ -331,13 +334,23 @@ export function useReportData(initialSeasonId?: string | "all") {
         multiUnit: boolean;
       };
       const matAggMap = new Map<string, AggMat>();
-      const nominalMap = new Map<string, number>();
+      const nominalMap = new Map<string, number>(); // fallback material nominal (jarang)
+      const cashExtras: { label: string; amount: number }[] = []; // ⬅️ NEW
 
       for (const r of cashDetailRows) {
         const rawLabel = (r.label ?? "").trim();
         const rawName = (r.name ?? "").trim();
         const key = rawName ? `${rawLabel}|${rawName}` : rawLabel;
 
+        // Baris "cash extra" (Biaya Lain Tunai) datang tanpa qty di view
+        const isCashExtra = r.qty == null;
+        if (isCashExtra) {
+          const amount = r.amount != null ? num(r.amount) * landFactor : 0;
+          if (amount > 0) cashExtras.push({ label: rawLabel, amount });
+          continue;
+        }
+
+        // Material (punya qty/unit atau unit_price)
         const hasQtyOrUnitPrice = r.qty != null || r.unit_price != null;
         if (hasQtyOrUnitPrice) {
           const qv = r.qty != null ? num(r.qty) : 0;
@@ -359,6 +372,7 @@ export function useReportData(initialSeasonId?: string | "all") {
           prev.amt += av;
           matAggMap.set(key, prev);
         } else {
+          // fallback nominal untuk material tanpa qty (kalau ada)
           nominalMap.set(key, (nominalMap.get(key) ?? 0) + num(r.amount));
         }
       }
@@ -488,11 +502,12 @@ export function useReportData(initialSeasonId?: string | "all") {
           p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice
         )
       );
-      const totalCash = sum(
-        cashByCategory.map((c) =>
-          c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice
-        )
-      );
+      const totalCash =
+        sum(
+          cashByCategory.map((c) =>
+            c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice
+          )
+        ) + sum(cashExtras.map((e) => e.amount)); // ⬅️ include Biaya Lain Tunai
       const totalTools = sum(tools.map((t) => t.quantity * t.purchasePrice));
       const totalLabor = sum(labor.map((l) => l.value));
       const totalExtras = sum(extras.map((e) => e.amount));
@@ -502,6 +517,7 @@ export function useReportData(initialSeasonId?: string | "all") {
       return {
         production,
         cashByCategory,
+        cashExtras, // ⬅️ expose Biaya Lain Tunai terpisah
         labor,
         tools,
         extras,
@@ -546,6 +562,7 @@ function emptyDataset(): ReportDataset {
   return {
     production: [],
     cashByCategory: [],
+    cashExtras: [], // default kosong
     labor: [],
     tools: [],
     extras: [],

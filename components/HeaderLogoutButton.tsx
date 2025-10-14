@@ -74,11 +74,8 @@ export default function HeaderLogoutButton({
 
 const styles = StyleSheet.create({
     btn: {
-        // width: 36,
-        // height: 36,
-        borderRadius: 999,
+        width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1,
         padding: 8,
-        borderWidth: 1,
         alignItems: "center",
         justifyContent: "center",
     },

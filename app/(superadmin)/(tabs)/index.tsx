@@ -1,11 +1,13 @@
 import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { useSuperAdminUserList } from "@/services/superAdminService";
+import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -35,7 +37,7 @@ export default function HomeAdminScreen() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
+    const { profile, reloadProfile } = useAuth();
     const { rows, loading, refreshing, fetchOnce, refresh } = useSuperAdminUserList();
 
     const users: AppUser[] = useMemo(
@@ -72,6 +74,10 @@ export default function HomeAdminScreen() {
     const onRefresh = useCallback(async () => {
         await refresh();
     }, [refresh]);
+
+    useEffect(() => {
+        reloadProfile();
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
@@ -194,10 +200,31 @@ export default function HomeAdminScreen() {
                             ]}
                         >
                             <Ionicons name="person-add-outline" size={18} color={C.text} />
-                            <Text style={{ color: C.text, fontWeight: "800" }}>Tambah</Text>
                         </Pressable>
 
                         <HeaderLogoutButton size={28} confirm={true} />
+                        <Pressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/(superadmin)/[detail]",
+                                    params: { detail: profile?.id ?? "" },
+                                })
+                            }
+                            style={[
+                                styles.avatarWrap,
+                                { borderColor: C.success, backgroundColor: C.surface },
+                                scheme === "light" ? S.shadow.light : S.shadow.dark,
+                            ]}
+                        >
+                            <Text style={{
+                                color: C.text,
+                                fontFamily: Fonts.rounded as any,
+                                fontSize: 16,
+                                fontWeight: "bold"
+                            }}>
+                                {getInitialsName(profile?.full_name ?? "")}
+                            </Text>
+                        </Pressable>
                     </View>
                 </View>
 
@@ -290,11 +317,10 @@ const styles = StyleSheet.create({
     headerBtn: {
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         gap: 6,
-        borderWidth: 1,
-        borderRadius: 999,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        padding: 8,
+        width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
     },
 
     search: {
@@ -314,13 +340,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     avatarWrap: {
-        width: 44,
-        height: 44,
-        borderRadius: 999,
-        borderWidth: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
+        justifyContent: "center", alignItems: "center",
+        width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
     },
     avatar: { width: "100%", height: "100%" },
     name: { fontSize: 14, fontWeight: "800" },

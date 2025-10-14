@@ -1,11 +1,13 @@
 import HeaderLogoutButton from "@/components/HeaderLogoutButton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { useAdminUserList } from "@/services/adminUserService";
+import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -35,7 +37,7 @@ export default function HomeAdminScreen() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
+    const { profile, reloadProfile } = useAuth();
     const { rows, loading, refreshing, fetchOnce, refresh } = useAdminUserList();
     const users: AppUser[] = useMemo(
         () =>
@@ -71,6 +73,10 @@ export default function HomeAdminScreen() {
     const onRefresh = useCallback(async () => {
         await refresh();
     }, [refresh]);
+
+    useEffect(() => {
+        reloadProfile();
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
@@ -149,7 +155,31 @@ export default function HomeAdminScreen() {
                     <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>
                         Kelola Pengguna
                     </Text>
-                    <HeaderLogoutButton size={28} confirm={true} />
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                        <HeaderLogoutButton size={28} confirm={true} />
+                        <Pressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/(admin)/[detail]",
+                                    params: { detail: profile?.id ?? "" },
+                                })
+                            }
+                            style={[
+                                styles.avatarWrap,
+                                { borderColor: C.success, backgroundColor: C.surface },
+                                scheme === "light" ? S.shadow.light : S.shadow.dark,
+                            ]}
+                        >
+                            <Text style={{
+                                color: C.text,
+                                fontFamily: Fonts.rounded as any,
+                                fontSize: 16,
+                                fontWeight: "bold"
+                            }}>
+                                {getInitialsName(profile?.full_name ?? "")}
+                            </Text>
+                        </Pressable>
+                    </View>
                 </View>
 
                 {/* search */}
@@ -196,7 +226,10 @@ const styles = StyleSheet.create({
     search: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
 
     row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1 },
-    avatarWrap: { width: 44, height: 44, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+    avatarWrap: {
+        justifyContent: "center", alignItems: "center",
+        width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
+    },
     avatar: { width: "100%", height: "100%" },
     name: { fontSize: 14, fontWeight: "800" },
     badge: { flexDirection: "row", gap: 6, alignItems: "center", borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },

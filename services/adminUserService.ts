@@ -1,7 +1,11 @@
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/profile";
-import { FunctionsHttpError } from "@supabase/supabase-js";
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** ===== Types ===== */
@@ -32,6 +36,8 @@ export type ListUsersOpts = {
   offset?: number;
 };
 
+type DeleteUserResult = { selfDelete: boolean };
+
 /** ===== Repo ===== */
 export const adminUserRepo = {
   async list(opts?: ListUsersOpts): Promise<AdminUserRow[]> {
@@ -40,6 +46,8 @@ export const adminUserRepo = {
     let q = supabase
       .from("profiles")
       .select("*")
+      // hanya tampilkan pengguna role "user" (admin/superadmin dikecualikan dari listing)
+      .not("role", "in", '("admin","superadmin")')
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -80,52 +88,85 @@ export const adminUserRepo = {
       newRole,
     } = input;
 
+    // 1) Update email/password via Edge Function bila ada perubahan kredensial
     if (newEmail || newPassword) {
-      const { error } = await supabase.functions.invoke("admin-update-user", {
-        body: { targetUserId, newEmail, newPassword },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "admin-update-user",
+        {
+          body: { targetUserId, newEmail, newPassword },
+        }
+      );
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          const { error: msg } = await error.context
-            .json()
-            .catch(() => ({ error: "Function error" }));
-          throw new Error(msg || "Gagal memperbarui email/password");
+          const payload = await error.context.json().catch(() => ({} as any));
+          throw new Error(payload?.error || "Gagal memperbarui email/password");
+        }
+        if (
+          error instanceof FunctionsRelayError ||
+          error instanceof FunctionsFetchError
+        ) {
+          throw new Error(error.message || "Gagal memperbarui email/password");
         }
         throw error;
       }
+      // optional: validasi data.ok pada response function
+      if (data && data.ok === false) {
+        throw new Error(data?.error || "Gagal memperbarui email/password");
+      }
     }
+
+    // 2) Update profil saja via RPC, dengan kebijakan per-role:
+    // - jika role !== 'user' maka nama_desa & luas_lahan dipaksa null
+    const roleIsUser = newRole === "user";
+    const namaDesaFinal = roleIsUser ? newNamaDesa ?? null : null;
+    const luasLahanFinal = roleIsUser ? newLuasLahan ?? null : null;
 
     const { error: eRpc } = await supabase.rpc("admin_update_profile_only", {
       target_user_id: targetUserId,
       new_full_name: newFullName ?? null,
-      new_nama_desa: newNamaDesa ?? null,
-      new_luas_lahan: newLuasLahan ?? null,
+      new_nama_desa: namaDesaFinal,
+      new_luas_lahan: luasLahanFinal,
       new_role: newRole,
     });
     if (eRpc) throw eRpc;
   },
 
-  async remove(targetUserId: string): Promise<void> {
-    const { error } = await supabase.functions.invoke("admin-delete-user", {
-      body: { targetUserId },
-    });
+  async remove(targetUserId: string): Promise<DeleteUserResult> {
+    const { data, error } = await supabase.functions.invoke(
+      "admin-delete-user",
+      {
+        body: { targetUserId },
+      }
+    );
+
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const { error: msg } = await error.context
-          .json()
-          .catch(() => ({ error: "Function error" }));
-        throw new Error(msg || "Gagal menghapus user");
+        const payload = await error.context.json().catch(() => ({} as any));
+        throw new Error(payload?.error || "Gagal menghapus user");
+      }
+      if (
+        error instanceof FunctionsRelayError ||
+        error instanceof FunctionsFetchError
+      ) {
+        throw new Error(error.message || "Gagal menghapus user");
       }
       throw error;
     }
+
+    if (!data?.ok) {
+      throw new Error(data?.error || "Gagal menghapus user");
+    }
+
+    return { selfDelete: Boolean(data.selfDelete) };
   },
 };
 
+/** ===== Service Hooks ===== */
 export function useAdminUserService() {
   const { user, authReady } = useAuth();
 
   const ensureAdmin = useCallback(() => {
-    if (!authReady) throw new Error("Auth masih authReady.");
+    if (!authReady) throw new Error("Auth belum siap.");
     if (!user) throw new Error("Tidak ada sesi login.");
     return user;
   }, [authReady, user]);
@@ -157,7 +198,7 @@ export function useAdminUserService() {
   const deleteUser = useCallback(
     (id: string) => {
       ensureAdmin();
-      return adminUserRepo.remove(id);
+      return adminUserRepo.remove(id); // -> Promise<{ selfDelete: boolean }>
     },
     [ensureAdmin]
   );
@@ -168,7 +209,7 @@ export function useAdminUserService() {
       listUsers,
       getUserById,
       updateUser,
-      deleteUser,
+      deleteUser, // kembalikan { selfDelete }
     }),
     [authReady, listUsers, getUserById, updateUser, deleteUser]
   );
@@ -296,7 +337,9 @@ export function useAdminUserDetail(targetUserId?: string) {
 
   const remove = useCallback(async () => {
     if (!targetUserId) throw new Error("targetUserId tidak ada.");
-    await adminUserRepo.remove(targetUserId);
+    // kembalikan selfDelete ke caller (UI)
+    const res = await adminUserRepo.remove(targetUserId);
+    return res; // { selfDelete: boolean }
   }, [targetUserId]);
 
   return { loading, refreshing, row, fetchOnce, refresh, update, remove };

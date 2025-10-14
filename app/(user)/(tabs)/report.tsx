@@ -8,6 +8,7 @@ import { generateReportPdf } from "@/services/pdf/reportPdf";
 import { getMyProfile } from "@/services/profileService";
 import { useReportData } from "@/services/reportService";
 import { CATEGORY_LABEL_REPORT, Theme } from "@/types/report";
+import { currency } from "@/utils/currency";
 import { fmtDate } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -37,7 +38,7 @@ function prettyLabel(raw: string): string {
         CATEGORY_LABEL_REPORT[rawCat] ??
         rawCat?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-    return name ? `${label} | ${name.trim()}` : label;
+    return name ? `${label} ${name.trim()}` : label;
 }
 
 // ===== Tambahan untuk Year Mode =====
@@ -183,6 +184,7 @@ export default function ReportScreen() {
             unit: string | null;
             unitPrice: number;
         }[],
+        cashExtras: [] as { label: string; amount: number }[], // ⬅️ NEW (tunai lainnya)
         laborNonCashNom: 0,
         laborNonCashDetail: null as null | {
             qty: number | null;
@@ -206,6 +208,7 @@ export default function ReportScreen() {
                 setBase({
                     production: d.production || [],
                     cash: d.cashByCategory || [],
+                    cashExtras: d.cashExtras || [], // ⬅️ ambil dari service
                     laborNonCashNom: (d.labor || []).reduce((a, r) => a + (r.value || 0), 0),
                     laborNonCashDetail: d.laborNonCashDetail ?? null,
                     tools: d.tools || [],
@@ -219,6 +222,7 @@ export default function ReportScreen() {
                 setBase({
                     production: [],
                     cash: [],
+                    cashExtras: [],
                     laborNonCashNom: 0,
                     laborNonCashDetail: null,
                     tools: [],
@@ -240,6 +244,8 @@ export default function ReportScreen() {
     const cashValue = (c: (typeof base.cash)[number]) =>
         c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
 
+    const cashExtraValue = (e: (typeof base.cashExtras)[number]) => e.amount || 0;
+
     const toolValue = (t: (typeof base.tools)[number]) => t.quantity * t.purchasePrice;
 
     const extraValue = (e: (typeof base.extras)[number]) => e.amount || 0;
@@ -250,8 +256,10 @@ export default function ReportScreen() {
     );
 
     const totalBiayaTunai = useMemo(
-        () => base.cash.reduce((acc, c) => acc + cashValue(c), 0),
-        [base.cash]
+        () =>
+            base.cash.reduce((acc, c) => acc + cashValue(c), 0) +
+            base.cashExtras.reduce((acc, e) => acc + cashExtraValue(e), 0),
+        [base.cash, base.cashExtras]
     );
 
     const totalBiayaNonTunaiTK = useMemo(() => base.laborNonCashNom, [base.laborNonCashNom]);
@@ -304,15 +312,15 @@ export default function ReportScreen() {
             <Text style={[styles.tdUraian, { color: C.text }]} numberOfLines={2}>
                 {label}
             </Text>
-            <Text style={[styles.tdRight, { color: C.text }]}>{value.toLocaleString("id-ID")}</Text>
+            <Text style={[styles.tdRight, { color: C.text }]}>{currency(value)}</Text>
         </View>
     );
 
-    // ===== Helpers untuk YEAR MODE =====
-    const yr = (lbl: string) => {
+    const yrRaw = (lbl: string) => {
         const row = yearRows.find((r) => r.label.toLowerCase() === lbl.toLowerCase());
         return row ? Number(row.amount || 0) : 0;
     };
+    const yrMoney = (lbl: string) => (yrRaw(lbl) * landFactor);
     const extractMtNo = (label: string): number | null => {
         const m = label.match(/MT\s*(\d+)/i);
         return m ? Number(m[1]) : null;
@@ -357,6 +365,7 @@ export default function ReportScreen() {
                                     profileAreaHa,
                                     effectiveArea: effectiveArea != null ? effectiveArea : profileAreaHa,
                                     landFactor,
+                                    cashExtras: base.cashExtras,
                                     production: base.production,
                                     cash: base.cash,
                                     tools: base.tools,
@@ -364,11 +373,14 @@ export default function ReportScreen() {
                                     laborNonCashNom: base.laborNonCashNom,
                                     laborNonCashDetail: base.laborNonCashDetail ?? undefined,
                                     prettyLabel,
-                                    // tambahkan ini saat Year Mode:
-                                    yearRows: yearActive ? yearRows : undefined,
+                                    // Year Mode:
+                                    yearRows: yearActive
+                                        ? yearRows.map(r =>
+                                            r.section === "rc" ? r : { ...r, amount: Number(r.amount || 0) * landFactor } // ⬅️ skala uang, bukan RC
+                                        )
+                                        : undefined,
                                     share: true,
                                 });
-
                             }}
                             style={({ pressed }) => [
                                 styles.iconBtn,
@@ -627,7 +639,7 @@ export default function ReportScreen() {
                                         <SimpleRow
                                             key={`pen-mt-${n}`}
                                             label={`Penerimaan MT ${n}`}
-                                            value={yr(`Penerimaan MT ${n}`)}
+                                            value={yrMoney(`Penerimaan MT ${n}`)}
                                         />
                                     ))}
 
@@ -638,15 +650,15 @@ export default function ReportScreen() {
                                             <SubTitle text={`MT ${n}`} C={C} />
                                             <SimpleRow
                                                 label={`Biaya Non Tunai MT ${n}`}
-                                                value={yr(`Biaya Non Tunai MT ${n}`)}
+                                                value={yrMoney(`Biaya Non Tunai MT ${n}`)}
                                             />
                                             <SimpleRow
                                                 label={`Biaya Tunai MT ${n}`}
-                                                value={yr(`Biaya Tunai MT ${n}`)}
+                                                value={yrMoney(`Biaya Tunai MT ${n}`)}
                                             />
                                             <SimpleRow
                                                 label={`Biaya Total MT ${n}`}
-                                                value={yr(`Biaya Total MT ${n}`)}
+                                                value={yrMoney(`Biaya Total MT ${n}`)}
                                             />
                                         </React.Fragment>
                                     ))}
@@ -657,15 +669,15 @@ export default function ReportScreen() {
                                         <React.Fragment key={`pend-mt-${n}`}>
                                             <SimpleRow
                                                 label={`Pendapatan Atas Biaya Tunai MT ${n}`}
-                                                value={yr(`Pendapatan Atas Biaya Tunai MT ${n}`)}
+                                                value={yrMoney(`Pendapatan Atas Biaya Tunai MT ${n}`)}
                                             />
                                             <SimpleRow
                                                 label={`Pendapatan Atas Biaya Non Tunai MT ${n}`}
-                                                value={yr(`Pendapatan Atas Biaya Non Tunai MT ${n}`)}
+                                                value={yrMoney(`Pendapatan Atas Biaya Non Tunai MT ${n}`)}
                                             />
                                             <SimpleRow
                                                 label={`Pendapatan Atas Biaya Total MT ${n}`}
-                                                value={yr(`Pendapatan Atas Biaya Total MT ${n}`)}
+                                                value={yrMoney(`Pendapatan Atas Biaya Total MT ${n}`)}
                                             />
                                         </React.Fragment>
                                     ))}
@@ -676,24 +688,24 @@ export default function ReportScreen() {
                                         <React.Fragment key={`rc-mt-${n}`}>
                                             <TotalLine
                                                 label={`R/C Biaya Tunai MT ${n}`}
-                                                valueStr={yr(`R/C Biaya Tunai MT ${n}`).toFixed(2)}
+                                                valueStr={yrMoney(`R/C Biaya Tunai MT ${n}`).toFixed(2)}
                                                 C={C}
                                             />
                                             <TotalLine
                                                 label={`R/C Biaya Non Tunai MT ${n}`}
-                                                valueStr={yr(`R/C Biaya Non Tunai MT ${n}`).toFixed(2)}
+                                                valueStr={yrMoney(`R/C Biaya Non Tunai MT ${n}`).toFixed(2)}
                                                 C={C}
                                             />
                                             <TotalLine
                                                 label={`R/C Biaya Total MT ${n}`}
-                                                valueStr={yr(`R/C Biaya Total MT ${n}`).toFixed(2)}
+                                                valueStr={yrMoney(`R/C Biaya Total MT ${n}`).toFixed(2)}
                                                 C={C}
                                             />
                                         </React.Fragment>
                                     ))}
                                 </>
                             ) : (
-                                // ====== SEASON MODE CONTENT (tetap seperti sebelumnya) ======
+                                // ====== SEASON MODE CONTENT ======
                                 <>
                                     {/* Penerimaan */}
                                     <SectionTitle text="Penerimaan" C={C} />
@@ -715,6 +727,8 @@ export default function ReportScreen() {
                                     {/* BIAYA PRODUKSI */}
                                     <SectionTitle text="Biaya Produksi" C={C} />
                                     <SubTitle text="I. Biaya Tunai" C={C} />
+
+                                    {/* Material & TK Luar Keluarga (dari cashByCategory) */}
                                     {base.cash.map((c, i) => {
                                         const label = prettyLabel(c.category || "");
                                         const value = c.quantity != null ? c.quantity * c.unitPrice : c.unitPrice;
@@ -730,6 +744,20 @@ export default function ReportScreen() {
                                             />
                                         );
                                     })}
+
+                                    {base.cashExtras.length > 0 && (
+                                        <>
+                                            <SubMini text="Biaya Lain" C={C} />
+                                            {base.cashExtras.map((e, i) => (
+                                                <RowView
+                                                    key={`cash-extra-${i}`}
+                                                    C={C}
+                                                    label={prettyLabel(e.label ?? "Biaya Lain")}
+                                                    value={cashExtraValue(e)}
+                                                />
+                                            ))}
+                                        </>
+                                    )}
 
                                     <SubTitle text="II. Biaya Non Tunai" C={C} />
 
@@ -748,11 +776,11 @@ export default function ReportScreen() {
                                             value={base.laborNonCashDetail.amount}
                                         />
                                     ) : (
-                                        totalBiayaNonTunaiTK > 0 && (
+                                        base.laborNonCashNom > 0 && (
                                             <RowView
                                                 C={C}
                                                 label={prettyLabel("TK Dalam Keluarga")}
-                                                value={totalBiayaNonTunaiTK}
+                                                value={base.laborNonCashNom}
                                             />
                                         )
                                     )}

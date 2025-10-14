@@ -2,7 +2,11 @@
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/profile";
-import { FunctionsHttpError } from "@supabase/supabase-js";
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** ===== Types ===== */
@@ -42,14 +46,18 @@ export type SuperAdminListUsersOpts = {
   offset?: number;
 };
 
+type DeleteUserResult = { selfDelete: boolean };
+
 /** ===== Repo ===== */
 export const superAdminUserRepo = {
   async list(opts?: SuperAdminListUsersOpts): Promise<SuperAdminUserRow[]> {
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
+
     let q = supabase
       .from("profiles")
       .select("*")
+      .neq("role", "superadmin") // superadmin tidak ditampilkan
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -80,7 +88,14 @@ export const superAdminUserRepo = {
   },
 
   async create(input: SuperAdminCreateUserInput): Promise<SuperAdminUserRow> {
-    const { email, password, fullName, namaDesa, luasLahan, role } = input;
+    const { email, password, fullName, role } = input;
+
+    // Enforce per-role: non-user => null fields
+    const namaDesa = role === "user" ? input.namaDesa ?? null : null;
+    const luasLahan =
+      role === "user" && typeof input.luasLahan === "number"
+        ? input.luasLahan
+        : null;
 
     const { data, error } = await supabase.functions.invoke(
       "admin-create-user",
@@ -89,8 +104,8 @@ export const superAdminUserRepo = {
           email,
           password,
           fullName: fullName ?? null,
-          namaDesa: namaDesa ?? null,
-          luasLahan: typeof luasLahan === "number" ? luasLahan : null,
+          namaDesa,
+          luasLahan,
           role,
         },
       }
@@ -98,10 +113,14 @@ export const superAdminUserRepo = {
 
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const { error: msg } = await error.context
-          .json()
-          .catch(() => ({ error: "Function error" }));
-        throw new Error(msg || "Gagal membuat user");
+        const payload = await error.context.json().catch(() => ({} as any));
+        throw new Error(payload?.error || "Gagal membuat user");
+      }
+      if (
+        error instanceof FunctionsRelayError ||
+        error instanceof FunctionsFetchError
+      ) {
+        throw new Error(error.message || "Gagal membuat user");
       }
       throw error;
     }
@@ -126,44 +145,75 @@ export const superAdminUserRepo = {
       newRole,
     } = input;
 
+    // 1) Update email/password via Edge Function bila ada perubahan
     if (newEmail || newPassword) {
-      const { error } = await supabase.functions.invoke("admin-update-user", {
-        body: { targetUserId, newEmail, newPassword },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "admin-update-user",
+        {
+          body: { targetUserId, newEmail, newPassword },
+        }
+      );
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          const { error: msg } = await error.context
-            .json()
-            .catch(() => ({ error: "Function error" }));
-          throw new Error(msg || "Gagal memperbarui email/password");
+          const payload = await error.context.json().catch(() => ({} as any));
+          throw new Error(payload?.error || "Gagal memperbarui email/password");
+        }
+        if (
+          error instanceof FunctionsRelayError ||
+          error instanceof FunctionsFetchError
+        ) {
+          throw new Error(error.message || "Gagal memperbarui email/password");
         }
         throw error;
       }
+      if (data && data.ok === false) {
+        throw new Error(data?.error || "Gagal memperbarui email/password");
+      }
     }
+
+    // 2) Update profil via RPC, patuhi aturan per-role:
+    //    jika role !== 'user' maka nama_desa & luas_lahan = null
+    const roleIsUser = newRole === "user";
+    const namaDesaFinal = roleIsUser ? newNamaDesa ?? null : null;
+    const luasLahanFinal = roleIsUser ? newLuasLahan ?? null : null;
 
     const { error: eRpc } = await supabase.rpc("admin_update_profile_only", {
       target_user_id: targetUserId,
       new_full_name: newFullName ?? null,
-      new_nama_desa: newNamaDesa ?? null,
-      new_luas_lahan: newLuasLahan ?? null,
+      new_nama_desa: namaDesaFinal,
+      new_luas_lahan: luasLahanFinal,
       new_role: newRole,
     });
     if (eRpc) throw eRpc;
   },
 
-  async remove(targetUserId: string): Promise<void> {
-    const { error } = await supabase.functions.invoke("admin-delete-user", {
-      body: { targetUserId },
-    });
+  async remove(targetUserId: string): Promise<DeleteUserResult> {
+    const { data, error } = await supabase.functions.invoke(
+      "admin-delete-user",
+      {
+        body: { targetUserId },
+      }
+    );
+
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const { error: msg } = await error.context
-          .json()
-          .catch(() => ({ error: "Function error" }));
-        throw new Error(msg || "Gagal menghapus user");
+        const payload = await error.context.json().catch(() => ({} as any));
+        throw new Error(payload?.error || "Gagal menghapus user");
+      }
+      if (
+        error instanceof FunctionsRelayError ||
+        error instanceof FunctionsFetchError
+      ) {
+        throw new Error(error.message || "Gagal menghapus user");
       }
       throw error;
     }
+
+    if (!data?.ok) {
+      throw new Error(data?.error || "Gagal menghapus user");
+    }
+
+    return { selfDelete: Boolean(data.selfDelete) };
   },
 };
 
@@ -214,7 +264,7 @@ export function useSuperAdminUserService() {
   const deleteUser = useCallback(
     (id: string) => {
       ensureSuperadmin();
-      return superAdminUserRepo.remove(id);
+      return superAdminUserRepo.remove(id); // -> Promise<{ selfDelete: boolean }>
     },
     [ensureSuperadmin]
   );
@@ -226,7 +276,7 @@ export function useSuperAdminUserService() {
       getUserById,
       createUser,
       updateUser,
-      deleteUser,
+      deleteUser, // kembalikan { selfDelete }
     }),
     [authReady, listUsers, getUserById, createUser, updateUser, deleteUser]
   );
@@ -354,7 +404,9 @@ export function useSuperAdminUserDetail(targetUserId?: string) {
 
   const remove = useCallback(async () => {
     if (!targetUserId) throw new Error("targetUserId tidak ada.");
-    await superAdminUserRepo.remove(targetUserId);
+    // kembalikan selfDelete ke caller (UI)
+    const res = await superAdminUserRepo.remove(targetUserId);
+    return res; // { selfDelete: boolean }
   }, [targetUserId]);
 
   return { loading, refreshing, row, fetchOnce, refresh, update, remove };

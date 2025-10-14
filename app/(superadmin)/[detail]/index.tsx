@@ -1,6 +1,7 @@
 // app/(superadmin)/users/[detail].tsx (atau lokasi komponen detail kamu)
 import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { SuperAdminUserRow, useSuperAdminUserService } from "@/services/superAdminService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
@@ -34,7 +35,7 @@ export default function AdminUserDetail() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-
+    const { signOut } = useAuth();
     const { getUserById, createUser, updateUser, deleteUser } =
         useSuperAdminUserService();
 
@@ -42,6 +43,7 @@ export default function AdminUserDetail() {
     const [saving, setSaving] = useState(false);
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
+    const isUserRole = role === "user";
 
     const {
         control,
@@ -182,9 +184,8 @@ export default function AdminUserDetail() {
                     onPress: async () => {
                         try {
                             setSaving(true);
-                            await deleteUser(userId);
-                            Alert.alert("Terhapus", "Pengguna berhasil dihapus.");
-                            router.back();
+                            const { selfDelete } = await deleteUser(userId);
+                            if (selfDelete) await signOut(); else { Alert.alert("Terhapus", "Pengguna berhasil dihapus."); router.back(); }
                         } catch (e: any) {
                             console.log(e);
                             Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus pengguna.");
@@ -379,44 +380,49 @@ export default function AdminUserDetail() {
                         <Chip label="Super Admin" active={role === "superadmin"} onPress={() => setRole("superadmin")} C={C} />
                     </View>
 
-                    {/* Nama Desa/Kelurahan */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Nama Desa/Kelurahan</Text>
-                    <Controller
-                        control={control}
-                        name="village"
-                        rules={{ required: "Nama Desa/Kelurahan wajib diisi" }}
-                        render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput
-                                placeholder="Contoh: Medangan"
-                                placeholderTextColor={C.icon}
-                                onBlur={onBlur}
-                                onChangeText={onChange}
-                                value={value}
-                                style={[
-                                    styles.input,
-                                    {
-                                        borderColor: errors.village ? C.danger : C.border,
-                                        color: C.text,
-                                        borderRadius: S.radius.md,
-                                        paddingHorizontal: S.spacing.md,
-                                        paddingVertical: 10,
-                                    },
-                                ]}
-                            />
-                        )}
-                    />
-                    {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>}
+
 
                     {/* Luas Lahan hanya untuk role user */}
                     {role === "user" && (
                         <>
+                            {/* Nama Desa/Kelurahan */}
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Nama Desa/Kelurahan</Text>
+                            <Controller
+                                control={control}
+                                name="village"
+                                rules={{
+                                    required: isUserRole ? "Nama Desa/Kelurahan wajib diisi" : false,
+                                }}
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <TextInput
+                                        placeholder="Contoh: Medangan"
+                                        placeholderTextColor={C.icon}
+                                        onBlur={onBlur}
+                                        onChangeText={onChange}
+                                        value={value}
+                                        style={[
+                                            styles.input,
+                                            {
+                                                borderColor: errors.village ? C.danger : C.border,
+                                                color: C.text,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
+                                            },
+                                        ]}
+                                    />
+                                )}
+                            />
+                            {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message as string}</Text>}
+
                             <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Luas Lahan (hektar)</Text>
                             <Controller
                                 control={control}
                                 name="landAreaHa"
                                 rules={{
-                                    required: "Luas lahan wajib diisi",
+                                    required: isUserRole ? "Luas lahan wajib diisi" : false,
                                     validate: (v) => {
+                                        if (!isUserRole) return true; // tidak wajib dan tidak divalidasi
                                         const n = parseFloat((v || "").toString().replace(",", "."));
                                         return !(Number.isNaN(n) || n <= 0) || "Harus angka > 0";
                                     },

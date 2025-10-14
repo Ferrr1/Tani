@@ -15,6 +15,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ExtrasPanel, { ExtraRow } from "@/components/ExtrasPanel";
 import LaborOne from "@/components/LaborOne";
 import RHFLineInput from "@/components/RHFLineInput";
 import SectionButton from "@/components/SectionButton";
@@ -26,11 +27,23 @@ import {
     NonCashFormValues,
     NonCashLaborInput,
     NonCashToolInput,
+    SERVICE_UNIT,
     ToolForm,
 } from "@/types/expense";
 import { calcLaborSubtotal } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
 import { toNum } from "@/utils/number";
+
+// >>> PRORATA: import service untuk ambil tanggal musim
+import { useSeasonService } from "@/services/seasonService";
+
+// >>> PRORATA: helper hitung hari inklusif
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const daysInclusive = (start: string | Date, end: string | Date) => {
+    const s = new Date(start); s.setHours(0, 0, 0, 0);
+    const e = new Date(end); e.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((e.getTime() - s.getTime()) / MS_PER_DAY) + 1);
+};
 
 export default function NonCashForm({
     seasonId,
@@ -54,6 +67,10 @@ export default function NonCashForm({
         listNonCashExtras,
     } = useExpenseService();
 
+    // >>> PRORATA: ambil season untuk hitung jumlah hari
+    const { getSeasonById } = useSeasonService();
+    const [seasonDays, setSeasonDays] = useState<number>(0);
+
     const [openNursery, setOpenNursery] = useState(false);
     const [openLandPrep, setOpenLandPrep] = useState(false);
     const [openPlanting, setOpenPlanting] = useState(false);
@@ -66,6 +83,7 @@ export default function NonCashForm({
     const [openTools, setOpenTools] = useState(false);
     const [openExtras, setOpenExtras] = useState(false);
     const [tools, setTools] = useState<ToolForm[]>([]);
+    const [extraItems, setExtraItems] = useState<ExtraRow[]>([]); // dinamis
 
     const defaultLabor = (): LaborForm => ({
         tipe: "harian",
@@ -104,6 +122,28 @@ export default function NonCashForm({
 
     const toStr = (v: any) => (v === null || v === undefined ? "" : String(v));
 
+    // >>> PRORATA: fetch season days (sekali per seasonId)
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                const season = await getSeasonById(seasonId);
+                if (!alive) return;
+                if (season?.start_date && season?.end_date) {
+                    setSeasonDays(daysInclusive(season.start_date, season.end_date));
+                } else {
+                    setSeasonDays(0);
+                }
+            } catch {
+                if (!alive) return;
+                setSeasonDays(0);
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [seasonId, getSeasonById]);
+
     useEffect(() => {
         let alive = true;
         const hydrate = async () => {
@@ -129,19 +169,30 @@ export default function NonCashForm({
                         nilaiSisa: toStr(t.salvage_value),
                     }))
                 );
-                console.log(toolsRows)
 
-                // extras
+                // extras (fixed + dinamis)
                 setValue("extras.tax", "");
                 setValue("extras.landRent", "");
+                setExtraItems([]); // reset dulu
                 (extras || []).forEach((e: any) => {
                     const kind =
                         e?.extra_kind || e?.metadata?.type || e?.metadata?.extra_kind;
                     const amount = toNum(e?.unit_price ?? e?.amount_estimate ?? e?.amount);
-                    if (kind === "tax") setValue("extras.tax", toStr(amount));
-                    if (kind === "land_rent") setValue("extras.landRent", toStr(amount));
+                    if (kind === "tax") {
+                        setValue("extras.tax", toStr(amount));
+                    } else if (kind === "land_rent") {
+                        setValue("extras.landRent", toStr(amount));
+                    } else {
+                        setExtraItems((prev) => [
+                            ...prev,
+                            {
+                                id: String(Date.now() + Math.random()),
+                                label: e?.note || kind || "Biaya",
+                                amount: toStr(amount || 0),
+                            },
+                        ]);
+                    }
                 });
-                console.log(extras)
 
                 const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = {
                     persemaian: "nursery",
@@ -287,32 +338,48 @@ export default function NonCashForm({
     const taxW = watch("extras.tax");
     const landRentW = watch("extras.landRent");
 
+    // >>> PRORATA: pajak & sewa tahunan → prorata hari musim
+    const TAX_DAYS_IN_YEAR = 365; // jika ingin leap-aware, bisa diganti dinamis
+    const taxPerYear = toNum(taxW);
+    const landRentPerYear = toNum(landRentW);
+    const taxProrated = (taxPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
+    const landRentProrated = (landRentPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
+
+    // subtotal (fixed extras) pakai PRORATA
     const extrasSubtotal = useMemo(() => {
-        return toNum(landRentW) + toNum(taxW);
-    }, [landRentW, taxW]);
-    const total = useMemo(() => {
-        const laborTotal =
-            calcLaborSubtotal(laborW.nursery) +
-            calcLaborSubtotal(laborW.land_prep) +
-            calcLaborSubtotal(laborW.planting) +
-            calcLaborSubtotal(laborW.fertilizing) +
-            calcLaborSubtotal(laborW.irrigation) +
-            calcLaborSubtotal(laborW.weeding) +
-            calcLaborSubtotal(laborW.pest_ctrl) +
-            calcLaborSubtotal(laborW.harvest) +
-            calcLaborSubtotal(laborW.postharvest);
+        return taxProrated + landRentProrated;
+    }, [taxProrated, landRentProrated]);
 
-        const toolsTotal = (tools || []).reduce((sum, t) => {
-            const qty = toNum(t.jumlah);
-            const price = toNum(t.hargaBeli);
-            return sum + (qty > 0 && price >= 0 ? qty * price : 0);
+    // subtotal dari ExtrasPanel (dinamis)
+    const extrasPanelSubtotal = useMemo(() => {
+        return (extraItems || []).reduce((acc, r) => {
+            const v = parseFloat(String(r.amount || "0").replace(",", "."));
+            return acc + (Number.isFinite(v) && v >= 0 ? v : 0);
         }, 0);
+    }, [extraItems]);
 
-        const totalNonCash = toolsTotal + laborTotal + extrasSubtotal;
-        return totalNonCash;
-    }, [calcLaborSubtotal, laborW, tools, extrasSubtotal]);
+    const laborTotal =
+        calcLaborSubtotal(laborW.nursery) +
+        calcLaborSubtotal(laborW.land_prep) +
+        calcLaborSubtotal(laborW.planting) +
+        calcLaborSubtotal(laborW.fertilizing) +
+        calcLaborSubtotal(laborW.irrigation) +
+        calcLaborSubtotal(laborW.weeding) +
+        calcLaborSubtotal(laborW.pest_ctrl) +
+        calcLaborSubtotal(laborW.harvest) +
+        calcLaborSubtotal(laborW.postharvest);
 
-    /** ===== Build payload (sesuai service baru) ===== */
+    const toolsTotal = (tools || []).reduce((sum, t) => {
+        const qty = toNum(t.jumlah);
+        const price = toNum(t.hargaBeli);
+        return sum + (qty > 0 && price >= 0 ? qty * price : 0);
+    }, 0);
+
+    const total = useMemo(() => {
+        return toolsTotal + laborTotal + extrasSubtotal + extrasPanelSubtotal;
+    }, [toolsTotal, laborTotal, extrasSubtotal, extrasPanelSubtotal]);
+
+    /** ===== Build payload (sesuai service) + extras dinamis ===== */
     const buildPayload = (fv: NonCashFormValues) => {
         const mapLabor = (
             key: keyof NonCashFormValues["labor"],
@@ -379,12 +446,24 @@ export default function NonCashForm({
             })
             .filter((v): v is NonCashToolInput => v !== null);
 
-        // extras
-        const extras: { type: "tax" | "land_rent"; amount: number }[] = [];
+        // extras (fixed) — SIMPAN NILAI TAHUNAN (TIDAK DIUBAH)
+        const extras: any[] = [];
         const vTax = toNum(fv.extras.tax);
         if (vTax > 0) extras.push({ type: "tax", amount: vTax });
         const vRent = toNum(fv.extras.landRent);
         if (vRent > 0) extras.push({ type: "land_rent", amount: vRent });
+
+        // extras (dinamis dari ExtrasPanel) — type = label, metadata lain tidak diubah
+        (extraItems || []).forEach((e) => {
+            const amt = parseFloat(String(e.amount || "0").replace(",", "."));
+            if (!Number.isFinite(amt) || amt < 0) return;
+            extras.push({
+                type: e.label,
+                amount: amt,
+                note: null,
+                _meta: { category: "other", unit: SERVICE_UNIT },
+            });
+        });
 
         return { labors, tools: toolItems, extras };
     };
@@ -645,27 +724,31 @@ export default function NonCashForm({
                                 name="extras.tax"
                                 control={control}
                                 C={C}
-                                rules={{
-                                    required: "Wajib diisi",
-                                    validate: (v: NonCashFormValues["extras"]["tax"]) =>
-                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
-                                }}
                             />
                             <RHFLineInput
                                 label="Sewa Lahan per Tahun"
                                 name="extras.landRent"
                                 control={control}
                                 C={C}
-                                rules={{
-                                    required: "Wajib diisi",
-                                    validate: (v: NonCashFormValues["extras"]["landRent"]) =>
-                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
-                                }}
                             />
+
+                            {/* >>> PRORATA: keterangan dan subtotal ter-pro-rata */}
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
+                            </Text>
                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
                                 Subtotal Biaya Lain ≈{" "}
                                 <Text style={{ color: C.success, fontWeight: "900" }}>
                                     {currency(extrasSubtotal || 0)}
+                                </Text>
+                            </Text>
+
+                            {/* === ExtrasPanel (dinamis) === */}
+                            <ExtrasPanel schemeColors={{ C, S }} rows={extraItems} setRows={setExtraItems} />
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Subtotal Biaya Lain ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(extrasPanelSubtotal || 0)}
                                 </Text>
                             </Text>
                         </View>

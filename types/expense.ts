@@ -32,8 +32,8 @@ export type Category =
   | "labor_postharvest"
   | "tax"
   | "land_rent"
-  | "transport";
-
+  | "transport"
+  | "other";
 export type ExpenseType = "cash" | "noncash";
 
 export type ExpenseRow = {
@@ -52,7 +52,7 @@ export type ExpenseRow = {
 };
 
 export type ExpenseItemKind = "cash" | "labor" | "tool" | "extra";
-export type ExtraKind = "tax" | "land_rent" | "other";
+export type ExtraKind = "tax" | "land_rent" | "transport" | "other";
 
 export type ExpenseItemRow = {
   id: string;

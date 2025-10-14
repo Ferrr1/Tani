@@ -466,7 +466,7 @@ export default function ChartScreen() {
                                                             }}
                                                         />
                                                         <Text style={{ color: C.text }}>
-                                                            {s.name ? `${s.label} | ${s.name}` : s.label}
+                                                            {s.name ? `${s.label} ${s.name}` : s.label}
                                                         </Text>
                                                     </View>
                                                     <Text style={{ color: C.textMuted, fontWeight: "800" }}>

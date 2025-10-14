@@ -59,11 +59,16 @@ const MATERIAL_CATS: Category[] = [
   "fungicide",
 ];
 
-const EXTRA_CATS: Category[] = ["tax", "land_rent", "transport"];
+const EXTRA_CATS: Category[] = ["tax", "land_rent", "transport", "other"];
 
 const isMaterial = (c: any): c is Category =>
   MATERIAL_CATS.includes(c as Category);
-const isExtra = (c: any): c is Category => EXTRA_CATS.includes(c as Category);
+const isExtra = (c: any): c is Category => {
+  if (!c) return false;
+  if (isLaborCat(c)) return false;
+  if (MATERIAL_CATS.includes(c as Category)) return false;
+  return true;
+};
 const isLaborCat = (c: any) => typeof c === "string" && c.startsWith("labor_"); // labor_nursery, dst.
 
 /** Bentuk item “lama” agar hydrate lama tetap jalan */
@@ -489,40 +494,28 @@ export const expenseRepo = {
     const extras = input.items
       .filter((x) => isExtra(x.category))
       .map((x) => ({
-        type: x.category as ExtraKind,
+        type: x.category as string,
         amount: x.unitPrice,
         itemName: x.itemName ?? null,
         unit: x.unit,
         _meta: { ...(x._meta ?? {}) },
       }));
 
-    try {
-      const { data: newId, error } = await supabase.rpc("create_cash_expense", {
-        p_user_id: userId,
-        p_season_id: input.seasonId,
-        p_note: input.note ?? null,
-        p_expense_date: input.expenseDate ?? null,
-        p_materials: nullIfEmpty(materials),
-        p_labors: nullIfEmpty(labors),
-        p_extras: nullIfEmpty(extras),
-      });
-      if (error) throw error;
+    const { data: newId, error } = await supabase.rpc("create_cash_expense", {
+      p_user_id: userId,
+      p_season_id: input.seasonId,
+      p_note: input.note ?? null,
+      p_expense_date: input.expenseDate ?? null,
+      p_materials: nullIfEmpty(materials),
+      p_labors: nullIfEmpty(labors),
+      p_extras: nullIfEmpty(extras),
+    });
+    if (error) throw error;
 
-      const created = await this.getById(userId, String(newId));
-      if (!created)
-        throw new Error("Gagal mengambil data setelah membuat expense.");
-      return created;
-    } catch (e: any) {
-      if (
-        e?.code === "P0001" ||
-        /melebihi total penerimaan/i.test(e?.message || "")
-      ) {
-        throw new Error(
-          "Total pengeluaran melebihi total penerimaan untuk musim ini."
-        );
-      }
-      throw e;
-    }
+    const created = await this.getById(userId, String(newId));
+    if (!created)
+      throw new Error("Gagal mengambil data setelah membuat expense.");
+    return created;
   },
 
   /** ========== CASH: update via RPC (atomic) ========== */
@@ -577,7 +570,7 @@ export const expenseRepo = {
     const extras = (input.items ?? [])
       .filter((x) => isExtra(x.category))
       .map((x) => ({
-        type: x.category as ExtraKind,
+        type: x.category as string,
         amount: x.unitPrice,
         itemName: x.itemName ?? null,
         unit: x.unit,
@@ -650,10 +643,11 @@ export const expenseRepo = {
       note: t.note ?? null,
     }));
 
+    // IZINKAN "other" juga (selaras dengan ExtrasPanel)
     const extras = (input.extras ?? []).map((e) => ({
-      type: e.type as "tax" | "land_rent",
+      type: e.type, // "tax" | "land_rent" | "other"
       amount: e.amount,
-      note: e.note ?? null,
+      note: e.note ?? null, // label dari ExtrasPanel masuk ke sini
     }));
 
     try {
@@ -727,8 +721,9 @@ export const expenseRepo = {
       note: t.note ?? null,
     }));
 
+    // HAPUS cast sempit; izinkan "other" juga saat update
     const extras = (input.extras ?? []).map((e) => ({
-      type: e.type as "tax" | "land_rent",
+      type: e.type, // "tax" | "land_rent" | "other"
       amount: e.amount,
       note: e.note ?? null,
     }));

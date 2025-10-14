@@ -34,3 +34,16 @@ export const fromISOtoDMY = (iso: string) => {
   if (Number.isNaN(d.getTime())) return "";
   return fmtDMY(d);
 };
+
+export function daysInclusive(
+  start: string | Date,
+  end: string | Date
+): number {
+  const d1 = new Date(start);
+  const d2 = new Date(end);
+  // normalisasi ke tengah malam UTC agar bebas DST
+  const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  const diff = Math.floor((utc2 - utc1) / (24 * 60 * 60 * 1000)) + 1;
+  return Math.max(diff, 0);
+}

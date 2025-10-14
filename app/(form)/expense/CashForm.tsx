@@ -3,14 +3,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import {
     Alert,
     Platform,
     Pressable,
     StyleSheet,
     Text,
-    TextInput,
     useColorScheme,
     View,
 } from "react-native";
@@ -19,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ChemPanel from "@/components/ChemPanel";
 import Chip from "@/components/Chip";
+import ExtrasPanel, { ExtraRow } from "@/components/ExtrasPanel";
 import FertilizerPanel from "@/components/FertilizerPanel";
 import LaborOne from "@/components/LaborOne";
 import RHFLineInput from "@/components/RHFLineInput";
@@ -40,6 +40,7 @@ import {
 } from "@/types/expense";
 import { calcLaborSubtotal, sumChem } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
+import { daysInclusive } from "@/utils/date";
 import { toNum } from "@/utils/number";
 
 type Mode = "create" | "edit";
@@ -47,9 +48,9 @@ type Mode = "create" | "edit";
 type SeedLine = {
     cropName: string;
     kind: "seed" | "seedling";
-    name: string;
     qty: string;
     price: string;
+    name?: string; // optional (kamu sempat set ini di init)
 };
 
 export default function CashForm({
@@ -96,6 +97,11 @@ export default function CashForm({
     const [insectItems, setInsectItems] = useState<ChemItem[]>([]);
     const [herbItems, setHerbItems] = useState<ChemItem[]>([]);
     const [fungiItems, setFungiItems] = useState<ChemItem[]>([]);
+    const [extraItems, setExtraItems] = useState<ExtraRow[]>([]);
+
+    // season range (untuk prorata)
+    const [seasonStart, setSeasonStart] = useState<string | null>(null);
+    const [seasonEnd, setSeasonEnd] = useState<string | null>(null);
 
     const addChem = (setter: any, item: Omit<ChemItem, "id">) =>
         setter((prev: ChemItem[]) => [
@@ -139,7 +145,7 @@ export default function CashForm({
     const seedsHydrated = useRef(false);
     const [initialLoading, setInitialLoading] = useState<boolean>(mode === "edit");
 
-    // ===== Ambil crops dari season → seeds[] (one-time init per seasonId)
+    // ===== Ambil crops & tanggal season (sekali per seasonId)
     useEffect(() => {
         let alive = true;
         const init = async () => {
@@ -148,6 +154,11 @@ export default function CashForm({
                 const season = await getSeasonById(seasonId);
                 if (!alive) return;
 
+                // simpan tanggal season untuk prorata
+                if (season?.start_date && season?.end_date) {
+                    setSeasonStart(season.start_date);
+                    setSeasonEnd(season.end_date);
+                }
                 const current = (watch("seeds") ?? []) as SeedLine[];
                 if (current.length > 0) {
                     seedsHydrated.current = true;
@@ -172,7 +183,13 @@ export default function CashForm({
                             price: "",
                         }))
                         : [
-                            { cropName: "Tanaman", kind: "seed", name: "", qty: "", price: "" },
+                            {
+                                cropName: "Tanaman",
+                                kind: "seed",
+                                name: "",
+                                qty: "",
+                                price: "",
+                            },
                         ];
 
                 setValue("seeds", seeds, { shouldDirty: false });
@@ -182,7 +199,7 @@ export default function CashForm({
                 if (current.length === 0) {
                     setValue(
                         "seeds",
-                        [{ cropName: "Tanaman", kind: "seed", name: "", qty: "", price: "" }],
+                        [{ cropName: "Tanaman", kind: "seed", qty: "", price: "" }],
                         { shouldDirty: false }
                     );
                 }
@@ -241,7 +258,7 @@ export default function CashForm({
                     setValue(`labor.${k}.upahBerlaku`, v.upahBerlaku!);
                 });
 
-                // Prefill seeds (seed/seedling)
+                // Prefill seeds
                 const formSeeds = (watch("seeds") || []) as SeedLine[];
                 const seedLike = (materials || []).filter(
                     (m: any) => m?.category === "seed" || m?.category === "seedling"
@@ -254,7 +271,6 @@ export default function CashForm({
                     return {
                         ...s,
                         kind: k,
-                        name: String(hit.item_name ?? hit.label ?? s.name ?? ""),
                         qty: String(hit.quantity ?? s.qty ?? ""),
                         price: String(hit.unit_price ?? s.price ?? ""),
                     };
@@ -323,9 +339,23 @@ export default function CashForm({
                 // Prefill extras
                 (extras || []).forEach((e: any) => {
                     const cat: Category = e?.metadata?.category;
-                    if (cat === "tax") setValue("extras.tax", String(e.amount || ""));
-                    if (cat === "land_rent") setValue("extras.landRent", String(e.amount || ""));
-                    if (cat === "transport") setValue("extras.transport", String(e.amount || ""));
+                    const kind = (e?.extra_kind || "").toString();
+                    if (cat === "tax") {
+                        setValue("extras.tax", String(e.amount || ""));
+                    } else if (cat === "land_rent") {
+                        setValue("extras.landRent", String(e.amount || ""));
+                    } else if (cat === "transport") {
+                        setValue("extras.transport", String(e.amount || ""));
+                    } else {
+                        setExtraItems((prev) => [
+                            ...prev,
+                            {
+                                id: String(Date.now() + Math.random()),
+                                label: e?.note || kind || "Biaya",
+                                amount: String(e?.amount || 0),
+                            },
+                        ]);
+                    }
                 });
 
                 // Prefill labor
@@ -344,12 +374,16 @@ export default function CashForm({
                 (labors || []).forEach((it: any) => {
                     const key = map[it?.metadata?.category as string];
                     if (!key) return;
-                    const type = it?.labor_type || it?.metadata?.laborType || it?.metadata?.labor_type;
+                    const type =
+                        it?.labor_type || it?.metadata?.laborType || it?.metadata?.labor_type;
                     if (type === "contract") {
                         const kontrak = Number(it?.contract_price ?? 0);
                         const upahBerlaku = Number(it?.metadata?.prevailingWage ?? NaN);
                         setValue(`labor.${key}.tipe`, "borongan");
-                        setValue(`labor.${key}.hargaBorongan`, kontrak ? String(kontrak) : "");
+                        setValue(
+                            `labor.${key}.hargaBorongan`,
+                            kontrak ? String(kontrak) : ""
+                        );
                         setValue(
                             `labor.${key}.upahBerlaku`,
                             Number.isFinite(upahBerlaku) ? String(upahBerlaku) : ""
@@ -358,14 +392,18 @@ export default function CashForm({
                         setValue(`labor.${key}.jumlahHari`, "");
                         setValue(`labor.${key}.upahHarian`, "");
                     } else {
-                        const people = Number(it?.people_count ?? it?.metadata?.peopleCount ?? 0) || 0;
+                        const people =
+                            Number(it?.people_count ?? it?.metadata?.peopleCount ?? 0) || 0;
                         const days = Number(it?.days ?? it?.metadata?.days ?? 0) || 0;
                         const wage = Number(it?.daily_wage ?? 0);
                         setValue(`labor.${key}.tipe`, "harian");
                         setValue(`labor.${key}.jumlahOrang`, String(people > 0 ? people : 0));
                         setValue(`labor.${key}.jumlahHari`, String(days > 0 ? days : 1));
                         setValue(`labor.${key}.upahHarian`, String(wage || ""));
-                        setValue(`labor.${key}.jamKerja`, it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : "");
+                        setValue(
+                            `labor.${key}.jamKerja`,
+                            it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : ""
+                        );
                         setValue(`labor.${key}.hargaBorongan`, "");
                         setValue(`labor.${key}.upahBerlaku`, "");
                     }
@@ -373,7 +411,6 @@ export default function CashForm({
 
                 didHydrateEdit.current = true;
             } catch (e) {
-                if (!alive) return;
                 console.warn("CashForm prefill error", e);
             } finally {
                 if (alive) setInitialLoading(false);
@@ -394,56 +431,79 @@ export default function CashForm({
         watch,
     ]);
 
-
-
     const L = watch("labor");
     const taxW = watch("extras.tax");
     const landRentW = watch("extras.landRent");
-    const TransportW = watch("extras.transport");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const seedsW = (watch("seeds") || []) as SeedLine[];
+    const transportW = watch("extras.transport");
+    const seedsW = watch("seeds") as SeedLine[];
 
     const chemOthersTotal =
-        sumChem(fertilizerItems) + sumChem(insectItems) + sumChem(herbItems) + sumChem(fungiItems);
+        sumChem(fertilizerItems) +
+        sumChem(insectItems) +
+        sumChem(herbItems) +
+        sumChem(fungiItems);
 
-    const seedSubtotal = useMemo(
-        () =>
-            seedsW.reduce((acc, s) => {
-                const q = toNum(s.qty);
-                const p = toNum(s.price);
-                return acc + (q > 0 && p >= 0 ? q * p : 0);
-            }, 0),
-        [seedsW]
-    );
+    const seedSubtotal = seedsW.reduce((acc, s) => {
+        const q = toNum(s.qty);
+        const p = toNum(s.price);
+        return acc + (q > 0 && p >= 0 ? q * p : 0);
+    }, 0);
 
-    const laborTotal = useMemo(() => {
-        return (
-            calcLaborSubtotal(L.nursery) +
-            calcLaborSubtotal(L.land_prep) +
-            calcLaborSubtotal(L.planting) +
-            calcLaborSubtotal(L.fertilizing) +
-            calcLaborSubtotal(L.irrigation) +
-            calcLaborSubtotal(L.weeding) +
-            calcLaborSubtotal(L.pest_ctrl) +
-            calcLaborSubtotal(L.harvest) +
-            calcLaborSubtotal(L.postharvest)
-        );
-    }, [L, calcLaborSubtotal]);
+    const laborTotal =
+        calcLaborSubtotal(L.nursery) +
+        calcLaborSubtotal(L.land_prep) +
+        calcLaborSubtotal(L.planting) +
+        calcLaborSubtotal(L.fertilizing) +
+        calcLaborSubtotal(L.irrigation) +
+        calcLaborSubtotal(L.weeding) +
+        calcLaborSubtotal(L.pest_ctrl) +
+        calcLaborSubtotal(L.harvest) +
+        calcLaborSubtotal(L.postharvest);
+
+    const seasonDays = useMemo(() => {
+        if (!seasonStart || !seasonEnd) return 0;
+        return daysInclusive(seasonStart, seasonEnd);
+    }, [seasonStart, seasonEnd]);
+
+    const taxSeason = useMemo(() => {
+        const v = toNum(taxW);
+        return seasonDays > 0 ? (v / 365) * seasonDays : 0;
+    }, [taxW, seasonDays]);
+
+    const landRentSeason = useMemo(() => {
+        const v = toNum(landRentW);
+        return seasonDays > 0 ? (v / 365) * seasonDays : 0;
+    }, [landRentW, seasonDays]);
+
+    const transportSeason = useMemo(() => toNum(transportW), [transportW]);
 
     const extrasSubtotal = useMemo(() => {
-        return toNum(landRentW) + toNum(taxW) + toNum(TransportW);
-    }, [landRentW, taxW, TransportW]);
+        // gunakan nilai prorata (tax & land rent) + transport langsung
+        return landRentSeason + taxSeason + transportSeason;
+    }, [landRentSeason, taxSeason, transportSeason]);
+
+    const extrasPanelSubtotal = useMemo(() => {
+        return (extraItems || []).reduce((acc, r) => {
+            const v = parseFloat(String(r.amount || "0").replace(",", "."));
+            return acc + (Number.isFinite(v) && v >= 0 ? v : 0);
+        }, 0);
+    }, [extraItems]);
 
     const total = useMemo(() => {
-        return seedSubtotal + chemOthersTotal + laborTotal + extrasSubtotal;
-    }, [seedSubtotal, chemOthersTotal, laborTotal, extrasSubtotal]);
+        return (
+            seedSubtotal +
+            chemOthersTotal +
+            laborTotal +
+            extrasSubtotal +
+            extrasPanelSubtotal
+        );
+    }, [seedSubtotal, chemOthersTotal, laborTotal, extrasSubtotal, extrasPanelSubtotal]);
 
     // ===== Validasi
     const seedsValid = useCallback(() => {
         if (!seedsW.length) return false;
         return seedsW.every(
             (r) =>
-                (r.name?.trim()?.length ?? 0) > 0 &&
                 toNum(r.qty) > 0 &&
                 toNum(r.price) >= 0 &&
                 (r.kind === "seed" || r.kind === "seedling")
@@ -489,19 +549,20 @@ export default function CashForm({
         });
     }, [L]);
 
-    // ===== Build payload
+    // ===== Build payload (gunakan nilai PRORATA untuk tax & land rent)
     const buildPayload = (fv: any) => {
         const out: any[] = [];
 
         // SEEDS (multi)
         (seedsW as SeedLine[]).forEach((s) => {
-            const unit: Unit = s.kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
+            const unit: Unit =
+                s.kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
             const q = toNum(s.qty);
             const p = toNum(s.price);
-            if (q > 0 && p >= 0 && (s.name?.trim()?.length ?? 0) > 0) {
+            if (q > 0 && p >= 0) {
                 out.push({
                     category: s.kind,
-                    itemName: s.name,
+                    itemName: s.cropName,
                     unit,
                     quantity: q,
                     unitPrice: p,
@@ -543,7 +604,9 @@ export default function CashForm({
                         category: cat,
                         unit: "service",
                         laborType: "contract",
-                        prevailingWage: lf.upahBerlaku ? Math.max(0, toNum(lf.upahBerlaku)) : undefined,
+                        prevailingWage: lf.upahBerlaku
+                            ? Math.max(0, toNum(lf.upahBerlaku))
+                            : undefined,
                         jamKerja: lf.jamKerja || undefined,
                     },
                 };
@@ -584,29 +647,41 @@ export default function CashForm({
 
         out.push(...laborRows);
 
-        // EXTRAS
+        // EXTRAS (pakai nilai PRORATA utk pajak & sewa)
         const extras: any[] = [];
-        const vTax = toNum(fv.extras.tax);
-        if (vTax > 0)
+        const vTaxSeason = Math.max(0, taxSeason);
+        if (vTaxSeason > 0)
             extras.push({
                 category: "tax",
                 unit: SERVICE_UNIT,
                 quantity: 1,
-                unitPrice: vTax,
+                unitPrice: vTaxSeason,
                 itemName: null,
-                _meta: { category: "tax", unit: SERVICE_UNIT },
+                _meta: {
+                    category: "tax",
+                    unit: SERVICE_UNIT,
+                    proratedFromYearly: toNum(fv.extras.tax) || undefined,
+                    seasonDays: seasonDays || undefined,
+                },
             });
-        const vRent = toNum(fv.extras.landRent);
-        if (vRent > 0)
+
+        const vRentSeason = Math.max(0, landRentSeason);
+        if (vRentSeason > 0)
             extras.push({
                 category: "land_rent",
                 unit: SERVICE_UNIT,
                 quantity: 1,
-                unitPrice: vRent,
+                unitPrice: vRentSeason,
                 itemName: null,
-                _meta: { category: "land_rent", unit: SERVICE_UNIT },
+                _meta: {
+                    category: "land_rent",
+                    unit: SERVICE_UNIT,
+                    proratedFromYearly: toNum(fv.extras.landRent) || undefined,
+                    seasonDays: seasonDays || undefined,
+                },
             });
-        const vTrans = toNum(fv.extras.transport);
+
+        const vTrans = Math.max(0, toNum(fv.extras.transport));
         if (vTrans > 0)
             extras.push({
                 category: "transport",
@@ -616,6 +691,20 @@ export default function CashForm({
                 itemName: null,
                 _meta: { category: "transport", unit: SERVICE_UNIT },
             });
+
+        (extraItems || []).forEach((e) => {
+            const amt = parseFloat(String(e.amount || "0").replace(",", "."));
+            if (!Number.isFinite(amt) || amt < 0) return;
+
+            extras.push({
+                category: e.label || "Biaya Lain",
+                unit: SERVICE_UNIT,
+                quantity: 1,
+                unitPrice: amt,
+                itemName: e.label,
+                _meta: { category: "other", unit: SERVICE_UNIT },
+            });
+        });
 
         out.push(...extras);
 
@@ -763,12 +852,16 @@ export default function CashForm({
                                 shouldDirty: true,
                             });
                         };
-                        const seedRowSubtotal = Math.max(0, toNum(s.qty) * Math.max(0, toNum(s.price)));
+                        const seedRowSubtotal = Math.max(
+                            0,
+                            toNum(s.qty) * Math.max(0, toNum(s.price))
+                        );
 
                         return (
                             <View key={`${s.cropName}-${idx}`} style={cardStyle}>
                                 <Text
                                     style={{
+                                        textTransform: "capitalize",
                                         color: C.textMuted,
                                         fontWeight: "800",
                                         fontFamily: Fonts.rounded as any,
@@ -782,47 +875,6 @@ export default function CashForm({
                                     <Chip label="Benih" active={kind === "seed"} onPress={() => setKind("seed")} C={C} />
                                     <Chip label="Bibit" active={kind === "seedling"} onPress={() => setKind("seedling")} C={C} />
                                 </View>
-
-                                {/* Nama: Controller + TextInput */}
-                                <Controller
-                                    control={control}
-                                    name={`seeds.${idx}.name`}
-                                    rules={{
-                                        required: "Wajib diisi",
-                                        validate: (v) =>
-                                            (String(v ?? "").trim().length > 0 && isNaN(Number(v))) ||
-                                            "Isi nama (teks), bukan angka.",
-                                    }}
-                                    render={({ field: { value, onChange, onBlur }, fieldState: { error } }) => (
-                                        <View>
-                                            <Text style={[styles.label, { color: C.textMuted }]}>{`Nama ${kind === "seed" ? "Benih" : "Bibit"
-                                                }`}</Text>
-                                            <TextInput
-                                                value={value ?? ""}
-                                                onChangeText={onChange}
-                                                onBlur={onBlur}
-                                                placeholder={`Contoh: ${kind === "seed" ? "Benih Jagung Pioneer" : "Bibit Cabai Rawit"
-                                                    }`}
-                                                keyboardType="default"
-                                                placeholderTextColor={C.textMuted}
-                                                style={[
-                                                    styles.inputBase,
-                                                    {
-                                                        borderColor: error ? C.danger : C.border,
-                                                        backgroundColor: C.surface,
-                                                        color: C.text,
-                                                        borderRadius: S.radius.md,
-                                                        paddingHorizontal: S.spacing.md,
-                                                        paddingVertical: S.spacing.sm,
-                                                    },
-                                                ]}
-                                            />
-                                            {error && (
-                                                <Text style={{ color: C.danger, marginTop: S.spacing.xs }}>{error.message}</Text>
-                                            )}
-                                        </View>
-                                    )}
-                                />
 
                                 <RHFLineInput
                                     label="Jumlah"
@@ -1073,7 +1125,7 @@ export default function CashForm({
                         Biaya Lain
                     </Text>
                     <SectionButton
-                        title="Pajak & Sewa Lahan"
+                        title="Pajak, Sewa Lahan, Transportasi"
                         icon="pricetag-outline"
                         open={openExtras}
                         onPress={() => setOpenExtras((v) => !v)}
@@ -1082,47 +1134,47 @@ export default function CashForm({
                     />
                     {openExtras && (
                         <View>
+                            {/* input tetap “per Tahun” */}
                             <RHFLineInput
-                                label="Pajak per Tahun"
+                                label={`Pajak per Tahun`}
                                 placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
                                 C={C}
-                                rules={{
-                                    required: "Wajib diisi",
-                                    validate: (v: any) =>
-                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
-                                }}
                             />
                             <RHFLineInput
-                                label="Sewa Lahan per Tahun"
+                                label={`Sewa Lahan per Tahun`}
                                 name="extras.landRent"
                                 control={control}
                                 C={C}
-                                rules={{
-                                    required: "Wajib diisi",
-                                    validate: (v: any) =>
-                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
-                                }}
                             />
                             <RHFLineInput
                                 label="Transportasi"
                                 name="extras.transport"
                                 control={control}
                                 C={C}
-                                rules={{
-                                    required: "Wajib diisi",
-                                    validate: (v: any) =>
-                                        (!Number.isNaN(toNum(v)) && toNum(v) >= 0) || "Harus angka ≥ 0",
-                                }}
                             />
 
-                            {divider}
-
+                            <Text style={{ marginTop: 6, color: C.textMuted, fontSize: 12 }}>
+                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
+                            </Text>
                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
                                 Subtotal Biaya Lain ≈{" "}
                                 <Text style={{ color: C.success, fontWeight: "900" }}>
                                     {currency(extrasSubtotal || 0)}
+                                </Text>
+                            </Text>
+                            {divider}
+
+                            <ExtrasPanel
+                                schemeColors={{ C, S }}
+                                rows={extraItems}
+                                setRows={setExtraItems}
+                            />
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Subtotal Biaya Lain ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(extrasPanelSubtotal || 0)}
                                 </Text>
                             </Text>
                         </View>

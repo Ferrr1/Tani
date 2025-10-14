@@ -213,7 +213,6 @@ export default function ExpenseForm() {
     );
 
     const incomeMissing = !hasAnyReceipt;
-    const overBudget = receiptsTotal > 0 && totalExpenseUsed >= receiptsTotal;
 
     const goNext = () => {
         if (!type || !season) return;
@@ -233,14 +232,6 @@ export default function ExpenseForm() {
             Alert.alert("Validasi", "Pengeluaran non-tunai untuk musim ini sudah ada.");
             return;
         }
-        if (overBudget) {
-            Alert.alert(
-                "Validasi",
-                "Total pengeluaran musim ini sudah sama atau melebihi total penerimaan."
-            );
-            return;
-        }
-
         router.push({
             pathname: "/(form)/expense/costType",
             params: { seasonId: season.id, type },
@@ -635,8 +626,7 @@ export default function ExpenseForm() {
                             !season ||
                             incomeMissing ||
                             (type === "tunai" && hasCashExpense) ||
-                            (type === "nontunai" && hasNonCashExpense) ||
-                            overBudget
+                            (type === "nontunai" && hasNonCashExpense)
                         }
                         style={({ pressed }) => [
                             styles.cta,
@@ -646,8 +636,7 @@ export default function ExpenseForm() {
                                         !season ||
                                         incomeMissing ||
                                         (type === "tunai" && hasCashExpense) ||
-                                        (type === "nontunai" && hasNonCashExpense) ||
-                                        overBudget
+                                        (type === "nontunai" && hasNonCashExpense)
                                         ? C.icon
                                         : C.tint,
                                 opacity: pressed ? 0.98 : 1,
@@ -663,11 +652,6 @@ export default function ExpenseForm() {
                     {incomeMissing && (
                         <Text style={{ color: C.danger, marginTop: 6 }}>
                             Tambahkan penerimaan untuk musim ini sebelum membuat pengeluaran.
-                        </Text>
-                    )}
-                    {overBudget && (
-                        <Text style={{ color: C.danger, marginTop: 6 }}>
-                            Total pengeluaran telah sama/lebih besar dari penerimaan.
                         </Text>
                     )}
                 </ScrollView>

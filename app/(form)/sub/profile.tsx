@@ -6,7 +6,7 @@ import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
@@ -28,8 +28,7 @@ export default function ProfileScreen() {
     const router = useRouter();
     const C = Colors[scheme];
     const S = Tokens;
-    const { profile, updateProfile, user } = useAuth();
-    console.log(profile)
+    const { profile, updateProfile, user, deleteSelf } = useAuth();
     const [loading, setLoading] = useState(false);
 
     const {
@@ -89,6 +88,32 @@ export default function ProfileScreen() {
             setLoading(false);
         }
     };
+
+    const onDelete = useCallback(() => {
+        Alert.alert(
+            "Hapus Pengguna?",
+            "Tindakan ini tidak dapat dibatalkan.",
+            [
+                { text: "Batal", style: "cancel" },
+                {
+                    text: "Hapus",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await deleteSelf();
+                        } catch (e: any) {
+                            console.log(e);
+                            Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus pengguna.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    }, [deleteSelf, router]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -303,32 +328,49 @@ export default function ProfileScreen() {
                     {errors.landAreaHa && <Text style={[styles.err, { color: C.danger }]}>{errors.landAreaHa.message}</Text>}
                 </View>
 
-                {/* Tombol simpan */}
-                <Pressable
-                    onPress={handleSubmit(onSave)}
-                    disabled={loading || !isDirty}
-                    style={({ pressed }) => [
-                        styles.saveBtn,
-                        {
-                            backgroundColor: loading ? C.tint + "CC" : C.tint,
-                            borderRadius: S.radius.lg,
-                            opacity: pressed ? 0.98 : 1,
-                            shadowColor: "#000",
-                        },
-                        scheme === "light" ? S.shadow.light : S.shadow.dark,
-                    ]}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <>
-                            <Ionicons name="save-outline" size={18} color="#fff" />
-                            <Text style={[styles.saveText, { fontFamily: Fonts.rounded as any }]}>
-                                {isDirty ? "Simpan" : "Tidak ada perubahan"}
-                            </Text>
-                        </>
-                    )}
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 12, marginTop: S.spacing.lg }}>
+                    {/* Tombol simpan */}
+                    <Pressable
+                        onPress={handleSubmit(onSave)}
+                        disabled={loading || !isDirty}
+                        style={({ pressed }) => [
+                            styles.button,
+                            {
+                                flex: 1,
+                                backgroundColor: C.tint,
+                                borderRadius: S.radius.md,
+                                opacity: pressed || loading ? 0.85 : 1,
+                            },
+                        ]}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <>
+                                <Ionicons name="save-outline" size={18} color="#fff" />
+                                <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>
+                                    {isDirty ? "Simpan" : "Tidak ada perubahan"}
+                                </Text>
+                            </>
+                        )}
+                    </Pressable>
+                    <Pressable
+                        onPress={onDelete}
+                        disabled={loading}
+                        style={({ pressed }) => [
+                            styles.button,
+                            {
+                                backgroundColor: C.danger,
+                                borderRadius: S.radius.md,
+                                opacity: pressed || loading ? 0.85 : 1,
+                                paddingHorizontal: 14,
+                            },
+                        ]}
+                    >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                        <Text style={[styles.btnText, { fontFamily: Fonts.rounded as any }]}>Hapus</Text>
+                    </Pressable>
+                </View>
             </KeyboardAwareScrollView>
         </SafeAreaView>
     );
@@ -359,8 +401,12 @@ const styles = StyleSheet.create({
     selectInput: {
         borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     },
-    saveBtn: {
-        marginTop: 16, paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
+    button: {
+        paddingVertical: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "row",
+        gap: 8,
     },
-    saveText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+    btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });
