@@ -40,10 +40,11 @@ export default function SeasonForm() {
 
     const [openStart, setOpenStart] = useState(false);
     const [openEnd, setOpenEnd] = useState(false);
-
-    // dropdown untuk memilih crop (dipakai ulang untuk pilihan 1 & 2)
     const [showSeasonNo, setShowSeasonNo] = useState(false);
     const [showCropDropdown, setShowCropDropdown] = useState(false);
+
+    const [showYearDropdown, setShowYearDropdown] = useState(false);
+    const [manualYear, setManualYear] = useState(false);
 
     const {
         control,
@@ -52,18 +53,20 @@ export default function SeasonForm() {
         setValue,
         reset,
         formState: { errors },
-    } = useForm<SeasonFormValues & {
-        /** ganti dari single menjadi array 1..2 */
-        cropTypes: string[];
-        /** input untuk opsi Lainnya (jika dipakai) */
-        cropTypeOther?: string;
-    }>({
+    } = useForm<
+        SeasonFormValues & {
+            cropTypes: string[];
+            cropTypeOther?: string;
+            seasonYear: string;
+        }
+    >({
         defaultValues: {
             seasonNo: "",
-            cropTypes: [],           // <= perubahannya di sini
-            cropTypeOther: "",       // <= hanya kalau pilih Lainnya
+            cropTypes: [],
+            cropTypeOther: "",
             startDate: "",
             endDate: "",
+            seasonYear: "",
         },
         mode: "onChange",
     });
@@ -75,8 +78,17 @@ export default function SeasonForm() {
 
     const cropTypes = watch("cropTypes");
     const cropTypeOther = (watch("cropTypeOther") || "");
+    // const seasonYear = (watch("seasonYear") || "").trim();
 
     const hasFetchedRef = useRef(false);
+
+    const yearOptions = useMemo(() => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const arr: number[] = [];
+        for (let i = y + 2; i >= y - 6; i--) arr.push(i);
+        return arr.map(String);
+    }, []);
 
     useEffect(() => {
         let alive = true;
@@ -90,7 +102,7 @@ export default function SeasonForm() {
 
             try {
                 setInitialLoading(true);
-                const row = await getSeasonById(seasonId);
+                const row: any = await getSeasonById(seasonId);
                 if (!alive) return;
                 if (!row) {
                     Alert.alert("Tidak ditemukan", "Data musim tidak ditemukan.");
@@ -105,12 +117,17 @@ export default function SeasonForm() {
                         ? [String(row.crop_type)]
                         : [];
 
+                // Tahun musim: prioritaskan kolom season_year jika ada; fallback dari start_date
+                const fallbackYear =
+                    row.start_date ? new Date(row.start_date).getFullYear().toString() : "";
+
                 reset({
                     seasonNo: String(row.season_no),
                     cropTypes: normalizedCropArray.slice(0, 2), // jaga max 2
                     cropTypeOther: "",
                     startDate: fromISOtoDMY(row.start_date),
                     endDate: fromISOtoDMY(row.end_date),
+                    seasonYear: (row.season_year ? String(row.season_year) : fallbackYear) ?? "",
                 });
             } catch (e: any) {
                 if (!alive) return;
@@ -155,8 +172,11 @@ export default function SeasonForm() {
 
     /** Build payload crop untuk server — ganti OTHER jadi isian custom */
     const buildServerCrops = (): string[] => {
-        const arr = cropTypes.map((c) => (c === OTHER ? cropTypeOther : c)).map((s) => s.trim()).filter(Boolean);
-        // distinct + lower (server pun akan normalisasi, tapi FE rapiin dikit)
+        const arr = cropTypes
+            .map((c) => (c === OTHER ? cropTypeOther : c))
+            .map((s) => s.trim())
+            .filter(Boolean);
+        // distinct + lower
         const seen = new Set<string>();
         const out: string[] = [];
         for (const x of arr) {
@@ -169,11 +189,19 @@ export default function SeasonForm() {
         return out.slice(0, 2);
     };
 
-    const onSubmit = async (v: SeasonFormValues & { cropTypes: string[]; cropTypeOther?: string }) => {
+    const onSubmit = async (v: SeasonFormValues & { cropTypes: string[]; cropTypeOther?: string; seasonYear: string }) => {
         const d1 = parseDMY(v.startDate);
         const d2 = parseDMY(v.endDate);
         const n = parseInt((v.seasonNo || "").toString().replace(",", "."), 10);
+        const y = parseInt((v.seasonYear || "").toString().replace(",", "."), 10);
+
         if (d1 === null || d2 === null || n <= 0) return;
+
+        // Validasi tahun (4 digit, 2000..2100)
+        if (!Number.isFinite(y) || String(y).length !== 4 || y < 2000 || y > 2100) {
+            Alert.alert("Validasi", "Tahun Musim harus 4 digit antara 2000–2100.");
+            return;
+        }
 
         // Validasi minimum 1 crop & maksimum 2
         const crops = buildServerCrops();
@@ -192,17 +220,19 @@ export default function SeasonForm() {
                 await updateSeason({
                     id: seasonId,
                     seasonNo: n,
-                    cropType: crops, // <= kirim array text[]
+                    cropType: crops,
                     startDate: toISO(d1),
                     endDate: toISO(d2),
-                });
+                    seasonYear: y as any,
+                } as any);
             } else {
                 await createSeason({
                     seasonNo: n,
-                    cropType: crops, // <= kirim array text[]
+                    cropType: crops,
                     startDate: toISO(d1),
                     endDate: toISO(d2),
-                });
+                    seasonYear: y as any,
+                } as any);
             }
             router.replace("/(user)/sub/season");
         } catch (e: any) {
@@ -375,8 +405,156 @@ export default function SeasonForm() {
                                 </>
                             )}
                         />
-                        {errors.seasonNo && (
-                            <Text style={[styles.err, { color: C.danger }]}>{errors.seasonNo.message as string}</Text>
+                        {errors.seasonNo && <Text style={[styles.err, { color: C.danger }]}>{errors.seasonNo.message as string}</Text>}
+
+                        {/* Tahun Musim */}
+                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tahun Musim</Text>
+                        <Controller
+                            control={control}
+                            name="seasonYear"
+                            rules={{
+                                required: "Wajib diisi",
+                                validate: (v) => {
+                                    const y = parseInt((v || "").toString().replace(",", "."), 10);
+                                    if (!Number.isFinite(y)) return "Harus angka 4 digit";
+                                    if (String(y).length !== 4) return "Harus 4 digit";
+                                    if (y < 2000 || y > 2100) return "Harus antara 2000–2100";
+                                    return true;
+                                },
+                            }}
+                            render={({ field: { value, onChange } }) => (
+                                <>
+                                    {!manualYear && (
+                                        <Pressable
+                                            onPress={() => setShowYearDropdown((v) => !v)}
+                                            style={[
+                                                styles.selectInput,
+                                                {
+                                                    borderColor: errors.seasonYear ? C.danger : C.border,
+                                                    backgroundColor: C.surface,
+                                                    borderRadius: S.radius.md,
+                                                    paddingHorizontal: S.spacing.md,
+                                                    paddingVertical: 12,
+                                                },
+                                            ]}
+                                        >
+                                            <Text
+                                                style={{
+                                                    color: value ? C.text : C.icon,
+                                                    fontFamily: Fonts.sans as any,
+                                                    fontSize: 15,
+                                                    fontWeight: "800",
+                                                }}
+                                            >
+                                                {value || "Pilih tahun"}
+                                            </Text>
+                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                                <Pressable
+                                                    onPress={() => {
+                                                        setManualYear(true);
+                                                        setShowYearDropdown(false);
+                                                    }}
+                                                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                                                >
+                                                    <Text style={{ color: C.tint, fontWeight: "900", fontSize: 12 }}>Ketik manual</Text>
+                                                </Pressable>
+                                                <Ionicons name={showYearDropdown ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
+                                            </View>
+                                        </Pressable>
+                                    )}
+
+                                    {showYearDropdown && !manualYear && (
+                                        <View
+                                            style={[
+                                                styles.dropdown,
+                                                { borderColor: C.border, backgroundColor: C.surface, borderRadius: 12, marginTop: 8 },
+                                            ]}
+                                        >
+                                            {yearOptions.map((opt) => (
+                                                <Pressable
+                                                    key={opt}
+                                                    onPress={() => {
+                                                        onChange(opt);
+                                                        setShowYearDropdown(false);
+                                                    }}
+                                                    style={({ pressed }) => [
+                                                        styles.dropdownItem,
+                                                        {
+                                                            backgroundColor: pressed
+                                                                ? (scheme === "light" ? C.surfaceSoft : C.surface)
+                                                                : "transparent",
+                                                            borderColor: C.border,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <Ionicons name="time-outline" size={14} color={C.tint} />
+                                                    <Text style={{ color: C.text, fontWeight: "700" }}>{opt}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    )}
+
+                                    {manualYear && (
+                                        <View style={{ marginTop: 8, gap: 8 }}>
+                                            <TextInput
+                                                placeholder="YYYY"
+                                                placeholderTextColor={C.icon}
+                                                keyboardType="number-pad"
+                                                value={value}
+                                                onChangeText={(t) => {
+                                                    // jaga hanya digit
+                                                    const clean = t.replace(/[^\d]/g, "").slice(0, 4);
+                                                    onChange(clean);
+                                                }}
+                                                style={[
+                                                    styles.input,
+                                                    {
+                                                        color: C.text,
+                                                        borderColor: errors.seasonYear ? C.danger : C.border,
+                                                        borderRadius: S.radius.md,
+                                                    },
+                                                ]}
+                                            />
+                                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                                <Pressable
+                                                    onPress={() => setManualYear(false)}
+                                                    style={({ pressed }) => [
+                                                        styles.badge,
+                                                        {
+                                                            backgroundColor: scheme === "light" ? "#00000010" : "#ffffff20",
+                                                            opacity: pressed ? 0.9 : 1,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <Ionicons name="chevron-back" size={12} color={C.textMuted} />
+                                                    <Text style={{ fontSize: 10, fontWeight: "800", color: C.textMuted }}>Pakai dropdown</Text>
+                                                </Pressable>
+                                                <Pressable
+                                                    onPress={() => {
+                                                        const ds = parseDMY(start);
+                                                        if (ds) onChange(String(ds.getFullYear()));
+                                                    }}
+                                                    style={({ pressed }) => [
+                                                        styles.badge,
+                                                        {
+                                                            backgroundColor: scheme === "light" ? "#00000010" : "#ffffff20",
+                                                            opacity: pressed ? 0.9 : 1,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <Ionicons name="sync-outline" size={12} color={C.textMuted} />
+                                                    <Text style={{ fontSize: 10, fontWeight: "800", color: C.textMuted }}>
+                                                        Ambil dari Tgl Mulai
+                                                    </Text>
+                                                </Pressable>
+                                            </View>
+                                        </View>
+                                    )}
+                                </>
+                            )}
+                        />
+                        {errors.seasonYear && (
+                            <Text style={[styles.err, { color: C.danger }]}>{errors.seasonYear.message as string}</Text>
                         )}
 
                         {/* Jenis Tanaman — MULTI (maks 2) */}
@@ -409,7 +587,7 @@ export default function SeasonForm() {
                                     </View>
                                 );
                             })}
-                            {/* Tombol tambah seperti ChemPanel: hanya muncul jika < 2 */}
+                            {/* Tombol tambah */}
                             {cropTypes.length < 2 && (
                                 <Pressable
                                     onPress={() => setShowCropDropdown((v) => !v)}
@@ -484,8 +662,7 @@ export default function SeasonForm() {
                                         styles.input,
                                         {
                                             color: C.text,
-                                            borderColor:
-                                                (cropTypes.includes(OTHER) && !cropTypeOther) ? C.danger : C.border,
+                                            borderColor: cropTypes.includes(OTHER) && !cropTypeOther ? C.danger : C.border,
                                             borderRadius: S.radius.md,
                                         },
                                     ]}
@@ -529,7 +706,6 @@ export default function SeasonForm() {
                                 <Ionicons name={openStart ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
                             </View>
                         </Pressable>
-                        {errors.startDate && <Text style={[styles.err, { color: C.danger }]}>{errors.startDate.message as string}</Text>}
 
                         {openStart && (
                             <View style={{ marginTop: 8 }}>
@@ -578,7 +754,6 @@ export default function SeasonForm() {
                                 <Ionicons name={openEnd ? "chevron-up" : "chevron-down"} size={18} color={C.icon} />
                             </View>
                         </Pressable>
-                        {errors.endDate && <Text style={[styles.err, { color: C.danger }]}>{errors.endDate.message as string}</Text>}
 
                         {openEnd && (
                             <View style={{ marginTop: 8 }}>

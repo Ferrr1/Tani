@@ -27,11 +27,11 @@ export default function RowView({
     const valueStr = isFiniteNumber(value) ? currency(value) : "-";
 
     return (
-        <View style={[styles.tr, { borderColor: C.border }]}>
+        <View style={[styles.tr, { borderColor: C.border, gap: 4 }]}>
             <Text style={[styles.tdUraian, { color: C.text }]}>{label}</Text>
             <Text style={[styles.tdSmall, { color: C.text }]}>{qtyStr}</Text>
             <Text style={[styles.tdSmall, { color: C.text }]}>{unitStr}</Text>
-            <Text style={[styles.tdSmall, { color: C.text }]}>{priceStr}</Text>
+            <Text style={[styles.tdPrice, { color: C.text }]}>{priceStr}</Text>
             <Text style={[styles.tdRight, { color: C.text }]}>{valueStr}</Text>
         </View>
     );
@@ -44,7 +44,8 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderBottomWidth: 1,
     },
-    tdUraian: { flex: 1.8, fontSize: 13 },
-    tdSmall: { flex: 1, fontSize: 13 },
+    tdUraian: { textTransform: "capitalize", flex: 1.7, fontSize: 13 },
+    tdSmall: { flex: 0.8, fontSize: 13 },
+    tdPrice: { flex: 1, fontSize: 13 },
     tdRight: { width: 110, fontSize: 13, textAlign: "right", fontWeight: "800" },
 });

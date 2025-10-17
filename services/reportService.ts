@@ -1,19 +1,12 @@
 // services/reportService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { sum, toNum } from "@/utils/number";
 import { normalizeUnitLabel } from "@/utils/unitLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seasonRepo } from "./seasonService";
 
 type YearFilter = number | "all";
-
-function num(x: any): number {
-  const n = typeof x === "string" ? parseFloat(x) : Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-function sum(arr: number[]) {
-  return arr.reduce((a, b) => a + b, 0);
-}
 
 export type YearSummaryRow = {
   user_id: string;
@@ -38,7 +31,7 @@ export type ReportDataset = {
     unit: string | null;
     unitPrice: number;
   }[];
-  cashExtras: { label: string; amount: number }[]; // ⬅️ Biaya Lain (Tunai) terpisah
+  cashExtras: { label: string; amount: number }[];
 
   labor: {
     stageKey?: string;
@@ -110,8 +103,8 @@ export function useReportData(initialSeasonId?: string | "all") {
 
         const years = new Set<number>();
         ordered.forEach((s: any) => {
-          if (s?.start_date) years.add(new Date(s.start_date).getFullYear());
-          if (s?.end_date) years.add(new Date(s.end_date).getFullYear());
+          const y = Number(s?.season_year);
+          if (Number.isFinite(y)) years.add(y);
         });
         setYearOptions(Array.from(years).sort((a, b) => a - b));
 
@@ -129,31 +122,21 @@ export function useReportData(initialSeasonId?: string | "all") {
     };
   }, [user?.id]);
 
-  // season ids yang overlap tahun (untuk mode per-tahun)
   const seasonIdsForYear = useMemo(() => {
     if (year === "all" || !seasons?.length) return undefined;
     const y = Number(year);
+    if (!Number.isFinite(y)) return ["__none__"];
     const ids = seasons
-      .filter((s: any) => {
-        const y1 = new Date(s.start_date).getFullYear();
-        const y2 = new Date(s.end_date).getFullYear();
-        const minY = Math.min(y1, y2);
-        const maxY = Math.max(y1, y2);
-        return y >= minY && y <= maxY;
-      })
+      .filter((s: any) => Number(s?.season_year) === y)
       .map((s: any) => s.id);
     return ids.length ? ids : ["__none__"];
   }, [year, seasons]);
 
-  // === Builder utama: pilih view berdasarkan filter (season vs year)
   const buildDataset = useCallback(
     async (opts?: { landFactor?: number }): Promise<ReportDataset> => {
       if (!user) return emptyDataset();
       const landFactor = Number(opts?.landFactor ?? 1) || 1;
 
-      // =========================
-      // MODE YEAR (summary only)
-      // =========================
       if (!seasonId) {
         type YRow = {
           user_id: string;
@@ -185,7 +168,7 @@ export function useReportData(initialSeasonId?: string | "all") {
           year: r.year,
           section: r.section,
           label: (r.label ?? "").trim(),
-          amount: num(r.amount),
+          amount: toNum(r.amount),
         }));
 
         const totalReceipts = sum(
@@ -226,7 +209,6 @@ export function useReportData(initialSeasonId?: string | "all") {
           laborCashDetail: null,
           laborNonCashDetail: null,
 
-          // pajak tidak disediakan di year summary (sesuai view)
           taxCash: 0,
           taxNonCash: 0,
 
@@ -242,9 +224,6 @@ export function useReportData(initialSeasonId?: string | "all") {
         };
       }
 
-      // =========================
-      // MODE SEASON (detail)
-      // =========================
       type Row = {
         user_id: string;
         season_id: string;
@@ -256,8 +235,8 @@ export function useReportData(initialSeasonId?: string | "all") {
           | "noncash_labor_total"
           | "noncash_tool_detail"
           | "noncash_detail"
-          | "cash_tax_info" // <— pajak cash (info-only)
-          | "noncash_tax_info"; // <— pajak noncash (info-only)
+          | "cash_tax_info"
+          | "noncash_tax_info";
         label: string | null;
         name: string | null;
         qty: number | null;
@@ -292,41 +271,38 @@ export function useReportData(initialSeasonId?: string | "all") {
         (r) => r.section === "noncash_detail"
       );
 
-      // === Pajak (info only, tidak masuk total biaya)
       const cashTaxRows = rows.filter((r) => r.section === "cash_tax_info");
       const noncashTaxRows = rows.filter(
         (r) => r.section === "noncash_tax_info"
       );
       const taxCash = sum(
         cashTaxRows.map((r) =>
-          r.amount != null ? num(r.amount) * landFactor : 0
+          r.amount != null ? toNum(r.amount) * landFactor : 0
         )
       );
       const taxNonCash = sum(
         noncashTaxRows.map((r) =>
-          r.amount != null ? num(r.amount) * landFactor : 0
+          r.amount != null ? toNum(r.amount) * landFactor : 0
         )
       );
 
-      // PRODUKSI
       const production: ReportDataset["production"] = productionRows.map(
         (r) => {
-          const baseQty = r.qty != null ? num(r.qty) : null;
+          const baseQty = r.qty != null ? toNum(r.qty) : null;
           return {
-            label: "Produksi",
+            label: `Produksi ${r.label ?? ""}`,
             quantity: baseQty != null ? baseQty * landFactor : null,
             unitType: r.unit ?? null,
             unitPrice:
               r.unit_price != null
-                ? num(r.unit_price)
+                ? toNum(r.unit_price)
                 : r.amount != null
-                ? num(r.amount)
+                ? toNum(r.amount)
                 : 0,
           };
         }
       );
 
-      // ====== CASH (Material vs Cash Extras terpisah) ======
       type AggMat = {
         qty: number;
         amt: number;
@@ -345,7 +321,7 @@ export function useReportData(initialSeasonId?: string | "all") {
         // Baris "cash extra" (Biaya Lain Tunai) datang tanpa qty di view
         const isCashExtra = r.qty == null;
         if (isCashExtra) {
-          const amount = r.amount != null ? num(r.amount) * landFactor : 0;
+          const amount = r.amount != null ? toNum(r.amount) * landFactor : 0;
           if (amount > 0) cashExtras.push({ label: rawLabel, amount });
           continue;
         }
@@ -353,9 +329,9 @@ export function useReportData(initialSeasonId?: string | "all") {
         // Material (punya qty/unit atau unit_price)
         const hasQtyOrUnitPrice = r.qty != null || r.unit_price != null;
         if (hasQtyOrUnitPrice) {
-          const qv = r.qty != null ? num(r.qty) : 0;
-          const pv = r.unit_price != null ? num(r.unit_price) : 0;
-          const av = qv > 0 && pv > 0 ? qv * pv : num(r.amount);
+          const qv = r.qty != null ? toNum(r.qty) : 0;
+          const pv = r.unit_price != null ? toNum(r.unit_price) : 0;
+          const av = qv > 0 && pv > 0 ? qv * pv : toNum(r.amount);
 
           const prev = matAggMap.get(key) || {
             qty: 0,
@@ -373,7 +349,7 @@ export function useReportData(initialSeasonId?: string | "all") {
           matAggMap.set(key, prev);
         } else {
           // fallback nominal untuk material tanpa qty (kalau ada)
-          nominalMap.set(key, (nominalMap.get(key) ?? 0) + num(r.amount));
+          nominalMap.set(key, (nominalMap.get(key) ?? 0) + toNum(r.amount));
         }
       }
 
@@ -406,14 +382,14 @@ export function useReportData(initialSeasonId?: string | "all") {
       const laborCashDetail = (() => {
         if (!cashLaborTotalRows.length) return null;
         const qty = sum(
-          cashLaborTotalRows.map((r) => (r.qty != null ? num(r.qty) : 0))
+          cashLaborTotalRows.map((r) => (r.qty != null ? toNum(r.qty) : 0))
         );
         const amount = sum(
           cashLaborTotalRows.map((r) =>
             r.amount != null
-              ? num(r.amount)
+              ? toNum(r.amount)
               : r.qty && r.unit_price
-              ? num(r.qty) * num(r.unit_price)
+              ? toNum(r.qty) * toNum(r.unit_price)
               : 0
           )
         );
@@ -448,14 +424,14 @@ export function useReportData(initialSeasonId?: string | "all") {
       const laborNonCashDetail = (() => {
         if (!noncashLaborTotalRows.length) return null;
         const qty = sum(
-          noncashLaborTotalRows.map((r) => (r.qty != null ? num(r.qty) : 0))
+          noncashLaborTotalRows.map((r) => (r.qty != null ? toNum(r.qty) : 0))
         );
         const amount = sum(
           noncashLaborTotalRows.map((r) =>
             r.amount != null
-              ? num(r.amount)
+              ? toNum(r.amount)
               : r.qty && r.unit_price
-              ? num(r.qty) * num(r.unit_price)
+              ? toNum(r.qty) * toNum(r.unit_price)
               : 0
           )
         );
@@ -485,15 +461,15 @@ export function useReportData(initialSeasonId?: string | "all") {
       // NONCASH TOOLS
       const tools: ReportDataset["tools"] = noncashToolRows.map((r) => ({
         toolName: r.name || "Alat",
-        quantity: (r.qty != null ? num(r.qty) : 0) * landFactor,
-        purchasePrice: r.unit_price != null ? num(r.unit_price) : 0,
+        quantity: (r.qty != null ? toNum(r.qty) : 0) * landFactor,
+        purchasePrice: r.unit_price != null ? toNum(r.unit_price) : 0,
       }));
 
       // NONCASH EXTRAS (sudah exclude pajak karena pajak keluar di *_tax_info)
       const extras: ReportDataset["extras"] = noncashDetailRows.map((r) => ({
         category: (r.label ?? "").trim(),
         label: (r.label ?? "").trim(),
-        amount: (r.amount != null ? num(r.amount) : 0) * landFactor,
+        amount: (r.amount != null ? toNum(r.amount) : 0) * landFactor,
       }));
 
       // TOTALS (pajak tidak dihitung di sini)

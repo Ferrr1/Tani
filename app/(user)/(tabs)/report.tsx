@@ -9,7 +9,7 @@ import { getMyProfile } from "@/services/profileService";
 import { useReportData } from "@/services/reportService";
 import { CATEGORY_LABEL_REPORT, Theme } from "@/types/report";
 import { currency } from "@/utils/currency";
-import { fmtDate } from "@/utils/date";
+import { formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
@@ -142,9 +142,9 @@ export default function ReportScreen() {
 
     const activeFilterText =
         seasonId && currentSeason
-            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(
+            ? `Filter: Musim Ke-${currentSeason.season_no} · ${formatWithOutYear(
                 currentSeason.start_date
-            )} — ${fmtDate(currentSeason.end_date)}`
+            )} — ${formatWithOutYear(currentSeason.end_date)} (${currentSeason.season_year})`
             : yearActive
                 ? `Filter: Tahun ${year}`
                 : "Pilih Musim atau Tahun";
@@ -184,7 +184,7 @@ export default function ReportScreen() {
             unit: string | null;
             unitPrice: number;
         }[],
-        cashExtras: [] as { label: string; amount: number }[], // ⬅️ NEW (tunai lainnya)
+        cashExtras: [] as { label: string; amount: number }[],
         laborNonCashNom: 0,
         laborNonCashDetail: null as null | {
             qty: number | null;
@@ -238,6 +238,42 @@ export default function ReportScreen() {
         };
     }, [buildDataset, profileLoading, seasonId, year, landFactor]);
 
+    // TOTALS utk Year Mode (pakai yearRows + landFactor)
+    const yrTotals = useMemo(() => {
+        const t = {
+            penerimaan: 0,
+            biayaTunai: 0,
+            biayaNonTunai: 0,
+            biayaTotal: 0,
+            pendTunai: 0,
+            pendNonTunai: 0,
+            pendTotal: 0,
+            rcTunai: 0,
+            rcTotal: 0,
+        };
+
+        yearRows.forEach((r) => {
+            const label = (r.label || "").toLowerCase();
+            const money = (r.section === "rc" ? 0 : Number(r.amount || 0) * landFactor);
+
+            if (r.section === "penerimaan" && label.startsWith("penerimaan mt")) t.penerimaan += money;
+
+            if (r.section === "biaya" && label.startsWith("biaya tunai mt")) t.biayaTunai += money;
+            if (r.section === "biaya" && label.startsWith("biaya non tunai mt")) t.biayaNonTunai += money;
+            if (r.section === "biaya" && label.startsWith("biaya total mt")) t.biayaTotal += money;
+
+            if (r.section === "pendapatan" && label.startsWith("pendapatan atas biaya tunai mt")) t.pendTunai += money;
+            if (r.section === "pendapatan" && label.startsWith("pendapatan atas biaya non tunai mt")) t.pendNonTunai += money;
+            if (r.section === "pendapatan" && label.startsWith("pendapatan atas biaya total mt")) t.pendTotal += money;
+        });
+
+        // RC agregat dihitung dari total (bukan rata-rata RC per MT)
+        t.rcTunai = t.biayaTunai > 0 ? t.penerimaan / t.biayaTunai : 0;
+        t.rcTotal = t.biayaTotal > 0 ? t.penerimaan / t.biayaTotal : 0;
+
+        return t;
+    }, [yearRows, landFactor]);
+
     const prodValue = (p: (typeof base.production)[number]) =>
         p.quantity != null ? p.quantity * p.unitPrice : p.unitPrice;
 
@@ -273,7 +309,6 @@ export default function ReportScreen() {
         () => base.tools.reduce((acc, t) => acc + t.quantity, 0),
         [base.tools]
     );
-    console.log("BASE TOOLS", base.tools);
 
     const totalBiayaNonTunaiLain = useMemo(() => {
         const toolsVal = base.tools.reduce((acc, t) => acc + toolValue(t), 0);
@@ -443,7 +478,7 @@ export default function ReportScreen() {
                                     </Text>
                                     {seasonId && currentSeason && (
                                         <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                                            {fmtDate(currentSeason.start_date)} — {fmtDate(currentSeason.end_date)}
+                                            {formatWithOutYear(currentSeason.start_date)} — {formatWithOutYear(currentSeason.end_date)} {`(${currentSeason.season_year})`}
                                         </Text>
                                     )}
                                 </View>
@@ -501,7 +536,7 @@ export default function ReportScreen() {
                                             Musim Ke-{s.season_no}
                                         </Text>
                                         <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                            {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
+                                            {formatWithOutYear(s.start_date)} — {formatWithOutYear(s.end_date)} {`(${s.season_year})`}
                                         </Text>
                                     </Pressable>
                                 ))}
@@ -631,7 +666,7 @@ export default function ReportScreen() {
                                 </View>
                             )}
 
-                            {/* ====== YEAR MODE CONTENT ====== */}
+                            {/* ====== YEAR MODE ====== */}
                             {yearActive ? (
                                 <>
                                     {/* PENERIMAAN */}
@@ -643,6 +678,7 @@ export default function ReportScreen() {
                                             value={yrMoney(`Penerimaan MT ${n}`)}
                                         />
                                     ))}
+                                    <TotalLine label="Total Penerimaan" value={yrTotals.penerimaan} C={C} />
 
                                     {/* BIAYA PRODUKSI */}
                                     <SectionTitle text="Biaya Produksi" C={C} />
@@ -663,6 +699,9 @@ export default function ReportScreen() {
                                             />
                                         </React.Fragment>
                                     ))}
+                                    <TotalLine label="Total Biaya Non Tunai" value={yrTotals.biayaNonTunai} C={C} />
+                                    <TotalLine label="Total Biaya Tunai" value={yrTotals.biayaTunai} C={C} />
+                                    <TotalLine label="Total Biaya" value={yrTotals.biayaTotal} C={C} />
 
                                     {/* PENDAPATAN */}
                                     <SectionTitle text="Pendapatan" C={C} />
@@ -682,6 +721,9 @@ export default function ReportScreen() {
                                             />
                                         </React.Fragment>
                                     ))}
+                                    <TotalLine label="Total Pendapatan Atas Biaya Tunai" value={yrTotals.pendTunai} C={C} />
+                                    <TotalLine label="Total Pendapatan Atas Biaya Non Tunai" value={yrTotals.pendNonTunai} C={C} />
+                                    <TotalLine label="Total Pendapatan Atas Biaya Total" value={yrTotals.pendTotal} C={C} />
 
                                     {/* R/C */}
                                     <SectionTitle text="R/C" C={C} />
@@ -716,7 +758,7 @@ export default function ReportScreen() {
                                             <RowView
                                                 key={`prod-${i}`}
                                                 C={C}
-                                                label={p.label ?? "Produksi"}
+                                                label={p.label}
                                                 qty={Number(p.quantity?.toFixed(0)) ?? undefined}
                                                 unit={p.unitType ?? null}
                                                 price={p.unitPrice ?? undefined}
@@ -724,6 +766,8 @@ export default function ReportScreen() {
                                             />
                                         );
                                     })}
+                                    {/* TOTALS */}
+                                    <TotalLine label="Total Produksi" value={totalProduksi} C={C} />
 
                                     {/* BIAYA PRODUKSI */}
                                     <SectionTitle text="Biaya Produksi" C={C} />

@@ -1,4 +1,3 @@
-// toNum yang tahan banting untuk berbagai format & tipe
 export const toNum = (input?: unknown): number => {
   if (input == null) return 0;
   if (typeof input === "number") return Number.isFinite(input) ? input : 0;
@@ -20,8 +19,8 @@ export const toNum = (input?: unknown): number => {
     const lastDot = s.lastIndexOf(".");
     const decSep = lastComma > lastDot ? "," : ".";
     const thouSep = decSep === "," ? "." : ",";
-    s = s.split(thouSep).join(""); // hapus pemisah ribuan
-    s = s.replace(decSep, "."); // normalisasi desimal ke titik
+    s = s.split(thouSep).join("");
+    s = s.replace(decSep, ".");
   } else if (hasComma) {
     const parts = s.split(",");
     if (parts.length === 2 && parts[1].length >= 1 && parts[1].length <= 6) {
@@ -34,7 +33,6 @@ export const toNum = (input?: unknown): number => {
     if (parts.length === 2 && parts[1].length >= 1 && parts[1].length <= 6) {
       s = parts[0].replace(/,/g, "") + "." + parts[1];
     } else {
-      // anggap semua titik = ribuan
       s = s.replace(/\./g, "");
     }
   }
@@ -42,3 +40,7 @@ export const toNum = (input?: unknown): number => {
   if (!Number.isFinite(n)) return 0;
   return isNeg ? -n : n;
 };
+
+export function sum(arr: number[]) {
+  return arr.reduce((a, b) => a + b, 0);
+}

@@ -4,6 +4,12 @@ export const fmtDate = (iso: string) =>
     month: "short",
     year: "numeric",
   });
+
+export const formatWithOutYear = (iso: string) =>
+  new Date(iso).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+  });
 export const yearOf = (iso: string) => new Date(iso).getFullYear();
 
 const pad2 = (n: number) => String(n).padStart(2, "0");

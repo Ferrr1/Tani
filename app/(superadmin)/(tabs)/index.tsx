@@ -179,7 +179,7 @@ export default function HomeAdminScreen() {
             >
                 <View style={styles.headerRow}>
                     <Text
-                        style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}
+                        style={[styles.title, { maxWidth: 100, color: C.text, fontFamily: Fonts.rounded as any }]}
                     >
                         Kelola Pengguna
                     </Text>

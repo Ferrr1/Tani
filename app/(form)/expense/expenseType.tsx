@@ -2,7 +2,7 @@ import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseService } from "@/services/expenseService";
 import { useReceiptService } from "@/services/receiptService";
 import { useSeasonList } from "@/services/seasonService";
-import { fmtDate } from "@/utils/date";
+import { fmtDate, formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -85,30 +85,31 @@ export default function ExpenseForm() {
 
     const yearOptions = useMemo(() => {
         const ys = new Set<number>();
-        seasons.forEach((s) => ys.add(new Date(s.start_date).getFullYear()));
+        seasons.forEach((s) => {
+            const y = Number(s.season_year);
+            if (Number.isFinite(y)) ys.add(y); // ignore null/invalid
+        });
         return Array.from(ys).sort((a, b) => b - a);
     }, [seasons]);
 
     const filteredSeasons = useMemo(() => {
         if (yearFilter === "all") return seasons;
-        return seasons.filter((s) => new Date(s.start_date).getFullYear() === yearFilter);
+        const Y = Number(yearFilter);
+        return seasons.filter((s) => Number(s.season_year) === Y);
     }, [seasons, yearFilter]);
 
-    // sinkronkan filter tahun dari query (sekali)
+
     useEffect(() => {
         if (!seasons.length || hydratedQueryRef.current) return;
         if (qsSeasonId) {
             const idxAll = seasons.findIndex((s) => s.id === String(qsSeasonId));
             if (idxAll >= 0) {
-                const y = new Date(seasons[idxAll].start_date).getFullYear();
-                setYearFilter(y as YearFilter);
+                const yNum = Number(seasons[idxAll].season_year);
+                if (Number.isFinite(yNum)) setYearFilter(yNum as YearFilter);
             }
             hydratedQueryRef.current = true;
         }
-    }, [seasons, qsSeasonId]);
 
-    // set season index dalam filtered list
-    useEffect(() => {
         if (!filteredSeasons.length) {
             setSeasonIdx(0);
             return;
@@ -119,13 +120,13 @@ export default function ExpenseForm() {
         } else {
             setSeasonIdx(0);
         }
-    }, [filteredSeasons, qsSeasonId]);
+    }, [seasons, filteredSeasons, qsSeasonId]);
 
     const season = filteredSeasons[seasonIdx];
 
     const seasonRange = useMemo(() => {
         if (!season) return "";
-        return `${fmtDate(season.start_date)} — ${fmtDate(season.end_date)}`;
+        return `${formatWithOutYear(season.start_date)} — ${formatWithOutYear(season.end_date)} (${season.season_year})`;
     }, [season]);
 
     const canPrev = seasonIdx >= 0 && seasonIdx < filteredSeasons.length - 1;
@@ -133,13 +134,9 @@ export default function ExpenseForm() {
     const goPrevSeason = () => { if (canPrev) setSeasonIdx((i) => i + 1); };
     const goNextSeasonNav = () => { if (canNext) setSeasonIdx((i) => i - 1); };
 
-    // === loader logic yang “anti-glitch” ===
-    // daftar season sudah siap?
     const seasonsReady = !seasonLoading && seasons.length >= 1;
-    // season terpilih sudah ada?
     const readySeason = seasonsReady && !!season;
 
-    // metrics per season (jalan hanya saat season sudah ada)
     useEffect(() => {
         if (!readySeason) return; // ← tunggu season ada dulu baru fetch metrik
         let alive = true;
@@ -609,7 +606,7 @@ export default function ExpenseForm() {
                                                 Musim Ke-{s.season_no}
                                             </Text>
                                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                                {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
+                                                {formatWithOutYear(s.start_date)} — {formatWithOutYear(s.end_date)} {`(${s.season_year})`}
                                             </Text>
                                         </Pressable>
                                     ))}

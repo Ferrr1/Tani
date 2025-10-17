@@ -105,7 +105,7 @@ export default function LaborOne({
                     {tipe === "borongan" && (
                         <View style={{ gap: 8 }}>
                             <RHFLineInput
-                                label="Harga Upah Borongan"
+                                label="Biaya Borongan"
                                 name={`${name}.hargaBorongan`}
                                 control={control}
                                 C={C}

@@ -3,7 +3,7 @@ import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useExpenseChartData } from "@/services/chartService";
 import { CATEGORY_LABEL } from "@/types/chart";
 import { currency } from "@/utils/currency";
-import { fmtDate } from "@/utils/date";
+import { formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -243,9 +243,9 @@ export default function ChartScreen() {
     const activeFilterText = yearActive
         ? `Filter: Tahun ${year}`
         : seasonId && currentSeason
-            ? `Filter: Musim Ke-${currentSeason.season_no} · ${fmtDate(
+            ? `Filter: Musim Ke-${currentSeason.season_no} · ${formatWithOutYear(
                 currentSeason.start_date
-            )} — ${fmtDate(currentSeason.end_date)}`
+            )} — ${formatWithOutYear(currentSeason.end_date)} (${currentSeason.season_year})`
             : "Pilih Musim atau Tahun";
 
     const chartTitleSuffix = yearActive
@@ -338,8 +338,8 @@ export default function ChartScreen() {
                                     </Text>
                                     {seasonId && currentSeason && (
                                         <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                                            {fmtDate(currentSeason.start_date)} —{" "}
-                                            {fmtDate(currentSeason.end_date)}
+                                            {formatWithOutYear(currentSeason.start_date)} —{" "}
+                                            {formatWithOutYear(currentSeason.end_date)}  {`(${currentSeason.season_year})`}
                                         </Text>
                                     )}
                                 </View>
@@ -401,7 +401,7 @@ export default function ChartScreen() {
                                             Musim Ke-{s.season_no}
                                         </Text>
                                         <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                            {fmtDate(s.start_date)} — {fmtDate(s.end_date)}
+                                            {formatWithOutYear(s.start_date)} — {formatWithOutYear(s.end_date)} {`(${s.season_year})`}
                                         </Text>
                                     </Pressable>
                                 ))}

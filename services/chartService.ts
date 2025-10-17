@@ -26,6 +26,7 @@ type SeasonLite = {
   start_date: string;
   end_date: string;
   season_no?: number | null;
+  season_year?: string | null;
 };
 
 export function useExpenseChartData(initialSeasonId?: string) {
@@ -78,33 +79,28 @@ export function useExpenseChartData(initialSeasonId?: string) {
     fetchSeasons();
   }, [fetchSeasons]);
 
-  // ===== Tahun options dari seasons
   const yearOptions = useMemo(() => {
     const ys = new Set<number>();
-    for (const s of seasons) {
-      if (s?.start_date) ys.add(new Date(s.start_date).getFullYear());
-      if (s?.end_date) ys.add(new Date(s.end_date).getFullYear());
-    }
-    return Array.from(ys).sort((a, b) => a - b);
+    seasons.forEach((s) => {
+      const y = Number(s.season_year);
+      if (Number.isFinite(y)) ys.add(y); // ignore null/invalid
+    });
+    return Array.from(ys).sort((a, b) => b - a);
   }, [seasons]);
 
-  // ===== Season IDs yang overlap tahun terpilih
   const seasonIdsForYear = useMemo(() => {
     if (year === "all" || !seasons.length) return undefined;
+
     const y = Number(year);
+    if (!Number.isFinite(y)) return ["__none__"];
+
     const ids = seasons
-      .filter((s) => {
-        const y1 = new Date(s.start_date).getFullYear();
-        const y2 = new Date(s.end_date).getFullYear();
-        const minY = Math.min(y1, y2);
-        const maxY = Math.max(y1, y2);
-        return y >= minY && y <= maxY;
-      })
+      .filter((s) => Number(s.season_year) === y)
       .map((s) => s.id);
-    return ids.length ? ids : ["__none__"]; // jaga supaya IN() tetap valid
+
+    return ids.length ? ids : ["__none__"];
   }, [year, seasons]);
 
-  // ===== Fetch items (auto pilih chart view: season vs year)
   const fetchItems = useCallback(async () => {
     if (!user) return;
     setLoadingItems(true);
@@ -141,22 +137,18 @@ export function useExpenseChartData(initialSeasonId?: string) {
     }
   }, [user, seasonId, seasonIdsForYear, year]);
 
-  // panggilan refetch ringan (tanpa clear)
   const refetch = fetchItems;
 
-  // panggilan refetch keras (clear dulu agar spinner tampil)
   const forceRefetch = useCallback(() => {
     setItems([]);
     fetchItems();
   }, [fetchItems]);
 
-  // clear & fetch saat filter berubah
   useEffect(() => {
     setItems([]);
     if (user) fetchItems();
   }, [user?.id, seasonId, seasonIdsForYear, year, fetchItems]);
 
-  // ===== ringkasan untuk chart
   const expensePieSummary = useMemo(
     () =>
       items.map((r) => ({

@@ -2,6 +2,7 @@ import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonFilter } from "@/context/SeasonFilterContext";
 import { useReceiptList, useReceiptService } from "@/services/receiptService";
 import { useSeasonList } from "@/services/seasonService";
+import { formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -133,7 +134,7 @@ export default function IncomeScreen() {
             style={{ color: C.textMuted, fontSize: 12, fontFamily: Fonts.serif as any }}
             numberOfLines={1}
           >
-            {item.unit_type} × {Number(item.quantity)}
+            {item.item_name}
           </Text>
           <Text style={{ color: C.success, fontSize: 16, fontWeight: "900", marginTop: 2 }} numberOfLines={1}>
             {formatMoney(item.total)}
@@ -260,7 +261,7 @@ export default function IncomeScreen() {
               </Text>
               {currentSeason && (
                 <Text style={[styles.seasonRange, { color: C.textMuted }]}>
-                  {formatDate(currentSeason.start_date)} — {formatDate(currentSeason.end_date)}
+                  {formatWithOutYear(currentSeason.start_date)} — {formatWithOutYear(currentSeason.end_date)} ({currentSeason.season_year})
                 </Text>
               )}
             </View>
@@ -314,7 +315,7 @@ export default function IncomeScreen() {
                   Musim Ke-{s.season_no}
                 </Text>
                 <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                  {formatDate(s.start_date)} — {formatDate(s.end_date)}
+                  {formatWithOutYear(s.start_date)} — {formatWithOutYear(s.end_date)} ({s.season_year})
                 </Text>
               </Pressable>
             ))}

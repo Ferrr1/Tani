@@ -1,3 +1,4 @@
+// services/pdf/reportPdf.ts
 import { currency } from "@/utils/currency";
 import * as FS from "expo-file-system";
 import * as Print from "expo-print";
@@ -91,6 +92,53 @@ function yr(yearRows: YearRow[] | undefined, lbl: string): number {
   return row ? Number(row.amount || 0) : 0;
 }
 
+// === total per-section utk Year Mode (asumsikan yearRows SUDAH di-scale di caller)
+function computeYearTotals(rows?: YearRow[]) {
+  const t = {
+    penerimaan: 0,
+    biayaTunai: 0,
+    biayaNonTunai: 0,
+    biayaTotal: 0,
+    pendTunai: 0,
+    pendNonTunai: 0,
+    pendTotal: 0,
+  };
+  if (!rows?.length) return t;
+
+  rows.forEach((r) => {
+    const label = (r.label || "").toLowerCase();
+    const money = r.section === "rc" ? 0 : Number(r.amount || 0);
+
+    if (r.section === "penerimaan" && label.startsWith("penerimaan mt"))
+      t.penerimaan += money;
+
+    if (r.section === "biaya" && label.startsWith("biaya tunai mt"))
+      t.biayaTunai += money;
+    if (r.section === "biaya" && label.startsWith("biaya non tunai mt"))
+      t.biayaNonTunai += money;
+    if (r.section === "biaya" && label.startsWith("biaya total mt"))
+      t.biayaTotal += money;
+
+    if (
+      r.section === "pendapatan" &&
+      label.startsWith("pendapatan atas biaya tunai mt")
+    )
+      t.pendTunai += money;
+    if (
+      r.section === "pendapatan" &&
+      label.startsWith("pendapatan atas biaya non tunai mt")
+    )
+      t.pendNonTunai += money;
+    if (
+      r.section === "pendapatan" &&
+      label.startsWith("pendapatan atas biaya total mt")
+    )
+      t.pendTotal += money;
+  });
+
+  return t;
+}
+
 // ===== Title Case helper (sederhana) =====
 function titleCase(s: string): string {
   return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -164,17 +212,12 @@ export async function generateReportPdf({
   const totalBiayaNonTunai = totalBiayaNonTunaiTK + totalBiayaNonTunaiLain;
   const totalBiaya = totalBiayaTunai + totalBiayaNonTunai;
 
-  const pendapatanAtasBiayaTunai = totalProduksi - totalBiayaTunai;
-  const pendapatanAtasBiayaTotal = totalProduksi - totalBiaya;
-  const rcTunai = totalBiayaTunai > 0 ? totalProduksi / totalBiayaTunai : 0;
-  const rcTotal = totalBiaya > 0 ? totalProduksi / totalBiaya : 0;
-
   // ===== meta atas (crop & village)
   const cropLine = formatCropTypeLine(cropType);
   const villageLine = village ? `Desa: <b>${village}</b>` : null;
   const cropVillageLine = [cropLine, villageLine].filter(Boolean).join(" | ");
 
-  // ===== Year mode detection
+  // ===== Year mode detection + list MT + totals per section
   const isYearMode = !!(yearRows && yearRows.length > 0);
   const mtList = isYearMode
     ? Array.from(
@@ -185,26 +228,29 @@ export async function generateReportPdf({
         )
       ).sort((a, b) => a - b)
     : [];
+  const yrTotals = isYearMode ? computeYearTotals(yearRows) : undefined;
 
   // ===== HTML parts =====
   const baseStyles = `
   @page { size: A4; margin: 18mm; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111827; }
-  h1 { font-size: 20px; margin: 0 0 8px; }
+  h1 { font-size: 22px; margin: 0 0 10px; font-weight: 900; }
   .muted { color: #6b7280; }
-  .section-title { margin: 16px 0 8px; font-weight: 800; }
-  .sub-title { margin: 8px 0 4px; font-weight: 700; }
-  .sub-mini { margin: 6px 0; color:#6b7280; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .section-title { margin: 16px 0 8px; font-weight: 800; font-size: 14px; }
+  .sub-title { margin: 8px 0 4px; font-weight: 700; font-size: 13px; }
+  .sub-mini { margin: 6px 0; color:#6b7280; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { text-align: left; border-bottom: 1px solid #e5e7eb; padding: 8px 6px; font-weight: 800; color:#6b7280;}
   tbody td { border-bottom: 1px solid #f3f4f6; padding: 8px 6px; }
   .td-uraian { width: 40%; }
   .td-small { width: 15%; }
   .td-right { width: 20%; text-align: right; font-weight: 800; }
   .totals { margin-top: 8px; }
-  .totals .row { display:flex; justify-content:space-between; margin-top:6px; }
+  .totals .row { display:flex; justify-content:space-between; margin-top:6px; font-size: 13px; }
   .bold { font-weight:900; }
   .meta { font-size: 12px; }
+  .total-row td { font-weight: 900; font-size: 13px; border-top: 1px solid #e5e7eb; }
+  .total-row-season td { font-weight: 900; font-size: 13px; border-top: 1px solid #e5e7eb; }
   `;
 
   // ===== TABLE HEADERS
@@ -251,6 +297,13 @@ export async function generateReportPdf({
         `;
       })
       .join("")}
+    <tr class="total-row-season">
+      <td>Total Produksi</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td class="td-right">${currency(totalProduksi)}</td>
+    </tr>
 
     <!-- BIAYA PRODUKSI -->
     <tr><td colspan="5" class="section-title">Biaya Produksi</td></tr>
@@ -361,8 +414,20 @@ export async function generateReportPdf({
     .join("")}
 `;
 
-  // ===== BODY: Year mode rows (tanpa kolom Jumlah)
-  const bodyYear = `
+  // ===== BODY: Year mode rows (dibuat HANYA saat isYearMode) + kembalikan R/C per MT (tanpa total)
+  const bodyYear = isYearMode
+    ? ((): string => {
+        const totals = yrTotals ?? {
+          penerimaan: 0,
+          biayaTunai: 0,
+          biayaNonTunai: 0,
+          biayaTotal: 0,
+          pendTunai: 0,
+          pendNonTunai: 0,
+          pendTotal: 0,
+        };
+
+        return `
     <!-- PENERIMAAN -->
     <tr><td colspan="2" class="section-title">Penerimaan</td></tr>
     ${mtList
@@ -376,6 +441,10 @@ export async function generateReportPdf({
       </tr>`
       )
       .join("")}
+    <tr class="total-row">
+      <td>Total Penerimaan</td>
+      <td class="td-right">${currency(totals.penerimaan)}</td>
+    </tr>
 
     <!-- BIAYA PRODUKSI -->
     <tr><td colspan="2" class="section-title">Biaya Produksi</td></tr>
@@ -403,6 +472,18 @@ export async function generateReportPdf({
       </tr>`
       )
       .join("")}
+    <tr class="total-row">
+      <td>Total Biaya Non Tunai</td>
+      <td class="td-right">${currency(totals.biayaNonTunai)}</td>
+    </tr>
+    <tr class="total-row">
+      <td>Total Biaya Tunai</td>
+      <td class="td-right">${currency(totals.biayaTunai)}</td>
+    </tr>
+    <tr class="total-row">
+      <td class="bold">Total Biaya</td>
+      <td class="td-right bold">${currency(totals.biayaTotal)}</td>
+    </tr>
 
     <!-- PENDAPATAN -->
     <tr><td colspan="2" class="section-title">Pendapatan</td></tr>
@@ -429,8 +510,20 @@ export async function generateReportPdf({
       </tr>`
       )
       .join("")}
+    <tr class="total-row">
+      <td>Total Pendapatan Atas Biaya Tunai</td>
+      <td class="td-right">${currency(totals.pendTunai)}</td>
+    </tr>
+    <tr class="total-row">
+      <td>Total Pendapatan Atas Biaya Non Tunai</td>
+      <td class="td-right">${currency(totals.pendNonTunai)}</td>
+    </tr>
+    <tr class="total-row">
+      <td class="bold">Total Pendapatan Atas Biaya Total</td>
+      <td class="td-right bold">${currency(totals.pendTotal)}</td>
+    </tr>
 
-    <!-- R/C -->
+    <!-- R/C (per MT saja, tanpa total) -->
     <tr><td colspan="2" class="section-title">R/C</td></tr>
     ${mtList
       .map(
@@ -456,6 +549,8 @@ export async function generateReportPdf({
       )
       .join("")}
   `;
+      })()
+    : "";
 
   // ===== FINAL HTML =====
   const html = `
@@ -502,20 +597,6 @@ export async function generateReportPdf({
     )}</div></div>
     <div class="row"><div class="bold">Total Biaya</div><div class="bold">${currency(
       totalBiaya
-    )}</div></div>
-
-    <div class="section-title">Pendapatan</div>
-    <div class="row"><div>Pendapatan Atas Biaya Tunai</div><div>${currency(
-      pendapatanAtasBiayaTunai
-    )}</div></div>
-    <div class="row"><div>Pendapatan Atas Biaya Total</div><div>${currency(
-      pendapatanAtasBiayaTotal
-    )}</div></div>
-    <div class="row"><div>R/C Biaya Tunai</div><div>${(rcTunai || 0).toFixed(
-      2
-    )}</div></div>
-    <div class="row"><div>R/C Biaya Total</div><div>${(rcTotal || 0).toFixed(
-      2
     )}</div></div>
   </div>
   `

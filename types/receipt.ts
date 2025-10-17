@@ -2,6 +2,7 @@ export type ReceiptRow = {
   id: string;
   user_id: string;
   season_id: string;
+  item_name: string;
   quantity: number; // numeric(18,2)
   unit_type: string; // text
   unit_price: number; // numeric(18,2)
@@ -12,6 +13,7 @@ export type ReceiptRow = {
 
 export type CreateReceiptInput = {
   seasonId: string;
+  itemName?: string;
   quantity: number;
   unitType: string;
   unitPrice: number;
@@ -20,6 +22,7 @@ export type CreateReceiptInput = {
 export type UpdateReceiptInput = {
   id: string;
   seasonId?: string;
+  itemName?: string;
   quantity?: number;
   unitType?: string;
   unitPrice?: number;

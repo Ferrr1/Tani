@@ -32,8 +32,8 @@ import {
     ChemItem,
     LaborForm,
     SATUAN_KIMIA,
-    SEED_UNIT,
-    SEEDLING_UNIT,
+    SEED_UNIT_CHOICES,
+    SEEDLING_UNIT_CHOICES,
     SERVICE_UNIT,
     Unit,
     UNIT_FERTILIZER,
@@ -50,7 +50,8 @@ type SeedLine = {
     kind: "seed" | "seedling";
     qty: string;
     price: string;
-    name?: string; // optional (kamu sempat set ini di init)
+    name?: string;
+    unit?: Unit;             // <-- TAMBAH: unit per baris
 };
 
 export default function CashForm({
@@ -181,6 +182,7 @@ export default function CashForm({
                             name: "",
                             qty: "",
                             price: "",
+                            unit: undefined,
                         }))
                         : [
                             {
@@ -189,6 +191,7 @@ export default function CashForm({
                                 name: "",
                                 qty: "",
                                 price: "",
+                                unit: undefined,
                             },
                         ];
 
@@ -268,11 +271,13 @@ export default function CashForm({
                     if (!hit) return s;
                     const k: "seed" | "seedling" =
                         hit.category === "seedling" ? "seedling" : "seed";
+                    const u: Unit | undefined = hit.unit as Unit | undefined;
                     return {
                         ...s,
                         kind: k,
                         qty: String(hit.quantity ?? s.qty ?? ""),
                         price: String(hit.unit_price ?? s.price ?? ""),
+                        unit: u ?? s.unit,
                     };
                 });
                 setValue("seeds", patched, { shouldDirty: false });
@@ -508,6 +513,7 @@ export default function CashForm({
             (r) =>
                 toNum(r.qty) > 0 &&
                 toNum(r.price) >= 0 &&
+                r.unit &&
                 (r.kind === "seed" || r.kind === "seedling")
         );
     }, [seedsW]);
@@ -557,8 +563,7 @@ export default function CashForm({
 
         // SEEDS (multi)
         (seedsW as SeedLine[]).forEach((s) => {
-            const unit: Unit =
-                s.kind === "seed" ? (SEED_UNIT as Unit) : (SEEDLING_UNIT as Unit);
+            const unit: Unit = (s.unit as Unit) ?? (s.kind === "seed" ? SEED_UNIT_CHOICES : SEEDLING_UNIT_CHOICES);
             const q = toNum(s.qty);
             const p = toNum(s.price);
             if (q > 0 && p >= 0) {
@@ -572,6 +577,7 @@ export default function CashForm({
                 });
             }
         });
+
 
         // Kimia lain
         const chemToRows = (rows: ChemItem[]) =>
@@ -877,6 +883,29 @@ export default function CashForm({
                                     <Chip label="Benih" active={kind === "seed"} onPress={() => setKind("seed")} C={C} />
                                     <Chip label="Bibit" active={kind === "seedling"} onPress={() => setKind("seedling")} C={C} />
                                 </View>
+                                <View style={{ flexDirection: "row", gap: S.spacing.sm, flexWrap: "wrap", marginTop: 6 }}>
+                                    {kind === "seed" ? (
+                                        SEED_UNIT_CHOICES.map((u) => (
+                                            <Chip
+                                                key={u}
+                                                label={u === "gram" ? "Gram" : "Kilogram"}
+                                                active={s.unit === u}
+                                                onPress={() => setValue(`seeds.${idx}.unit`, u as Unit, { shouldDirty: true })}
+                                                C={C}
+                                            />
+                                        ))
+                                    ) : (
+                                        SEEDLING_UNIT_CHOICES.map((u) => (
+                                            <Chip
+                                                key={u}
+                                                label={u === "ikat" ? "Ikat" : "Polybag"}
+                                                active={s.unit === u}
+                                                onPress={() => setValue(`seeds.${idx}.unit`, u as Unit, { shouldDirty: true })}
+                                                C={C}
+                                            />
+                                        ))
+                                    )}
+                                </View>
 
                                 <RHFLineInput
                                     label="Jumlah"
@@ -1144,12 +1173,30 @@ export default function CashForm({
                                 control={control}
                                 C={C}
                             />
+                            <Text style={{ marginTop: 6, color: C.textMuted, fontSize: 12 }}>
+                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
+                            </Text>
+                            <Text style={{ marginBottom: 6, color: C.textMuted, fontSize: 12 }}>
+                                Pajak ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(taxSeason || 0)}
+                                </Text>
+                            </Text>
                             <RHFLineInput
                                 label={`Sewa Lahan per Tahun`}
                                 name="extras.landRent"
                                 control={control}
                                 C={C}
                             />
+                            <Text style={{ marginTop: 6, color: C.textMuted, fontSize: 12 }}>
+                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
+                            </Text>
+                            <Text style={{ marginBottom: 6, color: C.textMuted, fontSize: 12 }}>
+                                Sewa Lahan ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(landRentSeason || 0)}
+                                </Text>
+                            </Text>
                             <RHFLineInput
                                 label="Transportasi"
                                 name="extras.transport"
@@ -1157,15 +1204,6 @@ export default function CashForm({
                                 C={C}
                             />
 
-                            <Text style={{ marginTop: 6, color: C.textMuted, fontSize: 12 }}>
-                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
-                            </Text>
-                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                Subtotal Biaya Lain ≈{" "}
-                                <Text style={{ color: C.success, fontWeight: "900" }}>
-                                    {currency(extrasSubtotal || 0)}
-                                </Text>
-                            </Text>
                             {divider}
 
                             <ExtrasPanel

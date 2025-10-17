@@ -66,6 +66,7 @@ export const receiptRepo = {
     const payload = {
       user_id: userId,
       season_id: input.seasonId,
+      item_name: input.itemName,
       quantity: input.quantity,
       unit_type: input.unitType,
       unit_price: input.unitPrice,
@@ -91,6 +92,10 @@ export const receiptRepo = {
       ensureText(input.seasonId, "Season");
       await assertSeasonOwnership(userId, input.seasonId);
       patch.season_id = input.seasonId;
+    }
+    if (input.itemName != null) {
+      ensureText(input.itemName, "Nama Tanaman");
+      patch.item_name = input.itemName;
     }
     if (input.quantity != null) {
       ensureMoneyNum(input.quantity, "Kuantitas");

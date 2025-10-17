@@ -40,6 +40,7 @@ export const seasonRepo = {
 
     const { data: newId, error } = await supabase.rpc("rpc_create_season", {
       p_season_no: input.seasonNo,
+      p_season_year: input.seasonYear,
       p_start: input.startDate,
       p_end: input.endDate,
       p_crop_type: input.cropType,
@@ -79,6 +80,7 @@ export const seasonRepo = {
     const { error } = await supabase.rpc("rpc_update_season", {
       p_id: input.id,
       p_season_no: input.seasonNo,
+      p_season_year: input.seasonYear,
       p_start: input.startDate,
       p_end: input.endDate,
       p_crop_type: input.cropType,

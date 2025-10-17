@@ -34,16 +34,8 @@ import { calcLaborSubtotal } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
 import { toNum } from "@/utils/number";
 
-// >>> PRORATA: import service untuk ambil tanggal musim
 import { useSeasonService } from "@/services/seasonService";
-
-// >>> PRORATA: helper hitung hari inklusif
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const daysInclusive = (start: string | Date, end: string | Date) => {
-    const s = new Date(start); s.setHours(0, 0, 0, 0);
-    const e = new Date(end); e.setHours(0, 0, 0, 0);
-    return Math.max(0, Math.floor((e.getTime() - s.getTime()) / MS_PER_DAY) + 1);
-};
+import { daysInclusive } from "@/utils/date";
 
 export default function NonCashForm({
     seasonId,
@@ -67,7 +59,6 @@ export default function NonCashForm({
         listNonCashExtras,
     } = useExpenseService();
 
-    // >>> PRORATA: ambil season untuk hitung jumlah hari
     const { getSeasonById } = useSeasonService();
     const [seasonDays, setSeasonDays] = useState<number>(0);
 
@@ -122,7 +113,6 @@ export default function NonCashForm({
 
     const toStr = (v: any) => (v === null || v === undefined ? "" : String(v));
 
-    // >>> PRORATA: fetch season days (sekali per seasonId)
     useEffect(() => {
         let alive = true;
         (async () => {
@@ -338,19 +328,16 @@ export default function NonCashForm({
     const taxW = watch("extras.tax");
     const landRentW = watch("extras.landRent");
 
-    // >>> PRORATA: pajak & sewa tahunan → prorata hari musim
-    const TAX_DAYS_IN_YEAR = 365; // jika ingin leap-aware, bisa diganti dinamis
+    const TAX_DAYS_IN_YEAR = 365;
     const taxPerYear = toNum(taxW);
     const landRentPerYear = toNum(landRentW);
-    const taxProrated = (taxPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
-    const landRentProrated = (landRentPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
+    const taxSeason = (taxPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
+    const landRentSeason = (landRentPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
 
-    // subtotal (fixed extras) pakai PRORATA
     const extrasSubtotal = useMemo(() => {
-        return taxProrated + landRentProrated;
-    }, [taxProrated, landRentProrated]);
+        return taxSeason + landRentSeason;
+    }, [taxSeason, landRentSeason]);
 
-    // subtotal dari ExtrasPanel (dinamis)
     const extrasPanelSubtotal = useMemo(() => {
         return (extraItems || []).reduce((acc, r) => {
             const v = parseFloat(String(r.amount || "0").replace(",", "."));
@@ -725,6 +712,15 @@ export default function NonCashForm({
                                 control={control}
                                 C={C}
                             />
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
+                            </Text>
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Pajak ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(taxSeason || 0)}
+                                </Text>
+                            </Text>
                             <RHFLineInput
                                 label="Sewa Lahan per Tahun"
                                 name="extras.landRent"
@@ -732,14 +728,13 @@ export default function NonCashForm({
                                 C={C}
                             />
 
-                            {/* >>> PRORATA: keterangan dan subtotal ter-pro-rata */}
                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
                                 Dihitung prorata: {seasonDays} hari × (nilai tahunan ÷ 365)
                             </Text>
                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
-                                Subtotal Biaya Lain ≈{" "}
+                                Sewa Lahan ≈{" "}
                                 <Text style={{ color: C.success, fontWeight: "900" }}>
-                                    {currency(extrasSubtotal || 0)}
+                                    {currency(landRentSeason || 0)}
                                 </Text>
                             </Text>
 

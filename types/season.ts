@@ -4,12 +4,12 @@ export const CROP_OPTIONS: string[] = [
   "pakcoi",
   "selada air",
   "sawi",
-  "kangkong",
+  "kangkung",
   "jagung",
   "bayam",
   "terong",
   "cabai",
-  "labusiam",
+  "labu siam",
   "timun",
   "buncis",
   "kacang Panjang",
@@ -26,12 +26,14 @@ export type SeasonFormValues = {
   cropTypeOther?: string;
   startDate: string;
   endDate: string;
+  seasonYear: string;
 };
 
 export type SeasonRow = {
   id: string;
   user_id: string;
   season_no: number;
+  season_year: string | null;
   crop_type: string | null;
   start_date: string; // YYYY-MM-DD
   end_date: string; // YYYY-MM-DD
@@ -44,6 +46,7 @@ export type CreateSeasonInput = {
   cropType: string[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
+  seasonYear?: string;
 };
 
 export type UpdateSeasonInput = {
@@ -52,4 +55,5 @@ export type UpdateSeasonInput = {
   cropType: string[];
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
+  seasonYear?: string;
 };

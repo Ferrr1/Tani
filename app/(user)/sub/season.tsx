@@ -1,6 +1,7 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonList, useSeasonService } from "@/services/seasonService";
 import { SeasonRow } from "@/types/season";
+import { formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -36,23 +37,16 @@ export default function SeasonScreen() {
   const yearsUI = useMemo(() => {
     const ys = new Set<number>();
     for (const s of rows) {
-      const a = new Date(s.start_date).getFullYear();
-      const b = new Date(s.end_date).getFullYear();
-      const minY = Math.min(a, b);
-      const maxY = Math.max(a, b);
-      for (let y = minY; y <= maxY; y++) ys.add(y);
+      const y = Number(s.season_year); // kolom season_year di DB bisa string → coercion
+      if (Number.isFinite(y)) ys.add(y);
     }
     return Array.from(ys).sort((a, b) => b - a); // desc
   }, [rows]);
 
   const filteredRows = useMemo(() => {
     if (yearUI === "all") return rows;
-    const Y = yearUI as number;
-    return rows.filter((s) => {
-      const yStart = new Date(s.start_date).getFullYear();
-      const yEnd = new Date(s.end_date).getFullYear();
-      return yStart === Y || yEnd === Y || (yStart < Y && yEnd > Y);
-    });
+    const Y = Number(yearUI);
+    return rows.filter((s) => Number(s.season_year) === Y);
   }, [rows, yearUI]);
 
   useFocusEffect(
@@ -62,13 +56,6 @@ export default function SeasonScreen() {
       return () => setOpenYearList(false);
     }, [fetchOnce])
   );
-
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
 
   const handleEdit = useCallback(
     (item: SeasonRow) => {
@@ -121,10 +108,10 @@ export default function SeasonScreen() {
           <Ionicons name="calendar-outline" size={14} color={C.icon} />
           <View>
             <Text style={{ color: C.text, fontSize: 11, fontWeight: "700" }}>
-              {fmtDate(item.start_date)}
+              {formatWithOutYear(item.start_date)}
             </Text>
             <Text style={{ color: C.text, fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-              {fmtDate(item.end_date)}
+              {formatWithOutYear(item.end_date)}
             </Text>
           </View>
         </View>
@@ -134,8 +121,11 @@ export default function SeasonScreen() {
           <Text style={{ color: C.textMuted, fontSize: 12, fontFamily: Fonts.serif as any }}>
             Musim
           </Text>
-          <Text style={{ color: C.text, fontSize: 16, fontWeight: "900", marginTop: 2 }}>
+          <Text style={{ color: C.text, fontSize: 12, fontWeight: "900", marginTop: 2 }}>
             Ke-{item.season_no}
+          </Text>
+          <Text style={{ color: C.text, fontSize: 12, fontWeight: "900", marginTop: 2 }}>
+            Tahun {item.season_year}
           </Text>
         </View>
 
