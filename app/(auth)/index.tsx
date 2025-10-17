@@ -65,7 +65,7 @@ export default function LoginScreen() {
                         Selamat Datang
                     </Text>
                     <Text style={[styles.subtitle, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
-                        Aplikasi management pertanian
+                        Aplikasi manajemen struktur biaya tanaman sayur
                     </Text>
 
                     <View
@@ -231,18 +231,24 @@ export default function LoginScreen() {
                         <Text style={[styles.info, { color: C.textMuted }]}>
                             Lupa password?{" "}
 
-                            <Link href={"/verify-mother"} style={[styles.link, { color: C.tint }]}>
+                            <Link href={"/forget-password"} style={[styles.link, { color: C.tint }]}>
                                 Klik disini
                             </Link>
                         </Text>
                     </View>
 
-                    <View style={[styles.helper, { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg }]}>
+                    <View
+                        style={[
+                            styles.helper,
+                            { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg },
+                        ]}
+                    >
                         <Ionicons name="information-circle-outline" size={24} color={C.textMuted} />
-                        <Text style={{ color: C.textMuted, fontFamily: Fonts.serif as any }}>
-                            Pastikan menggunakan email yang terdaftar
+                        <Text style={[styles.helperText, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
+                            Pastikan sudah membuat akun terlebih dahulu
                         </Text>
                     </View>
+
                 </View>
             </KeyboardAwareScrollView>
         </SafeAreaView>
@@ -263,5 +269,15 @@ const styles = StyleSheet.create({
     btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
     info: { marginTop: 14, textAlign: "center", fontSize: 13, alignItems: "center" },
     link: { fontWeight: "700", textDecorationLine: "underline" },
-    helper: { marginTop: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 },
+    helper: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 8,
+    },
+    helperText: {
+        flexShrink: 1,
+        flexGrow: 1,
+        flexBasis: 0,
+    },
 });

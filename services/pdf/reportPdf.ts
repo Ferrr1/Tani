@@ -153,6 +153,7 @@ export async function generateReportPdf({
     cash.reduce((acc, c) => acc + cashValue(c), 0) +
     cashExtras.reduce((acc, e) => acc + cashExtraValue(e), 0);
   const totalTools = tools.reduce((acc, t) => acc + toolValue(t), 0);
+  const totalToolsQty = tools.reduce((acc, t) => acc + t.quantity, 0);
   const totalExtras = extras.reduce((acc, e) => acc + extraValue(e), 0);
 
   const tkDetailAmount = laborNonCashDetail?.amount ?? null;
@@ -329,36 +330,36 @@ export async function generateReportPdf({
     }
 
     <tr><td colspan="5" class="sub-mini">Biaya Lain</td></tr>
-    ${tools
-      .map((t) => {
-        const value = toolValue(t);
-        return `
-          <tr>
-            <td>Alat${t.toolName ? ` | ${t.toolName}` : ""}</td>
-            <td>${t.quantity.toFixed(0)}</td>
-            <td>-</td>
-            <td>${currency(t.purchasePrice)}</td>
-            <td class="td-right">${currency(value)}</td>
-          </tr>
-        `;
-      })
-      .join("")}
-    ${extras
-      .map((e) => {
-        const value = extraValue(e);
-        const label = prettyLabel(e.label ?? e.category ?? "Biaya Lain");
-        return `
-          <tr>
-            <td>${label}</td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td class="td-right">${currency(value)}</td>
-          </tr>
-        `;
-      })
-      .join("")}
-  `;
+      ${
+        totalTools > 0
+          ? `
+    <tr>
+      <td>Penyusutan Alat</td>
+      <td>${Number(totalToolsQty).toFixed(0)}</td>
+      <td>-</td>
+      <td>-</td>
+      <td class="td-right">${currency(totalTools)}</td>
+    </tr>
+    `
+          : ""
+      }
+
+  ${extras
+    .map((e) => {
+      const value = extraValue(e);
+      const label = prettyLabel(e.label ?? e.category ?? "Biaya Lain");
+      return `
+        <tr>
+          <td>${label}</td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td class="td-right">${currency(value)}</td>
+        </tr>
+      `;
+    })
+    .join("")}
+`;
 
   // ===== BODY: Year mode rows (tanpa kolom Jumlah)
   const bodyYear = `

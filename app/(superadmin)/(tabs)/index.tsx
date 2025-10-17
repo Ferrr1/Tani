@@ -1,4 +1,4 @@
-import HeaderLogoutButton from "@/components/HeaderLogoutButton";
+import ButtonLogout from "@/components/ButtonLogout";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useSuperAdminUserList } from "@/services/superAdminService";
@@ -7,7 +7,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -75,14 +75,11 @@ export default function HomeAdminScreen() {
         await refresh();
     }, [refresh]);
 
-    useEffect(() => {
-        reloadProfile();
-    }, []);
-
     useFocusEffect(
         useCallback(() => {
+            reloadProfile();
             fetchOnce();
-        }, [fetchOnce])
+        }, [fetchOnce, reloadProfile])
     );
 
     const gotoCreate = () => {
@@ -186,8 +183,9 @@ export default function HomeAdminScreen() {
                     >
                         Kelola Pengguna
                     </Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ flexWrap: "wrap-reverse", flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
                         {/* tombol tambah user */}
+                        <ButtonLogout colors={[C.danger, C.gradientTo]} />
                         <Pressable
                             onPress={gotoCreate}
                             style={({ pressed }) => [
@@ -202,7 +200,6 @@ export default function HomeAdminScreen() {
                             <Ionicons name="person-add-outline" size={18} color={C.text} />
                         </Pressable>
 
-                        <HeaderLogoutButton size={28} confirm={true} />
                         <Pressable
                             onPress={() =>
                                 router.push({
@@ -217,9 +214,10 @@ export default function HomeAdminScreen() {
                             ]}
                         >
                             <Text style={{
+                                textTransform: "uppercase",
                                 color: C.text,
                                 fontFamily: Fonts.rounded as any,
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: "bold"
                             }}>
                                 {getInitialsName(profile?.full_name ?? "")}
@@ -311,6 +309,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         marginBottom: 10,
+        gap: 12,
     },
     title: { fontSize: 18, fontWeight: "800" },
 
@@ -320,7 +319,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 6,
         padding: 8,
-        width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
+        width: 38, height: 38, borderRadius: 54, overflow: "hidden", borderWidth: 1
     },
 
     search: {

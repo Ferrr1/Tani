@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { AdminUserRow, useAdminUserService } from "@/services/adminUserService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
@@ -33,7 +34,7 @@ export default function AdminUserDetail() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-    const { signOut } = useAuth();
+    const { signOut, user, profile } = useAuth();
     const { getUserById, updateUser, deleteUser } = useAdminUserService();
 
     const [loading, setLoading] = useState(true);
@@ -41,6 +42,8 @@ export default function AdminUserDetail() {
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
     const isUserRole = role === "user";
+    const isSelf = !!userId && user?.id === userId;
+    const isHaveMotherName = !!profile?.mother_name_hash;
 
     const {
         control,
@@ -55,6 +58,7 @@ export default function AdminUserDetail() {
             password: "",
             village: "",
             landAreaHa: "",
+            motherName: "",
         },
         mode: "onChange",
     });
@@ -78,6 +82,7 @@ export default function AdminUserDetail() {
                 password: "",
                 village: row.nama_desa ?? "",
                 landAreaHa: row.luas_lahan != null ? String(row.luas_lahan) : "",
+                motherName: "",
             });
         } catch (e: any) {
             console.log(e);
@@ -96,11 +101,34 @@ export default function AdminUserDetail() {
         if (!userId) return;
         setSaving(true);
         try {
-            const luas = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
-            if (Number.isNaN(luas) || luas <= 0) {
-                Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
-                setSaving(false);
-                return;
+            // === LUAS LAHAN hanya untuk role 'user'
+            let luas: number | undefined = undefined;
+            if (role === "user") {
+                const parsed = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+                if (Number.isNaN(parsed) || parsed <= 0) {
+                    Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
+                    setSaving(false);
+                    return;
+                }
+                luas = parsed;
+            }
+
+            // === NAMA IBU hanya saat isSelf
+            if (isSelf) {
+                const pendingAnswer = (v.motherName || "").trim();
+                if (pendingAnswer.length > 0) {
+                    const uid = user?.id;
+                    if (!uid) throw new Error("Session tidak valid: user.id tidak ditemukan");
+
+                    const { error: rpcErr } = await supabase.rpc("set_mother_name", {
+                        p_user_id: uid,
+                        p_answer: pendingAnswer,
+                    });
+                    if (rpcErr) throw new Error("Gagal menyimpan Nama Ibu");
+
+                    // Bersihkan agar tidak tetap 'dirty'
+                    reset({ ...v, password: "", motherName: "" });
+                }
             }
 
             await updateUser({
@@ -109,8 +137,8 @@ export default function AdminUserDetail() {
                 newPassword: (v.password || "").trim() ? v.password : undefined,
                 newFullName: v.fullName.trim(),
                 newNamaDesa: v.village.trim(),
-                newLuasLahan: luas,
-                newRole: role
+                newLuasLahan: luas, // ⬅️ undefined saat role != 'user'
+                newRole: role,
             });
 
             Alert.alert("Tersimpan", "Profil pengguna berhasil diperbarui.");
@@ -122,6 +150,7 @@ export default function AdminUserDetail() {
             setSaving(false);
         }
     };
+
 
     const onDelete = useCallback(() => {
         if (!userId) return;
@@ -203,8 +232,8 @@ export default function AdminUserDetail() {
                     {/* Avatar + Nama singkat */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
                         <View style={[styles.bigAvatar, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
-                            <Text style={{ color: C.text, fontSize: 18, fontWeight: "900" }}>
-                                {getInitialsName(watch("fullName") || watch("email") || "U")}
+                            <Text style={{ textTransform: "uppercase", color: C.text, fontSize: 14, fontWeight: "900" }}>
+                                {getInitialsName(watch("fullName"))}
                             </Text>
                         </View>
                         <View style={{ flex: 1 }}>
@@ -243,6 +272,48 @@ export default function AdminUserDetail() {
                     />
                     {errors.fullName && (
                         <Text style={[styles.err, { color: C.danger }]}>{errors.fullName.message}</Text>
+                    )}
+
+                    {isSelf && (
+                        <>
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
+                                Nama Ibu (untuk verifikasi reset password)
+                            </Text>
+                            <Controller
+                                control={control}
+                                name="motherName"
+                                rules={{
+                                    validate: (v) => {
+                                        if (!v) return true; // opsional
+                                        return String(v).trim().length >= 2 || "Minimal 2 karakter";
+                                    },
+                                }}
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <TextInput
+                                        placeholder={`${isHaveMotherName ? "Kosongkan jika tidak ingin mengubah" : "Anda belum memasukkan nama ibu"}`}
+                                        placeholderTextColor={C.icon}
+                                        onBlur={onBlur}
+                                        onChangeText={onChange}
+                                        value={value}
+                                        style={[
+                                            styles.input,
+                                            {
+                                                borderColor: errors.motherName ? C.danger : C.border,
+                                                color: C.text,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
+                                            },
+                                        ]}
+                                    />
+                                )}
+                            />
+                            {errors.motherName && (
+                                <Text style={[styles.err, { color: C.danger }]}>
+                                    {errors.motherName.message as string}
+                                </Text>
+                            )}
+                        </>
                     )}
 
                     {/* Email */}
@@ -339,7 +410,7 @@ export default function AdminUserDetail() {
                                 }}
                                 render={({ field: { onChange, onBlur, value } }) => (
                                     <TextInput
-                                        placeholder="Contoh: Medangan"
+                                        placeholder="Contoh: Cipta Waras"
                                         placeholderTextColor={C.icon}
                                         onBlur={onBlur}
                                         onChangeText={onChange}

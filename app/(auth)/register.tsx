@@ -126,14 +126,14 @@ export default function RegisterScreen() {
                         )}
 
                         {/* Nama Ibu */}
-                        <Text style={[styles.label, { color: C.text }]}>Nama Ibu</Text>
+                        <Text style={[styles.label, { marginTop: S.spacing.md, color: C.text }]}>Nama Ibu Kandung (untuk verifikasi reset password)</Text>
                         <Controller
                             control={control}
                             name="motherName"
                             rules={{ required: "Nama wajib diisi" }}
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <TextInput
-                                    placeholder="Nama ibu"
+                                    placeholder="Nama ibu kandung"
                                     placeholderTextColor={C.icon}
                                     onBlur={onBlur}
                                     onChangeText={onChange}
@@ -352,12 +352,18 @@ export default function RegisterScreen() {
                         </Text>
                     </View>
 
-                    <View style={[styles.helper, { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg }]}>
+                    <View
+                        style={[
+                            styles.helper,
+                            { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg },
+                        ]}
+                    >
                         <Ionicons name="information-circle-outline" size={24} color={C.textMuted} />
-                        <Text style={{ color: C.textMuted, fontFamily: Fonts.serif as any }}>
-                            Pastikan menggunakan email yang terdaftar
+                        <Text style={[styles.helperText, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
+                            Pastikan menggunakan email dan password yang mudah di ingat.
                         </Text>
                     </View>
+
                 </View>
             </KeyboardAwareScrollView>
         </SafeAreaView>
@@ -383,5 +389,15 @@ const styles = StyleSheet.create({
     btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
     info: { marginTop: 14, textAlign: "center", fontSize: 13 },
     link: { fontWeight: "700", textDecorationLine: "underline" },
-    helper: { marginTop: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 },
+    helper: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 8,
+    },
+    helperText: {
+        flexShrink: 1,
+        flexGrow: 1,
+        flexBasis: 0,
+    },
 });

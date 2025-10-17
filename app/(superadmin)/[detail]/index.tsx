@@ -2,6 +2,7 @@
 import Chip from "@/components/Chip";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { SuperAdminUserRow, useSuperAdminUserService } from "@/services/superAdminService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
@@ -10,7 +11,7 @@ import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
@@ -26,7 +27,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function AdminUserDetail() {
+export default function SuperAdminUserDetail() {
     const { detail } = useLocalSearchParams<{ detail?: string }>();
     const userId = detail && detail !== "new" ? detail : undefined;
     const isCreate = !userId; // "new" atau tanpa param → create
@@ -35,7 +36,7 @@ export default function AdminUserDetail() {
     const C = Colors[scheme];
     const S = Tokens;
     const router = useRouter();
-    const { signOut } = useAuth();
+    const { signOut, user, profile } = useAuth();
     const { getUserById, createUser, updateUser, deleteUser } =
         useSuperAdminUserService();
 
@@ -44,6 +45,8 @@ export default function AdminUserDetail() {
     const [role, setRole] = useState<Role>("user");
     const [showPwd, setShowPwd] = useState(false);
     const isUserRole = role === "user";
+    const isSelf = !!userId && user?.id === userId;
+    const isHaveMotherName = !!profile?.mother_name_hash;
 
     const {
         control,
@@ -58,11 +61,11 @@ export default function AdminUserDetail() {
             password: "",
             village: "",
             landAreaHa: "",
+            motherName: "",
         },
         mode: "onChange",
     });
 
-    // ===== LOAD (edit only)
     const load = useCallback(async () => {
         if (!userId) return;
         setLoading(true);
@@ -83,6 +86,7 @@ export default function AdminUserDetail() {
                 password: "",
                 village: row.nama_desa ?? "",
                 landAreaHa: row.luas_lahan != null ? String(row.luas_lahan) : "",
+                motherName: "",
             });
         } catch (e: any) {
             console.log(e);
@@ -97,7 +101,6 @@ export default function AdminUserDetail() {
         if (!isCreate) load();
     }, [isCreate, load]);
 
-    // ===== Submit
     const onSubmit = async (v: DetailForm) => {
         setSaving(true);
         try {
@@ -148,6 +151,26 @@ export default function AdminUserDetail() {
                     return;
                 }
                 luas = parsed;
+            }
+
+            if (isSelf) {
+                const pendingAnswer = (v.motherName || "").trim();
+                if (pendingAnswer.length > 0) {
+                    const uid = user?.id;
+                    if (!uid) throw new Error("Session tidak valid: user.id tidak ditemukan");
+
+                    const { error: rpcErr } = await supabase.rpc("set_mother_name", {
+                        p_user_id: uid,
+                        p_answer: pendingAnswer,
+                    });
+
+                    if (rpcErr) {
+                        throw new Error("Gagal menyimpan Nama Ibu");
+                    }
+
+                    // bersihkan field agar tidak tetap ‘dirty’
+                    reset({ ...v, password: "", motherName: "" }); // atau: setValue("motherName", "", { shouldDirty: false })
+                }
             }
 
             await updateUser({
@@ -201,10 +224,7 @@ export default function AdminUserDetail() {
 
     // ===== UI bits
     const headerTitle = isCreate ? "Buat Pengguna" : "Edit Pengguna";
-    const initials = useMemo(
-        () => getInitialsName(watch("fullName") || watch("email") || "U"),
-        [watch]
-    );
+    const initials = getInitialsName(watch("fullName"));
 
     if (loading) {
         return (
@@ -258,7 +278,7 @@ export default function AdminUserDetail() {
                     {/* Avatar + Nama singkat */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
                         <View style={[styles.bigAvatar, { borderColor: C.border, backgroundColor: C.surfaceSoft }]}>
-                            <Text style={{ color: C.text, fontSize: 18, fontWeight: "900" }}>{initials}</Text>
+                            <Text style={{ textTransform: "uppercase", color: C.text, fontSize: 14, fontWeight: "900" }}>{initials}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={{ color: C.text, fontSize: 16, fontWeight: "900" }}>
@@ -294,6 +314,48 @@ export default function AdminUserDetail() {
                         )}
                     />
                     {errors.fullName && <Text style={[styles.err, { color: C.danger }]}>{errors.fullName.message}</Text>}
+
+                    {isSelf && (
+                        <>
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
+                                Nama Ibu (untuk verifikasi reset password)
+                            </Text>
+                            <Controller
+                                control={control}
+                                name="motherName"
+                                rules={{
+                                    validate: (v) => {
+                                        if (!v) return true; // opsional
+                                        return String(v).trim().length >= 2 || "Minimal 2 karakter";
+                                    },
+                                }}
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <TextInput
+                                        placeholder={`${isHaveMotherName ? "Kosongkan jika tidak ingin mengubah" : "Anda belum memasukkan nama ibu"}`}
+                                        placeholderTextColor={C.icon}
+                                        onBlur={onBlur}
+                                        onChangeText={onChange}
+                                        value={value}
+                                        style={[
+                                            styles.input,
+                                            {
+                                                borderColor: errors.motherName ? C.danger : C.border,
+                                                color: C.text,
+                                                borderRadius: S.radius.md,
+                                                paddingHorizontal: S.spacing.md,
+                                                paddingVertical: 10,
+                                            },
+                                        ]}
+                                    />
+                                )}
+                            />
+                            {errors.motherName && (
+                                <Text style={[styles.err, { color: C.danger }]}>
+                                    {errors.motherName.message as string}
+                                </Text>
+                            )}
+                        </>
+                    )}
 
                     {/* Email */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Email</Text>
@@ -373,12 +435,16 @@ export default function AdminUserDetail() {
                     {errors.password && <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>}
 
                     {/* Role */}
-                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Role</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
-                        <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
-                        <Chip label="Super Admin" active={role === "superadmin"} onPress={() => setRole("superadmin")} C={C} />
-                    </View>
+                    {!isSelf &&
+                        <>
+                            <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Role</Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
+                                <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
+                                <Chip label="Super Admin" active={role === "superadmin"} onPress={() => setRole("superadmin")} C={C} />
+                            </View>
+                        </>
+                    }
 
 
 
@@ -395,7 +461,7 @@ export default function AdminUserDetail() {
                                 }}
                                 render={({ field: { onChange, onBlur, value } }) => (
                                     <TextInput
-                                        placeholder="Contoh: Medangan"
+                                        placeholder="Contoh: Cipta Waras"
                                         placeholderTextColor={C.icon}
                                         onBlur={onBlur}
                                         onChangeText={onChange}

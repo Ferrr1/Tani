@@ -1,4 +1,4 @@
-import HeaderLogoutButton from "@/components/HeaderLogoutButton";
+import ButtonLogout from "@/components/ButtonLogout";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminUserList } from "@/services/adminUserService";
@@ -7,7 +7,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -74,14 +74,11 @@ export default function HomeAdminScreen() {
         await refresh();
     }, [refresh]);
 
-    useEffect(() => {
-        reloadProfile();
-    }, []);
-
     useFocusEffect(
         useCallback(() => {
+            reloadProfile();
             fetchOnce();
-        }, [fetchOnce])
+        }, [fetchOnce, reloadProfile])
     );
 
     const renderItem = ({ item }: { item: AppUser }) => (
@@ -155,8 +152,8 @@ export default function HomeAdminScreen() {
                     <Text style={[styles.title, { color: C.text, fontFamily: Fonts.rounded as any }]}>
                         Kelola Pengguna
                     </Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        <HeaderLogoutButton size={28} confirm={true} />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <ButtonLogout colors={[C.danger, C.gradientTo]} />
                         <Pressable
                             onPress={() =>
                                 router.push({
@@ -171,9 +168,10 @@ export default function HomeAdminScreen() {
                             ]}
                         >
                             <Text style={{
+                                textTransform: "uppercase",
                                 color: C.text,
                                 fontFamily: Fonts.rounded as any,
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: "bold"
                             }}>
                                 {getInitialsName(profile?.full_name ?? "")}

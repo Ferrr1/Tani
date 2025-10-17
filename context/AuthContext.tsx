@@ -28,7 +28,7 @@ export type AuthState = {
     reloadProfile: () => Promise<void>;
     updateProfile: (patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>) => Promise<void>;
 
-    deleteSelf: () => Promise<void>; // ⬅️ tambah API self-delete
+    deleteSelf: () => Promise<void>;
 };
 
 const AuthCtx = createContext<AuthState | undefined>(undefined);
@@ -256,7 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signOut = useCallback(async () => {
         console.log(TAG, "signOut: start");
-        await supabase.auth.signOut().catch((e) => {
+        await supabase.auth.signOut({ scope: "global" }).catch((e) => {
             console.log(TAG, "signOut: supabase error:", e?.message);
         });
         try {
@@ -324,9 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw error;
         }
 
-        // Sukses → logout lokal
-        await signOut();
-    }, [session?.user?.id, signOut]);
+    }, [session?.user?.id]);
 
     const value = useMemo<AuthState>(
         () => ({
@@ -341,7 +339,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             signOut,
             reloadProfile,
             updateProfile,
-            deleteSelf, // ⬅️ expose ke consumer
+            deleteSelf,
         }),
         [session, authReady, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile, deleteSelf]
     );

@@ -1,12 +1,11 @@
+// app/(tabs)/ProfileScreen.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "@/lib/supabase";
-import { RegisterForm } from "@/types/profile";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     ActivityIndicator,
@@ -18,18 +17,43 @@ import {
     Text,
     TextInput,
     View,
-    useColorScheme
+    useColorScheme,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// ====== IMPORT services yang kamu sediakan ======
+import { supabase } from "@/lib/supabase";
+import {
+    changeMyPassword,
+    updateMyProfile,
+    updateOwnEmailViaEdge,
+} from "@/services/profileService"; // <- sesuaikan path-nya
+
+// Regex email longgar & realistis
+const EMAIL_REGEX =
+    /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+
+type FormShape = {
+    fullName: string;
+    email: string;
+    village: string;
+    landAreaHa: string;
+    motherName?: string;
+    password?: string;
+};
 
 export default function ProfileScreen() {
     const scheme = (useColorScheme() ?? "light") as "light" | "dark";
     const router = useRouter();
     const C = Colors[scheme];
     const S = Tokens;
-    const { profile, updateProfile, user, deleteSelf } = useAuth();
+
+    const { profile, user, deleteSelf, signOut } = useAuth();
+
     const [loading, setLoading] = useState(false);
+    const [showPwd, setShowPwd] = useState(false);
+    const isHaveMotherName = !!profile?.mother_name_hash;
 
     const {
         control,
@@ -37,50 +61,113 @@ export default function ProfileScreen() {
         reset,
         setValue,
         formState: { errors, isDirty },
-    } = useForm<RegisterForm>({
+    } = useForm<FormShape>({
         defaultValues: {
             fullName: "",
             email: "",
             village: "",
             landAreaHa: "",
             motherName: "",
-        } as any,
+            password: "",
+        },
         mode: "onChange",
     });
 
+    // hydrate form HANYA sekali supaya input user tidak ketimpa setelah edit
+    const didHydrate = useRef(false);
+
+    // Sumber kebenaran email: session auth
+    const currentEmail = user?.email ?? "";
+
     useEffect(() => {
         if (!profile) return;
+        if (didHydrate.current) return;
+
         reset({
             fullName: profile.full_name ?? "",
-            email: profile.email ?? "",
+            email: currentEmail, // dari auth
             village: profile.nama_desa ?? "",
             landAreaHa: profile.luas_lahan != null ? String(profile.luas_lahan) : "",
             motherName: "",
-        } as any);
-    }, [profile, reset]);
+            password: "",
+        });
 
-    const onSave = async (v: RegisterForm) => {
+        didHydrate.current = true;
+    }, [profile, currentEmail, reset]);
+
+    const onSave = async (v: FormShape) => {
         const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+
         try {
             setLoading(true);
-            await updateProfile({
+
+            // 1) Update profil umum
+            await updateMyProfile({
                 full_name: v.fullName.trim(),
                 nama_desa: v.village.trim(),
                 luas_lahan: Number.isFinite(ha) && ha >= 0 ? ha : 0,
             });
-            const newMother = (v.motherName ?? "").trim();
-            if (newMother.length > 0) {
-                if (!user?.id) throw new Error("User belum masuk.");
+
+            let changedMother = false;
+            let changedPwd = false;
+            let changedEmail = false;
+
+            // 2) Ubah password (opsional)
+            const newPassword = (v.password || "").trim();
+            if (newPassword.length > 0) {
+                await changeMyPassword(newPassword);
+                setValue("password", "");
+                changedPwd = true;
+            }
+
+            // 3) Ubah email (opsional)
+            const inputEmail = (v.email || "").trim();
+            if (!EMAIL_REGEX.test(inputEmail)) {
+                throw new Error("Format email tidak valid");
+            }
+            const newEmail = inputEmail.toLowerCase();
+
+            const currentEmail = user?.email ?? ""; // sumber kebenaran
+            if (newEmail && newEmail !== currentEmail) {
+                await updateOwnEmailViaEdge(newEmail);
+                setValue("email", newEmail, { shouldDirty: false });
+                changedEmail = true;
+            }
+
+            // 4) Ubah Nama Ibu via RPC (opsional)
+            const pendingAnswer = (v.motherName || "").trim();
+            if (pendingAnswer.length > 0) {
+                const uid = user?.id;
+                if (!uid) throw new Error("Session tidak valid: user.id tidak ditemukan");
+
                 const { error: rpcErr } = await supabase.rpc("set_mother_name", {
-                    p_user_id: user.id,
-                    p_answer: newMother,
+                    p_user_id: uid,
+                    p_answer: pendingAnswer,
                 });
-                if (rpcErr) throw new Error(rpcErr.message);
-                setValue("motherName", "");
+
+                if (rpcErr) {
+                    // beri pesan jelas; jangan bocorkan detail DB
+                    throw new Error("Gagal menyimpan Nama Ibu");
+                }
+
+                // kosongkan field agar tidak tetap ‘dirty’
+                setValue("motherName", "", { shouldDirty: false });
+                changedMother = true;
             }
 
             Keyboard.dismiss();
-            Alert.alert("Tersimpan", newMother ? "Profil & nama ibu diperbarui." : "Profil berhasil diperbarui.");
+
+            // 5) Pesan notifikasi ringkas sesuai kombinasi perubahan
+            let msg = "Profil berhasil diperbarui.";
+            if (changedEmail && changedPwd && changedMother) msg = "Profil, email, password & nama ibu diperbarui.";
+            else if (changedEmail && changedPwd) msg = "Profil, email & password diperbarui.";
+            else if (changedEmail && changedMother) msg = "Profil, email & nama ibu diperbarui.";
+            else if (changedPwd && changedMother) msg = "Profil, password & nama ibu diperbarui.";
+            else if (changedEmail) msg = "Profil & email diperbarui.";
+            else if (changedPwd) msg = "Profil & password diperbarui.";
+            else if (changedMother) msg = "Profil & nama ibu diperbarui.";
+
+            Alert.alert("Tersimpan", msg);
         } catch (e: any) {
             console.warn(e);
             Alert.alert("Gagal", e?.message ?? "Tidak dapat menyimpan profil.");
@@ -88,6 +175,7 @@ export default function ProfileScreen() {
             setLoading(false);
         }
     };
+
 
     const onDelete = useCallback(() => {
         Alert.alert(
@@ -102,6 +190,7 @@ export default function ProfileScreen() {
                         try {
                             setLoading(true);
                             await deleteSelf();
+                            await signOut()
                         } catch (e: any) {
                             console.log(e);
                             Alert.alert("Gagal", e?.message ?? "Tidak dapat menghapus pengguna.");
@@ -113,11 +202,11 @@ export default function ProfileScreen() {
             ],
             { cancelable: true }
         );
-    }, [deleteSelf, router]);
+    }, [deleteSelf]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header gradien */}
+            {/* Header */}
             <LinearGradient
                 colors={[C.gradientFrom, C.gradientTo]}
                 start={{ x: 0, y: 0 }}
@@ -151,7 +240,6 @@ export default function ProfileScreen() {
                 enableAutomaticScroll
                 extraScrollHeight={Platform.select({ ios: 80, android: 120 })}
             >
-                {/* Kartu profil */}
                 <View
                     style={[
                         styles.card,
@@ -163,7 +251,7 @@ export default function ProfileScreen() {
                         scheme === "light" ? S.shadow.light : S.shadow.dark,
                     ]}
                 >
-                    {/* Avatar */}
+                    {/* Avatar + Nama */}
                     <View style={styles.avatarRow}>
                         <View
                             style={[
@@ -177,8 +265,9 @@ export default function ProfileScreen() {
                                     color: C.text,
                                     fontFamily: Fonts.rounded as any,
                                     fontSize: 16,
-                                    fontWeight: "bold"
-                                }}>
+                                    fontWeight: "bold",
+                                }}
+                            >
                                 {getInitialsName(profile?.full_name || "")}
                             </Text>
                         </View>
@@ -211,46 +300,56 @@ export default function ProfileScreen() {
                         </View>
                     </View>
 
-                    {/* Email (read-only) */}
+                    {/* Email (EDITABLE) — sumber kebenaran: auth.user.email */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Email</Text>
                     <Controller
                         control={control}
                         name="email"
-                        render={({ field: { value } }) => (
+                        rules={{
+                            required: "Email wajib diisi",
+                            pattern: { value: EMAIL_REGEX, message: "Format email tidak valid" },
+                        }}
+                        render={({ field: { onChange, onBlur, value } }) => (
                             <TextInput
                                 value={value}
-                                editable={false}
+                                onBlur={onBlur}
+                                onChangeText={(t) => onChange(t)} // jangan paksa lower-case di onChange
                                 placeholder="nama@contoh.com"
                                 placeholderTextColor={C.icon}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                autoComplete="email"
+                                textContentType="username"
+                                keyboardType="email-address"
                                 style={[
                                     styles.input,
                                     {
                                         color: C.text,
-                                        borderColor: C.border,
+                                        borderColor: errors.email ? C.danger : C.border,
                                         borderRadius: S.radius.md,
-                                        opacity: 0.8,
                                     },
                                 ]}
                             />
                         )}
                     />
+                    {errors.email && <Text style={[styles.err, { color: C.danger }]}>{errors.email.message as string}</Text>}
 
-                    {/* Nama Ibu (opsional, jika diisi akan mengganti hash) */}
+                    {/* Nama Ibu (opsional, bila kamu pakai RPC set_mother_name kembali tinggal aktifkan) */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>
-                        Nama Ibu (untuk verifikasi reset password)
+                        Nama Ibu Kandung (untuk verifikasi reset password)
                     </Text>
                     <Controller
                         control={control}
                         name="motherName"
                         rules={{
                             validate: (v) => {
-                                if (!v) return true; // opsional
+                                if (!v) return true;
                                 return String(v).trim().length >= 2 || "Minimal 2 karakter";
                             },
                         }}
                         render={({ field: { onChange, onBlur, value } }) => (
                             <TextInput
-                                placeholder="Isi hanya jika ingin mengubah"
+                                placeholder={`${isHaveMotherName ? "Kosongkan jika tidak ingin mengubah" : "Anda belum memasukkan nama ibu"}`}
                                 placeholderTextColor={C.icon}
                                 onBlur={onBlur}
                                 onChangeText={onChange}
@@ -267,6 +366,55 @@ export default function ProfileScreen() {
                         )}
                     />
                     {errors.motherName && <Text style={[styles.err, { color: C.danger }]}>{errors.motherName.message}</Text>}
+
+                    {/* Password baru */}
+                    <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Password baru (opsional)</Text>
+                    <Controller
+                        control={control}
+                        name="password"
+                        rules={{
+                            validate: (v) => !v || v.length >= 6 || "Jika diisi, minimal 6 karakter",
+                        }}
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <View style={{ position: "relative" }}>
+                                <TextInput
+                                    placeholder="Kosongkan jika tidak ingin mengubah"
+                                    placeholderTextColor={C.icon}
+                                    secureTextEntry={!showPwd}
+                                    onBlur={onBlur}
+                                    onChangeText={onChange}
+                                    value={value as any}
+                                    style={[
+                                        styles.input,
+                                        {
+                                            borderColor: errors.password ? C.danger : C.border,
+                                            color: C.text,
+                                            borderRadius: S.radius.md,
+                                            paddingHorizontal: S.spacing.md,
+                                            paddingVertical: 10,
+                                            paddingRight: 42,
+                                        },
+                                    ]}
+                                />
+                                <Pressable
+                                    onPress={() => setShowPwd((s) => !s)}
+                                    hitSlop={10}
+                                    style={{
+                                        position: "absolute",
+                                        right: 10,
+                                        top: 10,
+                                        height: 24,
+                                        width: 24,
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    <Ionicons name={showPwd ? "eye-off-outline" : "eye-outline"} size={20} color={C.icon} />
+                                </Pressable>
+                            </View>
+                        )}
+                    />
+                    {errors.password && <Text style={[styles.err, { color: C.danger }]}>{errors.password.message as string}</Text>}
 
                     {/* Desa/Kelurahan */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Desa/Kelurahan</Text>
@@ -294,7 +442,7 @@ export default function ProfileScreen() {
                     />
                     {errors.village && <Text style={[styles.err, { color: C.danger }]}>{errors.village.message}</Text>}
 
-                    {/* Luas Lahan (ha) */}
+                    {/* Luas Lahan */}
                     <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Luas Lahan (ha)</Text>
                     <Controller
                         control={control}
@@ -329,7 +477,7 @@ export default function ProfileScreen() {
                 </View>
 
                 <View style={{ flexDirection: "row", gap: 12, marginTop: S.spacing.lg }}>
-                    {/* Tombol simpan */}
+                    {/* Simpan */}
                     <Pressable
                         onPress={handleSubmit(onSave)}
                         disabled={loading || !isDirty}
@@ -354,6 +502,8 @@ export default function ProfileScreen() {
                             </>
                         )}
                     </Pressable>
+
+                    {/* Hapus akun */}
                     <Pressable
                         onPress={onDelete}
                         disabled={loading}
@@ -379,7 +529,12 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
     header: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
     iconBtn: {
-        width: 36, height: 36, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center",
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
     },
     title: { fontSize: 22, fontWeight: "800" },
     subtitle: { fontSize: 12, marginTop: 2 },
@@ -387,20 +542,26 @@ const styles = StyleSheet.create({
     card: { padding: 16, borderWidth: 1 },
     avatarRow: { flexDirection: "row", gap: 14, alignItems: "center", marginBottom: 6 },
     avatarWrap: {
-        justifyContent: "center", alignItems: "center",
-        width: 86, height: 86, borderRadius: 86, overflow: "hidden", borderWidth: 1, position: "relative",
+        justifyContent: "center",
+        alignItems: "center",
+        width: 86,
+        height: 86,
+        borderRadius: 86,
+        overflow: "hidden",
+        borderWidth: 1,
+        position: "relative",
     },
-    avatar: { width: "100%", height: "100%" },
+
     label: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
     input: {
-        borderWidth: 1, fontSize: 15, paddingHorizontal: 12,
+        borderWidth: 1,
+        fontSize: 15,
+        paddingHorizontal: 12,
         paddingVertical: Platform.select({ ios: 10, android: 8 }) as number,
         backgroundColor: "transparent",
     },
     err: { marginTop: 6, fontSize: 12 },
-    selectInput: {
-        borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    },
+
     button: {
         paddingVertical: 12,
         alignItems: "center",

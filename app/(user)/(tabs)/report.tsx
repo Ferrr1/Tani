@@ -273,6 +273,7 @@ export default function ReportScreen() {
         () => base.tools.reduce((acc, t) => acc + t.quantity, 0),
         [base.tools]
     );
+    console.log("BASE TOOLS", base.tools);
 
     const totalBiayaNonTunaiLain = useMemo(() => {
         const toolsVal = base.tools.reduce((acc, t) => acc + toolValue(t), 0);

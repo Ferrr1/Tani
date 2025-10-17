@@ -11,7 +11,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, nama_desa, luas_lahan, role, created_at, updated_at"
+      "id, email, full_name, nama_desa, luas_lahan, role, mother_name_hash, created_at, updated_at"
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -47,7 +47,7 @@ export async function updateMyProfile(
     .update(body)
     .eq("id", user.id)
     .select(
-      "id, email, full_name, nama_desa, luas_lahan, role, created_at, updated_at"
+      "id, email, full_name, nama_desa, luas_lahan, role, mother_name_hash, created_at, updated_at"
     )
     .maybeSingle();
 
@@ -63,7 +63,22 @@ export async function changeMyPassword(newPassword: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function changeMyEmail(newEmail: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ email: newEmail });
-  if (error) throw error;
+export async function updateOwnEmailViaEdge(newEmail: string) {
+  // butuh user login agar Authorization header otomatis dikirim
+  const sess = (await supabase.auth.getSession()).data.session;
+  if (!sess) throw new Error("Belum login");
+
+  const { data, error } = await supabase.functions.invoke("self-update-email", {
+    body: { newEmail },
+  });
+  if (error) throw new Error(error.message || "Gagal memanggil function");
+
+  // penting: segarkan session agar user.email di context ikut berubah
+  try {
+    await supabase.auth.refreshSession();
+  } catch {
+    await supabase.auth.getUser();
+  }
+
+  return data; // { ok: true, user: { id, email } }
 }

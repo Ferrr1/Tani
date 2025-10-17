@@ -1,4 +1,5 @@
-import HeaderLogoutButton from "@/components/HeaderLogoutButton";
+import ButtonLogout from "@/components/ButtonLogout";
+import WeatherSkeleton from "@/components/WeatherSkeleton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { getInitialsName } from "@/utils/getInitialsName";
@@ -6,10 +7,10 @@ import { codeToText } from "@/utils/weather";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
-import { Link, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { Link, useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -55,9 +56,11 @@ export default function HomeScreen() {
   const [wx, setWx] = useState<WeatherNow | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    reloadProfile();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      reloadProfile();
+    }, [reloadProfile])
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +190,7 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <HeaderLogoutButton size={28} confirm={true} />
+          <ButtonLogout colors={[C.danger, C.gradientTo]} />
 
           <Pressable
             onPress={() => router.push("/(form)/sub/profile")}
@@ -227,28 +230,40 @@ export default function HomeScreen() {
             ]}
           >
             {loading ? (
-              <View style={{ paddingVertical: 12, alignItems: "center" }}>
-                <ActivityIndicator color={C.tint} size={"large"} />
-              </View>
+              <WeatherSkeleton C={C} S={S} />
             ) : (
               <>
+                <Image
+                  source={require("@/assets/images/logo.png")} // ganti path ke asetmu
+                  style={[
+                    styles.bgImage,
+                    { tintColor: C.tint, opacity: 0.9 }, // efek bayangan
+                  ]}
+                  resizeMode="contain"
+                />
+
                 <View style={styles.mainRow}>
                   <View style={{ flex: 1 }}>
-                    {/* Weight cuaca: suhu sangat tebal, deskripsi medium */}
-                    <Text style={[
-                      styles.mainTitle,
-                      { color: C.text, fontFamily: Fonts.rounded as any, fontWeight: "900" }
-                    ]}>
+                    <Text
+                      style={[
+                        styles.mainTitle,
+                        { color: C.text, fontFamily: Fonts.rounded as any, fontWeight: "900" },
+                      ]}
+                    >
                       {wx?.tempC != null ? Math.round(wx.tempC) : "-"}°
                     </Text>
-                    <Text style={[
-                      styles.mainSub,
-                      { color: C.text, fontFamily: Fonts.sans as any, fontWeight: "700" }
-                    ]}>
+                    <Text
+                      style={[
+                        styles.mainSub,
+                        { color: C.text, fontFamily: Fonts.sans as any, fontWeight: "700" },
+                      ]}
+                    >
                       {wx?.conditionText ?? "-"}
                     </Text>
                   </View>
-                  <Ionicons name="leaf-outline" size={44} color={C.tint} />
+
+                  {/* HAPUS Ionicons daun; tidak perlu lagi */}
+                  {/* <Ionicons name="leaf-outline" size={44} color={C.tint} /> */}
                 </View>
 
                 <View style={styles.chipsRow}>
@@ -325,9 +340,14 @@ const styles = StyleSheet.create({
     width: 54, height: 54, borderRadius: 54, overflow: "hidden", borderWidth: 1
   },
   mainCard: { marginTop: 16, padding: 16, borderWidth: 1 },
-  mainRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   mainTitle: { fontSize: 42, fontWeight: "900", letterSpacing: 1 },
   mainSub: { fontSize: 13, marginTop: 2 },
+  mainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    zIndex: 1,          // konten di atas gambar
+  },
 
   chipsRow: { flexDirection: "row", gap: 10, marginTop: 10, flexWrap: "wrap" },
   chip: {
@@ -340,6 +360,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipText: { fontSize: 12, fontWeight: "700" },
+
+  bgImage: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    width: 80,
+    height: 80,
+    zIndex: 0,
+  },
 
   grid: {
     flexDirection: "row",

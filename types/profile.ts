@@ -17,4 +17,5 @@ export type Profile = {
   nama_desa: string | null;
   luas_lahan: number | null;
   role: Role | null;
+  mother_name_hash: string | null;
 };

@@ -6,4 +6,5 @@ export type DetailForm = {
   cropType: string;
   cropTypeOther?: string;
   landAreaHa: string; // string untuk input, dikonversi saat submit
+  motherName?: string;
 };

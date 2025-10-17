@@ -3,14 +3,23 @@ import LoadingScreen from "@/components/LoadingScreen";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, Tabs, useRootNavigationState } from "expo-router";
-import React from "react";
+import { router, Tabs, useRootNavigationState } from "expo-router";
+import React, { useEffect } from "react";
 import { useColorScheme } from "react-native";
 
 const SuperadminLayout = () => {
     const scheme = useColorScheme() ?? "light";
     const navReady = !!useRootNavigationState()?.key;
     const { authReady, session, role } = useAuth();
+
+    useEffect(() => {
+        if (!session) {
+            router.replace("/(auth)");
+        } else if (role !== "superadmin") {
+            router.replace("/(user)/(tabs)");
+        }
+
+    }, [session, role]);
 
     if (!navReady || !authReady) {
         return (
@@ -19,12 +28,6 @@ const SuperadminLayout = () => {
                 subtitle="Memuat sesi & navigasi…"
             />
         );
-    }
-
-    if (!session) return <Redirect href="/(auth)" />;
-
-    if (role !== "superadmin") {
-        return <Redirect href="/(user)/(tabs)" />;
     }
 
     return (
