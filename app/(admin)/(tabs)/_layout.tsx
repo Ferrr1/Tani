@@ -14,12 +14,13 @@ const AdminLayout = () => {
     const { authReady, session, role } = useAuth();
 
     useEffect(() => {
+        if (!navReady || !authReady) return;
         if (!session) {
             router.replace("/(auth)");
         } else if (role !== "admin") {
             router.replace("/(user)/(tabs)");
         }
-    }, [session, role])
+    }, [session, role, navReady, authReady]);
 
     if (!navReady || !authReady) {
         return <LoadingScreen title="Menyiapkan panel admin" subtitle="Memuat sesi & navigasi…" />;

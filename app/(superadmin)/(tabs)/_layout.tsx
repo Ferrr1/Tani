@@ -13,13 +13,14 @@ const SuperadminLayout = () => {
     const { authReady, session, role } = useAuth();
 
     useEffect(() => {
+        if (!navReady || !authReady) return;
         if (!session) {
             router.replace("/(auth)");
         } else if (role !== "superadmin") {
             router.replace("/(user)/(tabs)");
         }
 
-    }, [session, role]);
+    }, [session, role, navReady, authReady]);
 
     if (!navReady || !authReady) {
         return (
