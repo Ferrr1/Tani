@@ -1,5 +1,6 @@
 import { ChemItem, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
+import { formatInputThousands, parseThousandsToNumber } from "@/utils/number";
 import { Ionicons } from "@expo/vector-icons";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
@@ -27,8 +28,9 @@ export default function ChemPanel({
     const [price, setPrice] = useState("");
 
     const add = () => {
-        const q = parseFloat((qty || "0").replace(",", "."));
-        const p = parseFloat((price || "0").replace(",", "."));
+        const q = parseThousandsToNumber(qty);
+        const p = parseThousandsToNumber(price);
+
         if (!name.trim()) {
             Alert.alert("Validasi", "Nama bahan kimia wajib diisi.");
             return;
@@ -62,36 +64,79 @@ export default function ChemPanel({
                 placeholderTextColor={C.icon}
                 value={name}
                 onChangeText={setName}
-                style={{ borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
+                style={{
+                    borderWidth: 1,
+                    borderColor: C.border,
+                    color: C.text,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                }}
             />
+
             <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
                     placeholder="Jumlah"
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={qty}
-                    onChangeText={setQty}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
+                    onChangeText={(t) => setQty(formatInputThousands(t))}
+                    style={{
+                        flex: 1,
+                        borderWidth: 1,
+                        borderColor: C.border,
+                        color: C.text,
+                        borderRadius: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                    }}
                 />
                 <TextInput
                     placeholder="Harga/satuan"
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={price}
-                    onChangeText={setPrice}
-                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, color: C.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}
+                    onChangeText={(t) => setPrice(formatInputThousands(t))}
+                    style={{
+                        flex: 1,
+                        borderWidth: 1,
+                        borderColor: C.border,
+                        color: C.text,
+                        borderRadius: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                    }}
                 />
             </View>
 
             <Pressable
                 onPress={add}
-                style={({ pressed }) => [{ backgroundColor: C.tint + "33", borderWidth: 1, borderColor: C.tint, paddingVertical: 10, borderRadius: 999, alignItems: "center", opacity: pressed ? 0.96 : 1 }]}
+                style={({ pressed }) => [
+                    {
+                        backgroundColor: C.tint + "33",
+                        borderWidth: 1,
+                        borderColor: C.tint,
+                        paddingVertical: 10,
+                        borderRadius: 999,
+                        alignItems: "center",
+                        opacity: pressed ? 0.96 : 1,
+                    },
+                ]}
             >
                 <Text style={{ color: C.tint, fontWeight: "900" }}>Tambah</Text>
             </Pressable>
 
             {rows.map((r) => (
-                <View key={r.id} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 10, marginTop: 8 }}>
+                <View
+                    key={r.id}
+                    style={{
+                        borderWidth: 1,
+                        borderColor: C.border,
+                        borderRadius: 12,
+                        padding: 10,
+                        marginTop: 8,
+                    }}
+                >
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                         <Text style={{ color: C.text, fontWeight: "800" }}>{r.name || "(tanpa nama)"}</Text>
                         <Pressable onPress={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}>
@@ -99,7 +144,7 @@ export default function ChemPanel({
                         </Pressable>
                     </View>
                     <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>
-                        {r.unit} | {r.qty} × {currency(parseFloat(r.price || "0") || 0)}
+                        {r.unit} | {r.qty} × {currency(parseThousandsToNumber(r.price))}
                     </Text>
                 </View>
             ))}

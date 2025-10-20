@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
     Alert,
@@ -73,6 +73,7 @@ export default function NonCashForm({
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openTools, setOpenTools] = useState(false);
     const [openExtras, setOpenExtras] = useState(false);
+    const [openExtraCost, setOpenExtraCost] = useState(false); // dinamis
     const [tools, setTools] = useState<ToolForm[]>([]);
     const [extraItems, setExtraItems] = useState<ExtraRow[]>([]); // dinamis
 
@@ -455,43 +456,10 @@ export default function NonCashForm({
         return { labors, tools: toolItems, extras };
     };
 
-    const hasAnyLabor = useCallback(() => {
-        const L = watch("labor");
-        const arr: LaborForm[] = [
-            L.nursery,
-            L.land_prep,
-            L.planting,
-            L.fertilizing,
-            L.irrigation,
-            L.weeding,
-            L.pest_ctrl,
-            L.harvest,
-            L.postharvest,
-        ];
-        return arr.some((lf) => {
-            if (lf.tipe === "borongan") {
-                return toNum(lf.hargaBorongan) > 0;
-            }
-            const orang = toNum(lf.jumlahOrang);
-            const hari = toNum(lf.jumlahHari);
-            const upah = toNum(lf.upahHarian);
-            return orang > 0 && hari > 0 && upah > 0;
-        });
-    }, [watch]);
-
-    /** ===== Submit ===== */
     const [saving, setSaving] = useState(false);
     const onSubmit = async (fv: NonCashFormValues) => {
         try {
             const { labors, tools: toolItems, extras } = buildPayload(fv);
-
-            if (!hasAnyLabor()) {
-                Alert.alert(
-                    "Validasi",
-                    "Isi minimal satu item Tenaga Kerja (harian)."
-                );
-                return;
-            }
 
             if (labors.length === 0 && toolItems.length === 0 && extras.length === 0) {
                 Alert.alert("Validasi", "Isi minimal satu data yang valid.");
@@ -693,8 +661,8 @@ export default function NonCashForm({
                     />
                     {openTools && <ToolPanel C={C} tools={tools} setTools={setTools} />}
 
-                    {/* ===== Biaya Lain ===== */}
-                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Biaya Lain</Text>
+                    {/* ===== Pajak dan Sewa Lahan ===== */}
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Pajak dan Sewa Lahan</Text>
                     <SectionButton
                         title="Pajak & Sewa Lahan"
                         icon="pricetag-outline"
@@ -706,7 +674,7 @@ export default function NonCashForm({
                     {openExtras && (
                         <View style={{ marginTop: 8, gap: 10 }}>
                             <RHFLineInput
-                                label="Pajak per Tahun"
+                                label="Pajak (PBB) per Tahun"
                                 placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
@@ -738,8 +706,6 @@ export default function NonCashForm({
                                 </Text>
                             </Text>
 
-                            {/* === ExtrasPanel (dinamis) === */}
-                            <ExtrasPanel schemeColors={{ C, S }} rows={extraItems} setRows={setExtraItems} />
                             <Text style={{ color: C.textMuted, fontSize: 12 }}>
                                 Subtotal Biaya Lain ≈{" "}
                                 <Text style={{ color: C.success, fontWeight: "900" }}>
@@ -748,6 +714,30 @@ export default function NonCashForm({
                             </Text>
                         </View>
                     )}
+
+                    {/* ===== Biaya Lain ===== */}
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Biaya Lain</Text>
+                    <SectionButton
+                        title="Biaya Lain"
+                        icon="pricetag-outline"
+                        open={openExtraCost}
+                        onPress={() => setOpenExtraCost((v) => !v)}
+                        C={C}
+                        S={S}
+                    />
+                    {openExtraCost && (
+
+                        <>
+                            <ExtrasPanel schemeColors={{ C, S }} rows={extraItems} setRows={setExtraItems} />
+                            <Text style={{ color: C.textMuted, fontSize: 12 }}>
+                                Subtotal Biaya Lain ≈{" "}
+                                <Text style={{ color: C.success, fontWeight: "900" }}>
+                                    {currency(extrasPanelSubtotal || 0)}
+                                </Text>
+                            </Text>
+                        </>
+                    )}
+                    {/* === ExtrasPanel (dinamis) === */}
 
                     {/* ===== Footer ===== */}
                     <View style={{ marginTop: 12 }}>

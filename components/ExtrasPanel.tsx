@@ -1,12 +1,13 @@
-// ExtrasPanel.tsx
+import { currency } from "@/utils/currency";
+import { formatInputThousands, parseThousandsToNumber } from "@/utils/number";
 import { Ionicons } from "@expo/vector-icons";
 import React, { Dispatch, SetStateAction, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 export type ExtraRow = {
     id: string;
-    label: string;     // nama bebas (dinamis)
-    amount: string;    // string biar gampang input; konversi di payload
+    label: string;
+    amount: string;
 };
 
 export default function ExtrasPanel({
@@ -32,13 +33,13 @@ export default function ExtrasPanel({
     };
 
     const add = () => {
-        const amt = parseFloat((amount || "0").replace(",", "."));
+        const amtNum = parseThousandsToNumber(amount);
 
         if (!label.trim()) {
             Alert.alert("Validasi", "Nama/label biaya wajib diisi.");
             return;
         }
-        if (!(Number.isFinite(amt) && amt >= 0)) {
+        if (!(Number.isFinite(amtNum) && amtNum >= 0)) {
             Alert.alert("Validasi", "Nominal harus ≥ 0.");
             return;
         }
@@ -48,7 +49,7 @@ export default function ExtrasPanel({
             {
                 id: String(Date.now() + Math.random()),
                 label: label.trim(),
-                amount,
+                amount,                      // simpan string bertitik
                 note: note?.trim() ? note.trim() : null,
             },
         ]);
@@ -79,13 +80,7 @@ export default function ExtrasPanel({
                     <Text style={{ color: C.tint, fontWeight: "900" }}>Tambah Biaya</Text>
                 </Pressable>
             ) : (
-                <View
-                    style={{
-                        borderRadius: 12,
-                        gap: 8,
-                        marginVertical: 8,
-                    }}
-                >
+                <View style={{ borderRadius: 12, gap: 8, marginVertical: 8 }}>
                     <TextInput
                         placeholder="Nama biaya"
                         placeholderTextColor={C.icon}
@@ -105,7 +100,7 @@ export default function ExtrasPanel({
                         placeholderTextColor={C.icon}
                         keyboardType="numeric"
                         value={amount}
-                        onChangeText={setAmount}
+                        onChangeText={(t) => setAmount(formatInputThousands(t))}  // ← live format ribuan
                         style={{
                             borderWidth: 1,
                             borderColor: C.border,
@@ -177,16 +172,12 @@ export default function ExtrasPanel({
                         <Text style={{ color: C.text, fontWeight: "800" }}>
                             {r.label}
                         </Text>
-                        <Pressable
-                            onPress={() =>
-                                setRows((prev) => prev.filter((x) => x.id !== r.id))
-                            }
-                        >
+                        <Pressable onPress={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}>
                             <Ionicons name="trash-outline" size={18} color={C.danger} />
                         </Pressable>
                     </View>
                     <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>
-                        Nominal: {r.amount}
+                        Nominal: {currency(parseThousandsToNumber(r.amount))}
                     </Text>
                 </View>
             ))}

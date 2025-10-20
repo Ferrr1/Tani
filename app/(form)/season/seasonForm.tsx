@@ -238,7 +238,7 @@ export default function SeasonForm() {
         } catch (e: any) {
             console.warn("SEASONFORM", e.code, e);
             if (e.code === "P0001") {
-                Alert.alert("Validasi", "Musim ke-" + n + " sudah ada.");
+                Alert.alert("Validasi", e.message);
             } else if (typeof e?.message === "string" && /Maksimal 3 musim/.test(e.message)) {
                 Alert.alert("Validasi", e.message);
             } else if (typeof e?.message === "string" && /crop_type (minimal|maksimal)/i.test(e.message)) {
@@ -674,7 +674,7 @@ export default function SeasonForm() {
                         )}
 
                         {/* Tanggal Mulai */}
-                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tanggal Mulai</Text>
+                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tanggal Mulai Lahan Digunakan</Text>
                         <Pressable
                             onPress={openStartPicker}
                             style={[
@@ -722,7 +722,7 @@ export default function SeasonForm() {
                         )}
 
                         {/* Tanggal Selesai */}
-                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tanggal Selesai</Text>
+                        <Text style={[styles.label, { color: C.text, marginTop: S.spacing.md }]}>Tanggal Selesai Lahan Digunakan</Text>
                         <Pressable
                             onPress={openEndPicker}
                             style={[
@@ -774,6 +774,17 @@ export default function SeasonForm() {
                                 Perkiraan durasi: <Text style={{ fontWeight: "800" }}>{durationText}</Text>
                             </Text>
                         )}
+                    </View>
+                    <View
+                        style={[
+                            styles.helper,
+                            { backgroundColor: C.surfaceSoft, borderRadius: S.radius.lg, marginTop: S.spacing.lg },
+                        ]}
+                    >
+                        <Ionicons name="information-circle-outline" size={24} color={C.textMuted} />
+                        <Text style={[styles.helperText, { color: C.textMuted, fontFamily: Fonts.serif as any }]}>
+                            Kalau Terdapat 2 Tanaman, Masukkan tanggal mulai penggunaan lahan dari tanaman yang mulai duluan dan masukkan tanggal selesai penggunaan lahan dari tanaman yang selesai terakhir
+                        </Text>
                     </View>
 
                     {/* Tombol Simpan */}
@@ -843,4 +854,17 @@ const styles = StyleSheet.create({
         marginTop: 16, paddingVertical: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
     },
     saveText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+    helper: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 8,
+    },
+    helperText: {
+        flexShrink: 1,
+        flexGrow: 1,
+        flexBasis: 0,
+        fontSize: 10,
+        lineHeight: 14,
+    },
 });

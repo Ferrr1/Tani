@@ -3,12 +3,12 @@ import React, { useEffect, useMemo } from "react";
 import { useWatch } from "react-hook-form";
 import { Pressable, Text, View } from "react-native";
 
-import { SEED_UNIT, SEEDLING_UNIT } from "@/types/expense";
+import { SEED_UNIT_CHOICES, SEEDLING_UNIT_CHOICES, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
+import { parseThousandsToNumber } from "@/utils/number";
 import RHFLineInput from "./RHFLineInput";
 
 type Props = {
-    // prefix form field, contoh: "seed"
     name: string;
     control: any;
     setValue: any;
@@ -17,7 +17,6 @@ type Props = {
 };
 
 export default function SeedOne({ name, control, setValue, C, S }: Props) {
-    // "seed" | "seedling"
     const kind: "seed" | "seedling" | undefined = useWatch({
         control,
         name: `${name}.kind`,
@@ -26,14 +25,13 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
     const qtyStr = useWatch({ control, name: `${name}.qty` }) ?? "";
     const priceStr = useWatch({ control, name: `${name}.price` }) ?? "";
 
-    // default-kan kind ke "seed" bila kosong
     useEffect(() => {
         if (!kind) {
             setValue(`${name}.kind`, "seed", { shouldDirty: true });
         }
     }, [kind, name, setValue]);
 
-    const unit = (kind === "seedling" ? SEEDLING_UNIT : SEED_UNIT) as string;
+    const unit: Unit = (kind as Unit) ?? (kind === "seed" ? SEED_UNIT_CHOICES : SEEDLING_UNIT_CHOICES);
 
     const selectKind = (k: "seed" | "seedling") => {
         setValue(`${name}.kind`, k, { shouldDirty: true, shouldValidate: true });
@@ -126,10 +124,10 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
                     C={C}
                     rules={{
                         required: "Wajib diisi",
-                        validate: (v: string) => {
-                            const n = toNum(v);
-                            return n > 0 || "Harus > 0";
-                        },
+                        validate: (v: string) =>
+                            v === "" ||
+                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                            "Tidak valid",
                     }}
                     placeholder="Masukkan jumlah"
                 />
@@ -140,10 +138,10 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
                     C={C}
                     rules={{
                         required: "Wajib diisi",
-                        validate: (v: string) => {
-                            const n = toNum(v);
-                            return n >= 0 || "Harus ≥ 0";
-                        },
+                        validate: (v: string) =>
+                            v === "" ||
+                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                            "Tidak valid",
                     }}
                     placeholder="Rp ..."
                 />

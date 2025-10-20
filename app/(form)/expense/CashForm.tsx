@@ -92,6 +92,7 @@ export default function CashForm({
     const [openHarvest, setOpenHarvest] = useState(false);
     const [openPostHarvest, setOpenPostHarvest] = useState(false);
     const [openExtras, setOpenExtras] = useState(false);
+    const [openExtraCost, setOpenExtraCost] = useState(false);
 
     // kimia
     const [fertilizerItems, setFertilizerItems] = useState<ChemItem[]>([]);
@@ -536,27 +537,6 @@ export default function CashForm({
                 toNum(r.price) >= 0
         );
 
-    const hasAnyLabor = useCallback(() => {
-        const arr: LaborForm[] = [
-            L.nursery,
-            L.land_prep,
-            L.planting,
-            L.fertilizing,
-            L.irrigation,
-            L.weeding,
-            L.pest_ctrl,
-            L.harvest,
-            L.postharvest,
-        ];
-        return arr.some((lf) => {
-            if (lf.tipe === "borongan") return toNum(lf.hargaBorongan) > 0;
-            const orang = toNum(lf.jumlahOrang);
-            const hari = toNum(lf.jumlahHari);
-            const upah = toNum(lf.upahHarian);
-            return orang > 0 && hari > 0 && upah > 0;
-        });
-    }, [L]);
-
     // ===== Build payload (gunakan nilai PRORATA untuk tax & land rent)
     const buildPayload = (fv: any) => {
         const out: any[] = [];
@@ -749,10 +729,6 @@ export default function CashForm({
                 Alert.alert("Validasi", "Jika isi pestisida, tiap baris harus lengkap.");
                 return;
             }
-            if (!hasAnyLabor()) {
-                Alert.alert("Validasi", "Isi minimal satu item Tenaga Kerja (borongan/harian).");
-                return;
-            }
 
             const items = buildPayload(fv);
             if (!items.length) {
@@ -786,16 +762,6 @@ export default function CashForm({
         padding: S.spacing.md,
         gap: S.spacing.sm,
     } as const;
-
-    const divider = (
-        <View
-            style={{
-                borderTopWidth: StyleSheet.hairlineWidth,
-                borderTopColor: C.border,
-                marginTop: S.spacing.xs,
-            }}
-        />
-    );
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -931,8 +897,6 @@ export default function CashForm({
                                         },
                                     }}
                                 />
-
-                                {divider}
 
                                 {/* Subtotal per baris seed */}
                                 <Text style={{ color: C.textMuted, fontSize: 12 }}>
@@ -1151,9 +1115,9 @@ export default function CashForm({
                         subtotal={calcLaborSubtotal(watch("labor").postharvest)}
                     />
 
-                    {/* ===== Biaya Lain ===== */}
+                    {/* ===== Pajak, Sewa Lahan, Transportasi ===== */}
                     <Text style={[styles.sectionTitle, { color: C.textMuted, fontFamily: Fonts.rounded as any }]}>
-                        Biaya Lain
+                        Pajak, Sewa Lahan, Transportasi
                     </Text>
                     <SectionButton
                         title="Pajak, Sewa Lahan, Transportasi"
@@ -1167,7 +1131,7 @@ export default function CashForm({
                         <View>
                             {/* input tetap “per Tahun” */}
                             <RHFLineInput
-                                label={`Pajak per Tahun`}
+                                label={`Pajak (PBB) per Tahun`}
                                 placeholder="Dalam Rupiah"
                                 name="extras.tax"
                                 control={control}
@@ -1203,9 +1167,22 @@ export default function CashForm({
                                 control={control}
                                 C={C}
                             />
+                        </View>
+                    )}
 
-                            {divider}
+                    {/* ===== Biaya Lain ===== */}
+                    <Text style={{ color: C.textMuted, fontWeight: "800", marginTop: 8 }}>Biaya Lain</Text>
+                    <SectionButton
+                        title="Biaya Lain"
+                        icon="pricetag-outline"
+                        open={openExtraCost}
+                        onPress={() => setOpenExtraCost((v) => !v)}
+                        C={C}
+                        S={S}
+                    />
+                    {openExtraCost && (
 
+                        <>
                             <ExtrasPanel
                                 schemeColors={{ C, S }}
                                 rows={extraItems}
@@ -1217,7 +1194,7 @@ export default function CashForm({
                                     {currency(extrasPanelSubtotal || 0)}
                                 </Text>
                             </Text>
-                        </View>
+                        </>
                     )}
 
                     {/* ===== Footer ===== */}

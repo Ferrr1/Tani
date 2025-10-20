@@ -24,16 +24,10 @@ type WeatherNow = {
   tempC: number | null;
   weatherCode: number | null;
   conditionText: string;
-  tzId: string;               // e.g. "Asia/Jakarta"
-  localIso: string;           // ISO string like "2025-09-19T10:30"
+  tzId: string;
+  localIso: string;
   city?: string;
   region?: string;
-};
-
-const TZ_ABBR: Record<string, string> = {
-  "Asia/Jakarta": "WIB",
-  "Asia/Makassar": "WITA",
-  "Asia/Jayapura": "WIT",
 };
 
 
@@ -152,15 +146,6 @@ export default function HomeScreen() {
     });
   }, [wx?.localIso]);
 
-  const tzAbbr = useMemo(() => {
-    const tz = wx?.tzId;
-    if (!tz || typeof tz !== "string") return "WIB";
-    const mapped = TZ_ABBR[tz];
-    if (mapped) return mapped;
-    const last = tz.includes("/") ? tz.split("/").pop() : tz;
-    return last || "WIB";
-  }, [wx?.tzId]);
-
   const menus = [
     { key: "season", label: "Musim", icon: "calendar-outline", color: C.tint, href: "/sub/season" },
     { key: "income", label: "Penerimaan", icon: "arrow-down-circle-outline", color: C.tint, href: "/income" },
@@ -272,10 +257,6 @@ export default function HomeScreen() {
                     <Text style={[styles.chipText, { color: C.text }]}>{dateText}</Text>
                   </View>
                   <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
-                    <Ionicons name="time-outline" size={14} color={C.textMuted} />
-                    <Text style={[styles.chipText, { color: C.text }]}>{tzAbbr}</Text>
-                  </View>
-                  <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="location-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>
                       {(wx?.city ?? "") + (wx?.region ? `, ${wx.region}` : "")}
@@ -365,8 +346,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 10,
     top: 10,
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     zIndex: 0,
   },
 

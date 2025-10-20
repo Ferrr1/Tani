@@ -1,4 +1,5 @@
 import { currency } from "@/utils/currency";
+import { parseThousandsToNumber } from "@/utils/number";
 import { useEffect } from "react";
 import { useWatch } from "react-hook-form";
 import { Text, View } from "react-native";
@@ -39,7 +40,6 @@ export default function LaborOne({
     subtotal: number;
     C: any;
     S: any;
-    /** Kustom chip yang ingin ditampilkan (urutan menentukan default) */
     chipOptions?: ChipOption[];
 }) {
     const tipe: Tipe | undefined = useWatch({
@@ -110,9 +110,10 @@ export default function LaborOne({
                                 control={control}
                                 C={C}
                                 rules={{
-                                    required: "Wajib diisi",
                                     validate: (v: string) =>
-                                        parseFloat((v || "0").replace(",", ".")) >= 0 || "Harus ≥ 0",
+                                        v === "" ||
+                                        parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                        "Tidak valid",
                                 }}
                             />
                             <RHFLineInput
@@ -120,7 +121,12 @@ export default function LaborOne({
                                 name={`${name}.upahBerlaku`}
                                 control={control}
                                 C={C}
-                                rules={{ required: "Wajib diisi" }}
+                                rules={{
+                                    validate: (v: string) =>
+                                        v === "" ||
+                                        parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                        "Tidak valid",
+                                }}
                             />
                         </View>
                     )}
@@ -135,9 +141,10 @@ export default function LaborOne({
                                     control={control}
                                     C={C}
                                     rules={{
-                                        required: "Wajib diisi",
                                         validate: (v: string) =>
-                                            parseFloat((v || "0").replace(",", ".")) > 0 || "Harus > 0",
+                                            v === "" ||
+                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            "Tidak valid",
                                     }}
                                 />
                                 <RHFLineInput
@@ -146,9 +153,10 @@ export default function LaborOne({
                                     control={control}
                                     C={C}
                                     rules={{
-                                        required: "Wajib diisi",
                                         validate: (v: string) =>
-                                            parseFloat((v || "0").replace(",", ".")) > 0 || "Harus > 0",
+                                            v === "" ||
+                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            "Tidak valid",
                                     }}
                                 />
                             </View>
@@ -162,7 +170,7 @@ export default function LaborOne({
                                     rules={{
                                         validate: (v: string) =>
                                             v === "" ||
-                                            parseFloat((v || "0").replace(",", ".")) >= 0 ||
+                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
                                             "Tidak valid",
                                     }}
                                 />
@@ -172,9 +180,10 @@ export default function LaborOne({
                                     control={control}
                                     C={C}
                                     rules={{
-                                        required: "Wajib diisi",
                                         validate: (v: string) =>
-                                            parseFloat((v || "0").replace(",", ".")) >= 0 || "Harus ≥ 0",
+                                            v === "" ||
+                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            "Tidak valid",
                                     }}
                                 />
                             </View>

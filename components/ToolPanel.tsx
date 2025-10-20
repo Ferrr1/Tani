@@ -1,5 +1,6 @@
 import { ToolForm } from "@/types/expense";
 import { currency } from "@/utils/currency";
+import { formatInputThousands, parseThousandsToNumber } from "@/utils/number";
 import { Ionicons } from "@expo/vector-icons";
 import React, { Dispatch, SetStateAction, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
@@ -19,16 +20,11 @@ export default function ToolPanel({
     const [umurThn, setUmurThn] = useState("");
     const [nilaiSisa, setNilaiSisa] = useState("");
 
-    const parseNum = (s: string) => {
-        const n = parseFloat((s || "0").replace(",", "."));
-        return Number.isFinite(n) ? n : NaN;
-    };
-
     const add = () => {
-        const q = parseNum(jumlah);
-        const p = parseNum(hargaBeli);
-        const life = umurThn.trim() ? parseNum(umurThn) : undefined;
-        const residual = nilaiSisa.trim() ? parseNum(nilaiSisa) : undefined;
+        const q = parseThousandsToNumber(jumlah);
+        const p = parseThousandsToNumber(hargaBeli);
+        const life = umurThn.trim() ? parseThousandsToNumber(umurThn) : undefined;
+        const residual = nilaiSisa.trim() ? parseThousandsToNumber(nilaiSisa) : undefined;
 
         if (!nama.trim()) {
             Alert.alert("Validasi", "Nama alat wajib diisi.");
@@ -50,8 +46,6 @@ export default function ToolPanel({
             Alert.alert("Validasi", "Nilai sisa harus ≥ 0.");
             return;
         }
-
-        // Opsional: jika ingin logika tambahan — contoh nilai sisa tidak melebihi harga beli.
         if (residual !== undefined && residual > p) {
             Alert.alert("Validasi", "Nilai sisa tidak boleh melebihi harga beli.");
             return;
@@ -62,11 +56,11 @@ export default function ToolPanel({
             {
                 id: String(Date.now() + Math.random()),
                 nama: nama.trim(),
-                // simpan string agar konsisten dengan ToolForm sebelumnya (seperti ChemPanel)
-                jumlah: jumlah,
-                hargaBeli: hargaBeli,
-                umurThn: umurThn,
-                nilaiSisa: nilaiSisa,
+                // simpan string bertitik agar konsisten dengan UI
+                jumlah,
+                hargaBeli,
+                umurThn,
+                nilaiSisa,
             },
         ]);
 
@@ -100,7 +94,7 @@ export default function ToolPanel({
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={jumlah}
-                    onChangeText={setJumlah}
+                    onChangeText={(t) => setJumlah(formatInputThousands(t))} // ← live format ribuan
                     style={{
                         flex: 1,
                         borderWidth: 1,
@@ -116,7 +110,7 @@ export default function ToolPanel({
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={hargaBeli}
-                    onChangeText={setHargaBeli}
+                    onChangeText={(t) => setHargaBeli(formatInputThousands(t))} // ← live format ribuan
                     style={{
                         flex: 1,
                         borderWidth: 1,
@@ -135,7 +129,7 @@ export default function ToolPanel({
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={umurThn}
-                    onChangeText={setUmurThn}
+                    onChangeText={(t) => setUmurThn(formatInputThousands(t))} // boleh ribuan juga
                     style={{
                         flex: 1,
                         borderWidth: 1,
@@ -151,7 +145,7 @@ export default function ToolPanel({
                     placeholderTextColor={C.icon}
                     keyboardType="numeric"
                     value={nilaiSisa}
-                    onChangeText={setNilaiSisa}
+                    onChangeText={(t) => setNilaiSisa(formatInputThousands(t))} // ← live format ribuan
                     style={{
                         flex: 1,
                         borderWidth: 1,
@@ -182,10 +176,10 @@ export default function ToolPanel({
             </Pressable>
 
             {(tools || []).map((r) => {
-                const q = parseNum(String(r.jumlah ?? ""));
-                const p = parseNum(String(r.hargaBeli ?? ""));
-                const life = r.umurThn?.trim() ? parseNum(String(r.umurThn)) : undefined;
-                const residual = r.nilaiSisa?.trim() ? parseNum(String(r.nilaiSisa)) : undefined;
+                const q = parseThousandsToNumber(String(r.jumlah ?? ""));
+                const p = parseThousandsToNumber(String(r.hargaBeli ?? ""));
+                const life = r.umurThn?.trim() ? parseThousandsToNumber(String(r.umurThn)) : undefined;
+                const residual = r.nilaiSisa?.trim() ? parseThousandsToNumber(String(r.nilaiSisa)) : undefined;
 
                 return (
                     <View
@@ -208,11 +202,7 @@ export default function ToolPanel({
                             <Text style={{ color: C.text, fontWeight: "800" }}>
                                 {r.nama?.trim() || "(tanpa nama)"}
                             </Text>
-                            <Pressable
-                                onPress={() =>
-                                    setTools((prev) => prev.filter((x) => x.id !== r.id))
-                                }
-                            >
+                            <Pressable onPress={() => setTools((prev) => prev.filter((x) => x.id !== r.id))}>
                                 <Ionicons name="trash-outline" size={18} color={C.danger} />
                             </Pressable>
                         </View>

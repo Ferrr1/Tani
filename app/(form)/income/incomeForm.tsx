@@ -4,7 +4,7 @@ import { useSeasonList } from "@/services/seasonService";
 import { IncomeFormValues, UNIT_OPTIONS } from "@/types/income";
 import { currency } from "@/utils/currency";
 import { formatWithOutYear } from "@/utils/date";
-import { toNum } from "@/utils/number"; // <-- helper sudah ada; sesuaikan path jika perlu
+import { formatInputThousands, parseThousandsToNumber } from "@/utils/number";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -108,10 +108,10 @@ export default function IncomeForm() {
     const grandTotal = isEdit
         ? 0
         : (items ?? []).reduce((acc, it) => {
-            const sub = Math.max(0, toNum(it.qty) * Math.max(0, toNum(it.price)));
-            return acc + sub;
+            const q = Math.max(0, parseThousandsToNumber(it.qty));
+            const p = Math.max(0, parseThousandsToNumber(it.price));
+            return acc + q * p;
         }, 0);
-
 
     const didHydrateEdit = useRef(false);
     const didSetDefaultSeason = useRef(false);
@@ -278,8 +278,8 @@ export default function IncomeForm() {
 
             if (isEdit && receiptId) {
                 // EDIT: tetap single row
-                const q = toNum(v.quantity);
-                const p = toNum(v.price);
+                const q = parseThousandsToNumber(v.quantity);
+                const p = parseThousandsToNumber(v.price);
                 if (!v.unit) return Alert.alert("Validasi", "Pilih jenis satuan dulu.");
                 if (!Number.isFinite(q) || q <= 0) return Alert.alert("Validasi", "Kuantitas harus angka > 0.");
                 if (!Number.isFinite(p) || p < 0) return Alert.alert("Validasi", "Harga/satuan harus angka ≥ 0.");
@@ -296,8 +296,8 @@ export default function IncomeForm() {
                 // CREATE: buat satu receipt per crop yang diisi valid
                 const lines = (v.items ?? []).map((it) => ({
                     cropName: it.cropName,
-                    qty: toNum(it.qty),
-                    price: toNum(it.price),
+                    qty: parseThousandsToNumber(it.qty),
+                    price: parseThousandsToNumber(it.price),
                     unit: it.unit,
                 }));
 
@@ -472,7 +472,10 @@ export default function IncomeForm() {
 
                         {/* ===== CREATE MODE: Penerimaan per Tanaman (Array) ===== */}
                         {!isEdit && items.map((it, idx) => {
-                            const subtotal = Math.max(0, toNum(it.qty) * Math.max(0, toNum(it.price)));
+                            const subtotal = Math.max(
+                                0,
+                                parseThousandsToNumber(it.qty) * Math.max(0, parseThousandsToNumber(it.price))
+                            );
                             const unitOpen = openUnitIdx === idx;
 
                             return (
@@ -570,15 +573,15 @@ export default function IncomeForm() {
                                         name={`items.${idx}.qty` as const}
                                         rules={{
                                             required: "Wajib diisi",
-                                            validate: (v) => toNum(v) > 0 || "Harus > 0",
+                                            validate: (v) => parseThousandsToNumber(v) > 0 || "Harus > 0",
                                         }}
                                         render={({ field: { value, onChange, onBlur } }) => (
                                             <TextInput
-                                                placeholder="contoh: 1000"
+                                                placeholder="contoh: 1.000"
                                                 placeholderTextColor={C.icon}
                                                 keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
                                                 onBlur={onBlur}
-                                                onChangeText={onChange}
+                                                onChangeText={(t) => onChange(formatInputThousands(t))}
                                                 value={value}
                                                 style={[
                                                     styles.input,
@@ -596,17 +599,17 @@ export default function IncomeForm() {
                                         rules={{
                                             required: "Wajib diisi",
                                             validate: (v) => {
-                                                const x = toNum(v);
+                                                const x = parseThousandsToNumber(v);
                                                 return (!Number.isNaN(x) && x >= 0) || "Harus angka ≥ 0";
                                             },
                                         }}
                                         render={({ field: { value, onChange, onBlur } }) => (
                                             <TextInput
-                                                placeholder="contoh: 4500"
+                                                placeholder="contoh: 4.500"
                                                 placeholderTextColor={C.icon}
                                                 keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
                                                 onBlur={onBlur}
-                                                onChangeText={onChange}
+                                                onChangeText={(t) => onChange(formatInputThousands(t))}
                                                 value={value}
                                                 style={[
                                                     styles.input,
@@ -638,17 +641,17 @@ export default function IncomeForm() {
                                     rules={{
                                         required: "Wajib diisi",
                                         validate: (v) => {
-                                            const n = toNum(v);
+                                            const n = parseThousandsToNumber(v);
                                             return (!Number.isNaN(n) && n > 0) || "Harus angka > 0";
                                         },
                                     }}
                                     render={({ field: { value, onChange, onBlur } }) => (
                                         <TextInput
-                                            placeholder="contoh: 1000"
+                                            placeholder="contoh: 1.000"
                                             placeholderTextColor={C.icon}
                                             keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
                                             onBlur={onBlur}
-                                            onChangeText={onChange}
+                                            onChangeText={(t) => onChange(formatInputThousands(t))}
                                             value={value}
                                             style={[
                                                 styles.input,
@@ -731,17 +734,17 @@ export default function IncomeForm() {
                                     rules={{
                                         required: "Wajib diisi",
                                         validate: (v) => {
-                                            const n = toNum(v);
+                                            const n = parseThousandsToNumber(v);
                                             return (!Number.isNaN(n) && n >= 0) || "Harus angka ≥ 0";
                                         },
                                     }}
                                     render={({ field: { value, onChange, onBlur } }) => (
                                         <TextInput
-                                            placeholder="contoh: 4500"
+                                            placeholder="contoh: 4.500"
                                             placeholderTextColor={C.icon}
                                             keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
                                             onBlur={onBlur}
-                                            onChangeText={onChange}
+                                            onChangeText={(t) => onChange(formatInputThousands(t))}
                                             value={value}
                                             style={[
                                                 styles.input,
@@ -763,8 +766,8 @@ export default function IncomeForm() {
                                 <TextInput
                                     editable={false}
                                     value={(() => {
-                                        const q = toNum(quantity);
-                                        const p = toNum(price);
+                                        const q = parseThousandsToNumber(quantity);
+                                        const p = parseThousandsToNumber(price);
                                         const sum = (Number.isFinite(q) ? q : 0) * (Number.isFinite(p) ? p : 0);
                                         return (Number.isFinite(sum) ? sum : 0).toLocaleString("id-ID", {
                                             style: "currency",

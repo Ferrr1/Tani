@@ -44,3 +44,38 @@ export const toNum = (input?: unknown): number => {
 export function sum(arr: number[]) {
   return arr.reduce((a, b) => a + b, 0);
 }
+
+/** Ambil hanya digit 0-9. */
+export function onlyDigits(input: string | number | null | undefined): string {
+  const s = String(input ?? "");
+  return s.replace(/[^\d]/g, "");
+}
+
+/** Format ribuan dengan titik. 1000000 -> "1.000.000" */
+export function formatThousands(
+  input: string | number | null | undefined
+): string {
+  const digits = onlyDigits(input);
+  if (!digits) return "";
+  // sisipkan titik setiap 3 digit dari belakang
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/** Parse "1.000.000" -> 1000000 (number) */
+export function parseThousandsToNumber(
+  input: string | number | null | undefined
+): number {
+  const digits = onlyDigits(input);
+  if (!digits) return 0;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Untuk dipakai di onChangeText:
+ * - input user apapun -> format ribuan real-time.
+ * - kosongkan jika semua karakter selain digit.
+ */
+export function formatInputThousands(text: string): string {
+  return formatThousands(text);
+}

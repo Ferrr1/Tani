@@ -830,7 +830,7 @@ export default function ReportScreen() {
                                         )
                                     )}
 
-                                    <SubMini text="Biaya Lain" C={C} />
+                                    {totalTools > 0 || base.extras.length > 0 && <SubMini text="Biaya Lain" C={C} />}
 
                                     {/* Tools */}
                                     {totalTools > 0 && (

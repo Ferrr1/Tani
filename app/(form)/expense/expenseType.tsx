@@ -31,6 +31,7 @@ export default function ExpenseForm() {
         seasonId?: string;
         type?: ExpenseKind;
     }>();
+    console.log(qsSeasonId)
 
     const { loading: seasonLoading, rows: seasonRows, fetchOnce, refresh } = useSeasonList();
     const { listExpenses } = useExpenseService();
@@ -98,19 +99,26 @@ export default function ExpenseForm() {
         return seasons.filter((s) => Number(s.season_year) === Y);
     }, [seasons, yearFilter]);
 
+    // ===== Perbaikan A: pisah efek hidrasi & clamp seasonIdx =====
 
+    // 1) Hidrasi sekali dari qsSeasonId → set yearFilter berdasar seasons (sekali saja)
     useEffect(() => {
-        if (!seasons.length || hydratedQueryRef.current) return;
+        if (!seasons.length) return;
+        if (hydratedQueryRef.current) return;
+
         if (qsSeasonId) {
             const idxAll = seasons.findIndex((s) => s.id === String(qsSeasonId));
             if (idxAll >= 0) {
                 const yNum = Number(seasons[idxAll].season_year);
                 if (Number.isFinite(yNum)) setYearFilter(yNum as YearFilter);
             }
-            hydratedQueryRef.current = true;
         }
+        hydratedQueryRef.current = true;
+    }, [seasons, qsSeasonId]);
 
-        if (!filteredSeasons.length) {
+    // 2) Tiap kali filteredSeasons berubah, jaga seasonIdx tetap valid & sinkron
+    useEffect(() => {
+        if (filteredSeasons.length === 0) {
             setSeasonIdx(0);
             return;
         }
@@ -118,9 +126,9 @@ export default function ExpenseForm() {
             const i = filteredSeasons.findIndex((s) => s.id === String(qsSeasonId));
             setSeasonIdx(i >= 0 ? i : 0);
         } else {
-            setSeasonIdx(0);
+            setSeasonIdx((i) => Math.min(Math.max(i, 0), filteredSeasons.length - 1));
         }
-    }, [seasons, filteredSeasons, qsSeasonId]);
+    }, [filteredSeasons, qsSeasonId]);
 
     const season = filteredSeasons[seasonIdx];
 
@@ -134,18 +142,28 @@ export default function ExpenseForm() {
     const goPrevSeason = () => { if (canPrev) setSeasonIdx((i) => i + 1); };
     const goNextSeasonNav = () => { if (canNext) setSeasonIdx((i) => i - 1); };
 
-    const seasonsReady = !seasonLoading && seasons.length >= 1;
-    const readySeason = seasonsReady && !!season;
+    // ===== Perbaikan B: loader tidak mengandalkan readySeason =====
+    const showLoader = seasonLoading || (!firstHydrated && metricsLoading);
 
+    // ===== Perbaikan C: efek metrik aman saat season kosong =====
     useEffect(() => {
-        if (!readySeason) return; // ← tunggu season ada dulu baru fetch metrik
+        if (!season) {
+            setReceiptsTotal(0);
+            setHasAnyReceipt(false);
+            setHasCashExpense(false);
+            setHasNonCashExpense(false);
+            setTotalExpenseUsed(0);
+            if (!firstHydrated) setFirstHydrated(true);
+            return;
+        }
+
         let alive = true;
         const myReq = ++reqRef.current;
 
         const loadMetrics = async () => {
             setMetricsLoading(true);
             try {
-                const receipts = await listReceiptsRef.current({ seasonId: season!.id });
+                const receipts = await listReceiptsRef.current({ seasonId: season.id });
                 if (!alive || myReq !== reqRef.current) return;
                 const rTotal = (receipts ?? []).reduce(
                     (acc: number, r: any) => acc + (Number(r.total) || 0),
@@ -154,7 +172,7 @@ export default function ExpenseForm() {
                 setReceiptsTotal(rTotal);
                 setHasAnyReceipt((receipts ?? []).length > 0);
 
-                const expenses = await listExpensesRef.current({ seasonId: season!.id });
+                const expenses = await listExpensesRef.current({ seasonId: season.id });
                 if (!alive || myReq !== reqRef.current) return;
 
                 const hasCash = (expenses ?? []).some((e: any) => e.type === "cash");
@@ -187,7 +205,7 @@ export default function ExpenseForm() {
 
         loadMetrics();
         return () => { alive = false; };
-    }, [readySeason, season?.id, firstHydrated]);
+    }, [season?.id, firstHydrated]);
 
     const receiptsShort = useMemo(
         () =>
@@ -234,12 +252,6 @@ export default function ExpenseForm() {
             params: { seasonId: season.id, type },
         });
     };
-
-    // TAMPILKAN LOADER kalau:
-    // - daftar season belum siap, atau
-    // - season terpilih belum ada, atau
-    // - (initial) metrics masih loading
-    const showLoader = !readySeason || (!firstHydrated && metricsLoading);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -347,32 +359,34 @@ export default function ExpenseForm() {
                         })}
                     </View>
 
-                    {/* Ringkasan musim */}
-                    <View
-                        style={[
-                            styles.summaryCard,
-                            {
-                                borderColor: C.border,
-                                backgroundColor: C.surface,
-                                borderRadius: S.radius.lg,
-                            },
-                        ]}
-                    >
-                        <Text style={{ color: C.text, fontWeight: "900", marginBottom: 6 }}>
-                            Musim Ke-{season!.season_no}
-                        </Text>
-                        <Text style={{ color: C.textMuted, marginBottom: 8 }}>
-                            {fmtDate(season!.start_date)} — {fmtDate(season!.end_date)}
-                        </Text>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                            <Text style={{ color: C.text }}>Total Penerimaan</Text>
-                            <Text style={{ color: C.text, fontWeight: "900" }}>{receiptsShort}</Text>
+                    {/* Ringkasan musim (guarded) */}
+                    {season && (
+                        <View
+                            style={[
+                                styles.summaryCard,
+                                {
+                                    borderColor: C.border,
+                                    backgroundColor: C.surface,
+                                    borderRadius: S.radius.lg,
+                                },
+                            ]}
+                        >
+                            <Text style={{ color: C.text, fontWeight: "900", marginBottom: 6 }}>
+                                Musim Ke-{season.season_no}
+                            </Text>
+                            <Text style={{ color: C.textMuted, marginBottom: 8 }}>
+                                {fmtDate(season.start_date)} — {fmtDate(season.end_date)}
+                            </Text>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                <Text style={{ color: C.text }}>Total Penerimaan</Text>
+                                <Text style={{ color: C.text, fontWeight: "900" }}>{receiptsShort}</Text>
+                            </View>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                                <Text style={{ color: C.text }}>Total Pengeluaran</Text>
+                                <Text style={{ color: C.text, fontWeight: "900" }}>{usedShort}</Text>
+                            </View>
                         </View>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
-                            <Text style={{ color: C.text }}>Total Pengeluaran</Text>
-                            <Text style={{ color: C.text, fontWeight: "900" }}>{usedShort}</Text>
-                        </View>
-                    </View>
+                    )}
 
                     {/* Filter Tahun */}
                     <Text style={[styles.label, { color: C.text }]}>Filter Tahun</Text>
@@ -646,7 +660,7 @@ export default function ExpenseForm() {
                     </Pressable>
 
                     {/* Pesan merah hanya di bawah */}
-                    {incomeMissing && (
+                    {incomeMissing && season && (
                         <Text style={{ color: C.danger, marginTop: 6 }}>
                             Tambahkan penerimaan untuk musim ini sebelum membuat pengeluaran.
                         </Text>

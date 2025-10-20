@@ -18,7 +18,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   labor_postharvest: "Pasca Panen",
 
   // Extras
-  tax: "Pajak",
+  tax: "Pajak (PBB)",
   land_rent: "Sewa Lahan",
   transport: "Transportasi",
 

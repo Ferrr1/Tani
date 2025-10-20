@@ -16,7 +16,7 @@ export default function WeatherSkeleton({ C, S }: { C: any; S: any }) {
             {/* Chips */}
             <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                 <SkeletonBox width={120} height={20} radius={S.radius.lg} base={C.surfaceSoft} highlight={C.surface} />
-                <SkeletonBox width={84} height={20} radius={S.radius.lg} base={C.surfaceSoft} highlight={C.surface} />
+                {/* <SkeletonBox width={84} height={20} radius={S.radius.lg} base={C.surfaceSoft} highlight={C.surface} /> */}
                 <SkeletonBox width={160} height={20} radius={S.radius.lg} base={C.surfaceSoft} highlight={C.surface} />
             </View>
         </View>

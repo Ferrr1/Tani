@@ -1,3 +1,4 @@
+import { formatInputThousands } from "@/utils/number";
 import { Controller } from "react-hook-form";
 import { Text, TextInput, View } from "react-native";
 
@@ -23,13 +24,16 @@ export default function RHFLineInput({
                 control={control}
                 name={name}
                 rules={rules}
-                render={({ field: { value, onChange }, fieldState: { error } }) => (
+                render={({ field: { value, onChange, onBlur }, fieldState: { error } }) => (
                     <>
                         <TextInput
                             placeholder={placeholder ? placeholder : label}
                             placeholderTextColor={C.icon}
                             value={value}
-                            onChangeText={onChange}
+                            onChangeText={(t) => {
+                                onChange(formatInputThousands(t));
+                            }}
+                            onBlur={onBlur}
                             keyboardType="numeric"
                             style={{
                                 borderWidth: 1,

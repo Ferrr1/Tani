@@ -10,7 +10,7 @@ export const CATEGORY_LABEL_REPORT: Record<string, string> = {
   land_rent: "Sewa Lahan",
   transport: "Transportasi",
   labor_outside: "TK Luar Keluarga",
-  tax: "Pajak",
+  tax: "Pajak (PBB)",
 };
 
 export type Theme = (typeof Colors)["light"];
