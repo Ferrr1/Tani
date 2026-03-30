@@ -25,7 +25,7 @@ const SuperadminLayout = () => {
     if (!navReady || !isInitialized) {
         return (
             <LoadingScreen
-                title="Menyiapkan panel superadmin"
+                title="Menyiapkan panel operator"
                 subtitle="Memuat profil & sesi…"
             />
         );

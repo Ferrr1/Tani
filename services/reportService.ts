@@ -154,7 +154,6 @@ export function useReportData(initialSeasonId?: string | "all") {
 
         if (seasonIdsForYear) {
           q = q.in("season_id", seasonIdsForYear);
-          if (year !== "all") q = q.eq("year", Number(year));
         }
 
         const { data, error } = await q;

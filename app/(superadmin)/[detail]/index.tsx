@@ -442,7 +442,10 @@ export default function SuperAdminUserDetail() {
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                                 <Chip label="User" active={role === "user"} onPress={() => setRole("user")} C={C} />
                                 <Chip label="Admin" active={role === "admin"} onPress={() => setRole("admin")} C={C} />
-                                <Chip label="Super Admin" active={role === "superadmin"} onPress={() => setRole("superadmin")} C={C} />
+                                {/* Operator tidak diperbolehkan membuat Operator lain */}
+                                {role === "superadmin" && (
+                                    <Chip label="Operator" active={true} onPress={() => { }} C={C} />
+                                )}
                             </View>
                         </>
                     }

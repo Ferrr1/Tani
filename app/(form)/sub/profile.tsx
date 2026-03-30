@@ -88,7 +88,7 @@ export default function ProfileScreen() {
             fullName: profile.full_name ?? "",
             email: currentEmail, // dari auth
             village: profile.nama_desa ?? "",
-            landAreaHa: profile.luas_lahan != null ? formatInputThousands(String(profile.luas_lahan)) : "",
+            landAreaHa: profile.luas_lahan != null ? String(profile.luas_lahan) : "",
             motherName: "",
             password: "",
         });
