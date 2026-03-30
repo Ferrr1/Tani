@@ -41,7 +41,7 @@ import {
 import { calcLaborSubtotal, sumChem } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
 import { daysInclusive } from "@/utils/date";
-import { toNum } from "@/utils/number";
+import { formatInputThousands, toNum } from "@/utils/number";
 
 type Mode = "create" | "edit";
 
@@ -218,6 +218,11 @@ export default function CashForm({
     }, [seasonId]);
 
     // ===== Prefill EDIT
+    const toStr = (v: any) => {
+        if (v === null || v === undefined) return "";
+        return formatInputThousands(String(v));
+    };
+
     useEffect(() => {
         let alive = true;
         const hydrateEdit = async () => {
@@ -276,8 +281,8 @@ export default function CashForm({
                     return {
                         ...s,
                         kind: k,
-                        qty: String(hit.quantity ?? s.qty ?? ""),
-                        price: String(hit.unit_price ?? s.price ?? ""),
+                        qty: toStr(hit.quantity ?? s.qty),
+                        price: toStr(hit.unit_price ?? s.price),
                         unit: u ?? s.unit,
                     };
                 });
@@ -287,8 +292,8 @@ export default function CashForm({
                 (materials || []).forEach((m: any) => {
                     const cat: Category | undefined = m?.category;
                     const unit: Unit | undefined = (m?.unit as Unit) ?? "gram";
-                    const qty = String(m?.quantity ?? "");
-                    const price = String(m?.unit_price ?? "");
+                    const qty = toStr(m?.quantity);
+                    const price = toStr(m?.unit_price);
                     const name = m?.item_name ?? m?.label ?? "";
 
                     if (cat === "fertilizer") {
@@ -354,19 +359,19 @@ export default function CashForm({
 
                     if (cat === "tax") {
                         // gunakan nilai tahunan untuk input, bukan amount (prorata)
-                        setValue("extras.tax", String(yearly ?? e?.amount ?? ""));
+                        setValue("extras.tax", toStr(yearly ?? e?.amount));
                     } else if (cat === "land_rent") {
-                        setValue("extras.landRent", String(yearly ?? e?.amount ?? ""));
+                        setValue("extras.landRent", toStr(yearly ?? e?.amount));
                     } else if (cat === "transport") {
                         // transport memang tidak diprorata ketika create → pakai amount langsung
-                        setValue("extras.transport", String(e?.amount ?? ""));
+                        setValue("extras.transport", toStr(e?.amount));
                     } else {
                         setExtraItems((prev) => [
                             ...prev,
                             {
                                 id: String(Date.now() + Math.random()),
                                 label: e?.note || kind || "Biaya",
-                                amount: String(e?.amount ?? 0),
+                                amount: toStr(e?.amount ?? 0),
                             },
                         ]);
                     }
@@ -397,7 +402,7 @@ export default function CashForm({
                         setValue(`labor.${key}.tipe`, "borongan");
                         setValue(
                             `labor.${key}.hargaBorongan`,
-                            kontrak ? String(kontrak) : ""
+                            kontrak ? toStr(kontrak) : ""
                         );
                         setValue(
                             `labor.${key}.upahBerlaku`,
@@ -414,7 +419,7 @@ export default function CashForm({
                         setValue(`labor.${key}.tipe`, "harian");
                         setValue(`labor.${key}.jumlahOrang`, String(people > 0 ? people : 0));
                         setValue(`labor.${key}.jumlahHari`, String(days > 0 ? days : 1));
-                        setValue(`labor.${key}.upahHarian`, String(wage || ""));
+                        setValue(`labor.${key}.upahHarian`, toStr(wage));
                         setValue(
                             `labor.${key}.jamKerja`,
                             it?.metadata?.jamKerja != null ? String(it.metadata.jamKerja) : ""
@@ -496,7 +501,7 @@ export default function CashForm({
 
     const extrasPanelSubtotal = useMemo(() => {
         return (extraItems || []).reduce((acc, r) => {
-            const v = parseFloat(String(r.amount || "0").replace(",", "."));
+            const v = toNum(r.amount);
             return acc + (Number.isFinite(v) && v >= 0 ? v : 0);
         }, 0);
     }, [extraItems]);
@@ -681,7 +686,7 @@ export default function CashForm({
             });
 
         (extraItems || []).forEach((e) => {
-            const amt = parseFloat(String(e.amount || "0").replace(",", "."));
+            const amt = toNum(e.amount);
             if (!Number.isFinite(amt) || amt < 0) return;
 
             extras.push({

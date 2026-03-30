@@ -112,7 +112,7 @@ export default function LaborOne({
                                 rules={{
                                     validate: (v: string) =>
                                         v === "" ||
-                                        parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                        parseThousandsToNumber(v) >= 0 ||
                                         "Tidak valid",
                                 }}
                             />
@@ -124,7 +124,7 @@ export default function LaborOne({
                                 rules={{
                                     validate: (v: string) =>
                                         v === "" ||
-                                        parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                        parseThousandsToNumber(v) >= 0 ||
                                         "Tidak valid",
                                 }}
                             />
@@ -143,7 +143,7 @@ export default function LaborOne({
                                     rules={{
                                         validate: (v: string) =>
                                             v === "" ||
-                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            parseThousandsToNumber(v) >= 0 ||
                                             "Tidak valid",
                                     }}
                                 />
@@ -155,7 +155,7 @@ export default function LaborOne({
                                     rules={{
                                         validate: (v: string) =>
                                             v === "" ||
-                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            parseThousandsToNumber(v) >= 0 ||
                                             "Tidak valid",
                                     }}
                                 />
@@ -170,7 +170,7 @@ export default function LaborOne({
                                     rules={{
                                         validate: (v: string) =>
                                             v === "" ||
-                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            parseThousandsToNumber(v) >= 0 ||
                                             "Tidak valid",
                                     }}
                                 />
@@ -182,7 +182,7 @@ export default function LaborOne({
                                     rules={{
                                         validate: (v: string) =>
                                             v === "" ||
-                                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                                            parseThousandsToNumber(v) >= 0 ||
                                             "Tidak valid",
                                     }}
                                 />

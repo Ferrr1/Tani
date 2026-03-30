@@ -1,9 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AuthTokenResponsePassword, Session, User } from "@supabase/supabase-js";
-import { FunctionsHttpError } from "@supabase/supabase-js"; // ⬅️ tambah ini
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-
+import { FunctionsHttpError } from "@supabase/supabase-js";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react";
+import { toNum } from "@/utils/number";
 import { getMyProfile, updateMyProfile } from "@/services/profileService";
 import type { Profile, RegisterForm, Role } from "@/types/profile";
 
@@ -17,6 +17,7 @@ export type AuthState = {
     user: User | null;
 
     authReady: boolean;
+    isInitialized: boolean;
     profile: Profile | null;
     profileReady: boolean;
     role: Role | null;
@@ -40,256 +41,174 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [profile, setProfile] = useState<Profile | null>(null);
     const [profileReady, setProfileReady] = useState(false);
 
+    const profileLoadingRef = useRef<string | null>(null);
+    const bootstrapDoneRef = useRef(false);
+
+    /** Initialize session and sync with persistence flags */
     useEffect(() => {
         let alive = true;
-        console.log(TAG, "mount: start bootstrap");
 
-        (async () => {
-            try {
-                const remember = await AsyncStorage.getItem(REMEMBER_KEY);
-                console.log(TAG, "bootstrap: remember =", remember);
-
-                if (remember !== "1") {
-                    console.log(TAG, "bootstrap: non-remember mode → signOut to clear persisted session");
-                    await supabase.auth.signOut().catch((e) => {
-                        console.log(TAG, "bootstrap: signOut (non-remember) catch:", e?.message);
-                    });
-                    if (!alive) return;
-                    setSession(null);
-                    setAuthReady(true);
-                    console.log(TAG, "bootstrap: done (non-remember)");
-                } else {
-                    console.log(TAG, "bootstrap: remember mode → getSession()");
-                    const { data, error } = await supabase.auth.getSession();
-                    if (error) console.log(TAG, "getSession error:", error.message);
-                    if (!alive) return;
-                    setSession(data.session ?? null);
-                    setAuthReady(true);
-                    console.log(TAG, "bootstrap: done (remember), session.user.id =", data.session?.user?.id ?? null);
-                }
-            } catch (e: any) {
-                console.log(TAG, "bootstrap error:", e?.message);
-                if (!alive) return;
-                setSession(null);
-                setAuthReady(true);
-            }
-        })();
-
+        // 1. Register listener FIRST but gate it behind bootstrapDoneRef
+        //    so INITIAL_SESSION and bootstrap-caused SIGNED_OUT are ignored.
         const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
-            console.log(TAG, "onAuthStateChange:", event, "user.id =", sess?.user?.id ?? null);
-            setSession(sess ?? null);
-            setAuthReady(true);
+            if (!bootstrapDoneRef.current) {
+                console.log(TAG, "Ignoring pre-bootstrap event:", event);
+                return;
+            }
+
+            console.log(TAG, "Auth state change:", event);
+            setSession(sess);
 
             if (event === "SIGNED_OUT") {
-                console.log(TAG, "onAuthStateChange: SIGNED_OUT → clear profile state");
                 setProfile(null);
                 setProfileReady(false);
             }
-            if (event === "SIGNED_IN" && sess?.user?.id) {
-                (async () => {
-                    try {
-                        const pendingAnswer = await AsyncStorage.getItem(PENDING_ANSWER);
-                        const patchStr = await AsyncStorage.getItem(PENDING_PROFILE);
-                        if (pendingAnswer || patchStr) {
-                            console.log(TAG, "post-login: applying pending registration data");
-                            if (patchStr) {
-                                try {
-                                    const patch = JSON.parse(patchStr);
-                                    await updateMyProfile(patch);
-                                    await AsyncStorage.removeItem(PENDING_PROFILE);
-                                } catch (e: any) {
-                                    console.log(TAG, "post-login: apply pending profile patch error:", e?.message);
-                                }
-                            }
-                            if (pendingAnswer) {
-                                const { error: rpcErr } = await supabase.rpc("set_mother_name", {
-                                    p_user_id: sess.user.id,
-                                    p_answer: pendingAnswer,
-                                });
-                                if (rpcErr) {
-                                    console.log(TAG, "post-login: set_mother_name RPC error:", rpcErr.message);
-                                } else {
-                                    await AsyncStorage.removeItem(PENDING_ANSWER);
-                                }
-                            }
-                            await reloadProfile();
-                        }
-                    } catch (e: any) {
-                        console.log(TAG, "post-login: apply pending error:", e?.message);
-                    }
-                })();
-            }
         });
+
+        // 2. Bootstrap: determine the definitive initial session
+        const bootstrap = async () => {
+            try {
+                const remember = await AsyncStorage.getItem(REMEMBER_KEY);
+
+                // If not in "remember" mode, sign out first
+                if (remember !== "1") {
+                    await supabase.auth.signOut().catch(() => {});
+                }
+
+                // Fetch the final session state after potential signOut
+                const { data } = await supabase.auth.getSession();
+                if (alive) {
+                    setSession(data.session);
+                }
+            } catch (e: any) {
+                console.error(TAG, "Bootstrap error:", e?.message);
+            } finally {
+                if (alive) {
+                    // Mark bootstrap complete BEFORE setting authReady
+                    // so subsequent listener events are processed normally
+                    bootstrapDoneRef.current = true;
+                    setAuthReady(true);
+                }
+            }
+        };
+
+        bootstrap();
 
         return () => {
             alive = false;
-            console.log(TAG, "unmount: unsubscribe auth listener");
             sub.subscription.unsubscribe();
         };
     }, []);
 
+    const isInitialized = useMemo(() => {
+        // 1. Must have checked for session at least once
+        if (!authReady) return false;
+
+        // 2. If no session exists, we're initialized (at login/auth)
+        if (!session) return true;
+
+        // 3. If session exists, we're only initialized once profile is fetched
+        return profileReady;
+    }, [authReady, session, profileReady]);
+
+    /** Load profile whenever session user changes */
     useEffect(() => {
-        let alive = true;
-
-        async function loadProfileOnce() {
-            setProfileReady(false);
-            const uid = session?.user?.id ?? null;
-            console.log(TAG, "loadProfileOnce: start for user.id =", uid);
-
-            try {
-                const p = await getMyProfile();
-                if (!alive) return;
-                setProfile(p ?? null);
-                console.log(TAG, "loadProfileOnce: success, role =", p?.role ?? null);
-            } catch (e: any) {
-                console.log(TAG, "loadProfileOnce error:", e?.message);
-                if (!alive) return;
-                setProfile(null);
-            } finally {
-                if (alive) {
-                    setProfileReady(true);
-                    console.log(TAG, "loadProfileOnce: done (profileReady=true)");
-                }
-            }
-        }
-
-        const userId = session?.user?.id ?? null;
+        const userId = session?.user?.id;
         if (!userId) {
-            console.log(TAG, "session changed: no user → clear profile, profileReady=false");
             setProfile(null);
-            setProfileReady(false);
+            // Don't touch profileReady here — isInitialized handles
+            // the no-session case via the !session short-circuit
             return;
         }
 
-        loadProfileOnce();
-        return () => {
-            alive = false;
-            console.log(TAG, "loadProfileOnce: cancel (effect cleanup)");
+        // Prevent redundant loads for same user
+        if (profileLoadingRef.current === userId) return;
+        profileLoadingRef.current = userId;
+
+        let alive = true;
+        const load = async () => {
+            setProfileReady(false);
+            try {
+                const p = await getMyProfile(userId);
+                if (alive) setProfile(p);
+            } catch (e: any) {
+                console.error(TAG, "loadProfile error:", e?.message);
+            } finally {
+                if (alive) setProfileReady(true);
+                profileLoadingRef.current = null;
+            }
         };
+
+        load();
+        return () => { alive = false; };
     }, [session?.user?.id]);
 
     const register = useCallback(
         async (form: RegisterForm, remember: boolean = true) => {
             const { fullName, motherName, email, password, village, landAreaHa } = form;
-            const luas = Number((landAreaHa ?? "").toString().trim().replace(",", "."));
-            const luasSafe = Number.isFinite(luas) && luas >= 0 ? luas : 0;
+            const luasSafe = toNum(landAreaHa);
 
-            console.log(TAG, "register: start for", email);
             const { data, error } = await supabase.auth.signUp({ email, password });
-            if (error) {
-                console.log(TAG, "register: signUp error:", error.message);
-                throw error;
-            }
-            try {
-                await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
-            } catch (e: any) {
-                console.log(TAG, "register: set REMEMBER_KEY error:", e?.message);
-            }
+            if (error) throw error;
 
-            const uid = data.session?.user?.id ?? null;
+            await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+
+            const uid = data.session?.user?.id;
             if (!uid) {
-                try {
-                    await AsyncStorage.setItem(
-                        PENDING_PROFILE,
-                        JSON.stringify({
-                            full_name: fullName.trim(),
-                            nama_desa: village.trim(),
-                            luas_lahan: luasSafe,
-                        })
-                    );
-                    await AsyncStorage.setItem(PENDING_ANSWER, motherName.trim());
-                } catch (e: any) {
-                    console.log(TAG, "register: save pending error:", e?.message);
-                }
-                console.log(TAG, "register: no session (likely email confirm). Pending saved.");
-                return;
-            }
-            try {
-                await updateMyProfile({
+                // Pending verification case
+                await AsyncStorage.setItem(PENDING_PROFILE, JSON.stringify({
                     full_name: fullName.trim(),
                     nama_desa: village.trim(),
                     luas_lahan: luasSafe,
-                });
-                console.log(TAG, "register: profile updated");
-            } catch (e: any) {
-                console.log(TAG, "register: updateMyProfile error:", e?.message);
-                // lanjut set mother_name walau profil gagal (tidak fatal)
+                }));
+                await AsyncStorage.setItem(PENDING_ANSWER, motherName.trim());
+                return;
             }
+
+            // Direct login case
+            await updateMyProfile({
+                full_name: fullName.trim(),
+                nama_desa: village.trim(),
+                luas_lahan: luasSafe,
+            });
 
             const { error: rpcErr } = await supabase.rpc("set_mother_name", {
                 p_user_id: uid,
                 p_answer: motherName,
             });
-            if (rpcErr) {
-                console.log(TAG, "register: set_mother_name RPC error:", rpcErr.message);
-            } else {
-                console.log(TAG, "register: mother_name set (hashed)");
-            }
-            console.log(TAG, "register: done for", email);
+            if (rpcErr) throw new Error("Gagal menyimpan data keamanan (Nama Ibu)");
         },
         []
     );
 
     const signIn = useCallback(
         async (email: string, _password: string, remember: boolean = false) => {
-            console.log(TAG, "signIn: start for", email, "remember =", remember);
             const res = await supabase.auth.signInWithPassword({ email, password: _password });
-            console.log(
-                TAG,
-                "signIn: supabase response: error =",
-                res.error?.message ?? null,
-                "user.id =",
-                res.data?.user?.id ?? null
-            );
-            if (res.error) throw res.error?.message;
-            try {
-                await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
-                console.log(TAG, "signIn: REMEMBER_KEY set to", remember ? "1" : "0");
-            } catch (e: any) {
-                console.log(TAG, "signIn: set REMEMBER_KEY error:", e?.message);
-            }
-
+            if (res.error) throw res.error.message;
+            await AsyncStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
             return res;
         },
         []
     );
 
     const signOut = useCallback(async () => {
-        console.log(TAG, "signOut: start");
-        await supabase.auth.signOut({ scope: "global" }).catch((e) => {
-            console.log(TAG, "signOut: supabase error:", e?.message);
-        });
-        try {
-            await AsyncStorage.setItem(REMEMBER_KEY, "0");
-            console.log(TAG, "signOut: REMEMBER_KEY set to 0");
-        } catch (e: any) {
-            console.log(TAG, "signOut: set REMEMBER_KEY error:", e?.message);
-        }
-        setProfile(null);
-        setProfileReady(false);
-        console.log(TAG, "signOut: done, profile cleared");
+        // Just call supabase signOut, listener will handle the rest
+        await supabase.auth.signOut({ scope: "global" }).catch(() => {});
+        await AsyncStorage.setItem(REMEMBER_KEY, "0");
     }, []);
 
     const reloadProfile = useCallback(async () => {
         const userId = session?.user?.id;
-        if (!userId) {
-            console.log(TAG, "reloadProfile: skipped (no user)");
-            return;
-        }
+        if (!userId) return;
 
-        console.log(TAG, "reloadProfile: start for user.id =", userId);
+        // Background reload, no need to flip profileReady 
+        // which would unmount the entire navigation layout
         try {
-            setProfileReady(false);
-            const p = await getMyProfile();
-            setProfile(p ?? null);
-            console.log(TAG, "reloadProfile: success, role =", p?.role ?? null);
+            const p = await getMyProfile(userId);
+            setProfile(p);
         } catch (e: any) {
-            console.log(TAG, "reloadProfile error:", e?.message);
-            setProfile(null);
-        } finally {
-            setProfileReady(true);
-            console.log(TAG, "reloadProfile: done (profileReady=true)");
-        }
+            console.error(TAG, "reloadProfile error:", e?.message);
+        } 
     }, [session?.user?.id]);
 
     const updateProfile = useCallback(
@@ -298,7 +217,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const updated = await updateMyProfile(patch);
                 setProfile(updated);
             } catch (e) {
-                console.log("updateProfile error:", e);
+                console.error("updateProfile error:", e);
+                throw e;
             }
         },
         []
@@ -306,11 +226,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const deleteSelf = useCallback(async () => {
         const targetUserId = session?.user?.id;
-        if (!targetUserId) {
-            throw new Error("Tidak ada sesi pengguna.");
-        }
+        if (!targetUserId) throw new Error("Tidak ada sesi pengguna.");
 
-        // Panggil Edge Function yang menggunakan service role untuk menghapus akun
         const { error } = await supabase.functions.invoke("admin-delete-user", {
             body: { targetUserId },
         });
@@ -318,12 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) {
             if (error instanceof FunctionsHttpError) {
                 const payload = await error.context.json().catch(() => ({} as any));
-                const msg = (payload as any)?.error || "Gagal menghapus akun";
-                throw new Error(msg);
+                throw new Error((payload as any)?.error || "Gagal menghapus akun");
             }
             throw error;
         }
-
     }, [session?.user?.id]);
 
     const value = useMemo<AuthState>(
@@ -331,6 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             session,
             user: session?.user ?? null,
             authReady,
+            isInitialized,
             profile,
             profileReady,
             role: profile?.role ?? null,
@@ -341,17 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             updateProfile,
             deleteSelf,
         }),
-        [session, authReady, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile, deleteSelf]
-    );
-
-    console.log(
-        TAG,
-        "render provider: authReady=",
-        authReady,
-        "profileReady=",
-        profileReady,
-        "user.id=",
-        session?.user?.id ?? null
+        [session, authReady, isInitialized, profile, profileReady, register, signIn, signOut, reloadProfile, updateProfile, deleteSelf]
     );
 
     return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

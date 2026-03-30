@@ -11,19 +11,19 @@ import { useColorScheme } from "react-native";
 const AdminLayout = () => {
     const scheme = useColorScheme();
     const navReady = !!useRootNavigationState()?.key;
-    const { authReady, session, role } = useAuth();
+    const { isInitialized, session, role } = useAuth();
 
     useEffect(() => {
-        if (!navReady || !authReady) return;
+        if (!navReady || !isInitialized) return;
         if (!session) {
             router.replace("/(auth)");
         } else if (role !== "admin") {
             router.replace("/(user)/(tabs)");
         }
-    }, [session, role, navReady, authReady]);
+    }, [session, role, navReady, isInitialized]);
 
-    if (!navReady || !authReady) {
-        return <LoadingScreen title="Menyiapkan panel admin" subtitle="Memuat sesi & navigasi…" />;
+    if (!navReady || !isInitialized) {
+        return <LoadingScreen title="Menyiapkan panel admin" subtitle="Memuat profil & sesi…" />;
     }
     return (
         <Tabs

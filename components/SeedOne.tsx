@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { SEED_UNIT_CHOICES, SEEDLING_UNIT_CHOICES, Unit } from "@/types/expense";
 import { currency } from "@/utils/currency";
-import { parseThousandsToNumber } from "@/utils/number";
+import { toNum, parseThousandsToNumber } from "@/utils/number";
 import RHFLineInput from "./RHFLineInput";
 
 type Props = {
@@ -41,10 +41,7 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
         setValue(`${name}.price`, "", { shouldDirty: true });
     };
 
-    const toNum = (s?: string) => {
-        const v = parseFloat((s || "0").replace(",", "."));
-        return Number.isFinite(v) ? v : 0;
-    };
+
 
     const subtotal = useMemo(() => {
         const q = toNum(qtyStr);
@@ -126,7 +123,7 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
                         required: "Wajib diisi",
                         validate: (v: string) =>
                             v === "" ||
-                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                            parseThousandsToNumber(v) >= 0 ||
                             "Tidak valid",
                     }}
                     placeholder="Masukkan jumlah"
@@ -140,7 +137,7 @@ export default function SeedOne({ name, control, setValue, C, S }: Props) {
                         required: "Wajib diisi",
                         validate: (v: string) =>
                             v === "" ||
-                            parseThousandsToNumber((v || "0").replace(",", ".")) >= 0 ||
+                            parseThousandsToNumber(v) >= 0 ||
                             "Tidak valid",
                     }}
                     placeholder="Rp ..."

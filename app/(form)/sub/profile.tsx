@@ -1,6 +1,7 @@
 // app/(tabs)/ProfileScreen.tsx
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { formatInputThousands, toNum } from "@/utils/number";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -87,7 +88,7 @@ export default function ProfileScreen() {
             fullName: profile.full_name ?? "",
             email: currentEmail, // dari auth
             village: profile.nama_desa ?? "",
-            landAreaHa: profile.luas_lahan != null ? String(profile.luas_lahan) : "",
+            landAreaHa: profile.luas_lahan != null ? formatInputThousands(String(profile.luas_lahan)) : "",
             motherName: "",
             password: "",
         });
@@ -96,7 +97,7 @@ export default function ProfileScreen() {
     }, [profile, currentEmail, reset]);
 
     const onSave = async (v: FormShape) => {
-        const ha = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+        const ha = toNum(v.landAreaHa);
 
         try {
             setLoading(true);
@@ -450,8 +451,8 @@ export default function ProfileScreen() {
                         rules={{
                             required: "Luas lahan wajib diisi",
                             validate: (v) => {
-                                const n = parseFloat((v || "").toString().replace(",", "."));
-                                return !(Number.isNaN(n) || n < 0) || "Harus angka ≥ 0";
+                                const n = toNum(v);
+                                return (n >= 0) || "Harus angka ≥ 0";
                             },
                         }}
                         render={({ field: { onChange, onBlur, value } }) => (

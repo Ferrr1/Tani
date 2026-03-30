@@ -8,6 +8,7 @@ import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import { getInitialsName } from "@/utils/getInitialsName";
+import { toNum } from "@/utils/number";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -116,7 +117,7 @@ export default function SuperAdminUserDetail() {
                 // Luas lahan hanya relevan untuk role "user"
                 let luas: number | undefined = undefined;
                 if (role === "user") {
-                    const parsed = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+                    const parsed = toNum(v.landAreaHa);
                     if (Number.isNaN(parsed) || parsed <= 0) {
                         Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
                         setSaving(false);
@@ -144,7 +145,7 @@ export default function SuperAdminUserDetail() {
 
             let luas: number | undefined = undefined;
             if (role === "user") {
-                const parsed = parseFloat((v.landAreaHa || "").toString().replace(",", "."));
+                const parsed = toNum(v.landAreaHa);
                 if (Number.isNaN(parsed) || parsed <= 0) {
                     Alert.alert("Data tidak valid", "Luas lahan harus angka > 0");
                     setSaving(false);
@@ -489,8 +490,8 @@ export default function SuperAdminUserDetail() {
                                     required: isUserRole ? "Luas lahan wajib diisi" : false,
                                     validate: (v) => {
                                         if (!isUserRole) return true; // tidak wajib dan tidak divalidasi
-                                        const n = parseFloat((v || "").toString().replace(",", "."));
-                                        return !(Number.isNaN(n) || n <= 0) || "Harus angka > 0";
+                                        const n = toNum(v);
+                                        return (n > 0) || "Harus angka > 0";
                                     },
                                 }}
                                 render={({ field: { onChange, onBlur, value } }) => (

@@ -9,6 +9,7 @@ import { getMyProfile } from "@/services/profileService";
 import { useReportData } from "@/services/reportService";
 import { CATEGORY_LABEL_REPORT, Theme } from "@/types/report";
 import { currency } from "@/utils/currency";
+import { toNum } from "@/utils/number";
 import { formatWithOutYear } from "@/utils/date";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -155,7 +156,7 @@ export default function ReportScreen() {
     const [effectiveArea, setEffectiveArea] = useState<number | null>(null);
 
     const onConvert = () => {
-        const v = parseFloat((overrideAreaStr || "").replace(",", "."));
+        const v = toNum(overrideAreaStr);
         if (Number.isFinite(v) && v > 0) setEffectiveArea(v);
         Keyboard.dismiss();
     };

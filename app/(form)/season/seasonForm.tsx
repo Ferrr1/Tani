@@ -2,6 +2,7 @@ import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useSeasonService } from "@/services/seasonService";
 import { CROP_OPTIONS, SEASON_NO_OPTIONS, SeasonFormValues } from "@/types/season";
 import { fmtDMY, fromISOtoDMY, parseDMY, toISO } from "@/utils/date";
+import { toNum } from "@/utils/number";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -192,8 +193,8 @@ export default function SeasonForm() {
     const onSubmit = async (v: SeasonFormValues & { cropTypes: string[]; cropTypeOther?: string; seasonYear: string }) => {
         const d1 = parseDMY(v.startDate);
         const d2 = parseDMY(v.endDate);
-        const n = parseInt((v.seasonNo || "").toString().replace(",", "."), 10);
-        const y = parseInt((v.seasonYear || "").toString().replace(",", "."), 10);
+        const n = toNum(v.seasonNo);
+        const y = toNum(v.seasonYear);
 
         if (d1 === null || d2 === null || n <= 0) return;
 
@@ -340,8 +341,8 @@ export default function SeasonForm() {
                             rules={{
                                 required: "Wajib diisi",
                                 validate: (v) => {
-                                    const n = parseInt((v || "").toString().replace(",", "."), 10);
-                                    return (Number.isFinite(n) && n >= 1) || "Harus angka ≥ 1";
+                                    const n = toNum(v);
+                                    return (n >= 1) || "Harus angka ≥ 1";
                                 },
                             }}
                             render={({ field: { onChange, value } }) => (
@@ -415,8 +416,8 @@ export default function SeasonForm() {
                             rules={{
                                 required: "Wajib diisi",
                                 validate: (v) => {
-                                    const y = parseInt((v || "").toString().replace(",", "."), 10);
-                                    if (!Number.isFinite(y)) return "Harus angka 4 digit";
+                                    const y = toNum(v);
+                                    if (y === 0) return "Harus angka 4 digit";
                                     if (String(y).length !== 4) return "Harus 4 digit";
                                     if (y < 2000 || y > 2100) return "Harus antara 2000–2100";
                                     return true;

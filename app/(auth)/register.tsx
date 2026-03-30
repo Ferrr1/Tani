@@ -1,5 +1,6 @@
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { toNum } from "@/utils/number";
 import { RegisterForm } from "@/types/profile";
 import { EMAIL_REGEX } from "@/types/regex";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -293,8 +294,8 @@ export default function RegisterScreen() {
                             rules={{
                                 required: "Luas lahan wajib diisi",
                                 validate: (v) => {
-                                    const n = parseFloat((v || "").toString().replace(",", "."));
-                                    return !(Number.isNaN(n) || n <= 0) || "Harus angka > 0";
+                                    const n = toNum(v);
+                                    return (n > 0) || "Harus angka > 0";
                                 },
                             }}
                             render={({ field: { onChange, onBlur, value } }) => (

@@ -186,9 +186,9 @@ export default function IncomeForm() {
                 }
 
                 reset({
-                    quantity: row.quantity != null ? String(row.quantity) : "",
+                    quantity: row.quantity != null ? formatInputThousands(String(row.quantity)) : "",
                     unit: row.unit_type ?? "",
-                    price: row.unit_price != null ? String(row.unit_price) : "",
+                    price: row.unit_price != null ? formatInputThousands(String(row.unit_price)) : "",
                     seasonId: row.season_id ?? seasons[0]?.id ?? "",
                     items: [], // tidak dipakai saat edit
                 });
