@@ -32,7 +32,7 @@ import {
 } from "@/types/expense";
 import { calcLaborSubtotal } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
-import { toNum } from "@/utils/number";
+import { formatInputThousands, toNum } from "@/utils/number";
 
 import { useSeasonService } from "@/services/seasonService";
 import { daysInclusive } from "@/utils/date";
@@ -112,7 +112,10 @@ export default function NonCashForm({
         mode === "edit"
     );
 
-    const toStr = (v: any) => (v === null || v === undefined ? "" : String(v));
+    const toStr = (v: any) => {
+        if (v === null || v === undefined) return "";
+        return formatInputThousands(String(v));
+    };
 
     useEffect(() => {
         let alive = true;
@@ -341,7 +344,7 @@ export default function NonCashForm({
 
     const extrasPanelSubtotal = useMemo(() => {
         return (extraItems || []).reduce((acc, r) => {
-            const v = parseFloat(String(r.amount || "0").replace(",", "."));
+            const v = toNum(r.amount);
             return acc + (Number.isFinite(v) && v >= 0 ? v : 0);
         }, 0);
     }, [extraItems]);
@@ -443,7 +446,7 @@ export default function NonCashForm({
 
         // extras (dinamis dari ExtrasPanel) — type = label, metadata lain tidak diubah
         (extraItems || []).forEach((e) => {
-            const amt = parseFloat(String(e.amount || "0").replace(",", "."));
+            const amt = toNum(e.amount);
             if (!Number.isFinite(amt) || amt < 0) return;
             extras.push({
                 type: e.label,

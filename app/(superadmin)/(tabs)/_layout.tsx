@@ -10,23 +10,23 @@ import { useColorScheme } from "react-native";
 const SuperadminLayout = () => {
     const scheme = useColorScheme() ?? "light";
     const navReady = !!useRootNavigationState()?.key;
-    const { authReady, session, role } = useAuth();
+    const { isInitialized, session, role } = useAuth();
 
     useEffect(() => {
-        if (!navReady || !authReady) return;
+        if (!navReady || !isInitialized) return;
         if (!session) {
             router.replace("/(auth)");
         } else if (role !== "superadmin") {
             router.replace("/(user)/(tabs)");
         }
 
-    }, [session, role, navReady, authReady]);
+    }, [session, role, navReady, isInitialized]);
 
-    if (!navReady || !authReady) {
+    if (!navReady || !isInitialized) {
         return (
             <LoadingScreen
-                title="Menyiapkan panel superadmin"
-                subtitle="Memuat sesi & navigasi…"
+                title="Menyiapkan panel operator"
+                subtitle="Memuat profil & sesi…"
             />
         );
     }

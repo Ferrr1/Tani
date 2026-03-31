@@ -225,7 +225,7 @@ export function useSuperAdminUserService() {
     if (!authReady) throw new Error("Auth belum siap.");
     if (!user) throw new Error("Tidak ada sesi login.");
     if (role !== "superadmin")
-      throw new Error("Hanya superadmin yang diizinkan.");
+      throw new Error("Hanya operator yang diizinkan.");
     return user;
   }, [authReady, user, role]);
 

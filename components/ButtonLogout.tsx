@@ -29,7 +29,6 @@ export default function ButtonLogout({ colors, style }: LogoutProps) {
             try {
                 setLogoutting(true);
                 await signOut();
-                router.replace("/(auth)");
             } finally {
                 setLogoutting(false);
             }

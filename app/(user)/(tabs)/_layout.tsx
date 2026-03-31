@@ -12,10 +12,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 export default function TabLayout() {
   const scheme = useColorScheme();
   const navReady = !!useRootNavigationState()?.key;
-  const { authReady, session, role } = useAuth();
+  const { isInitialized, session, role } = useAuth();
 
   useEffect(() => {
-    if (!navReady || !authReady) return;
+    if (!navReady || !isInitialized) return;
 
     if (!session) {
       router.replace("/(auth)");
@@ -24,13 +24,13 @@ export default function TabLayout() {
     } else if (role === "admin") {
       router.replace("/(admin)/(tabs)");
     }
-  }, [navReady, authReady, session, role]);
+  }, [navReady, isInitialized, session, role]);
 
-  if (!navReady || !authReady) {
+  if (!navReady || !isInitialized) {
     return (
       <LoadingScreen
         title="Menyiapkan navigasi"
-        subtitle="Memuat sesi pengguna…"
+        subtitle="Memuat profil & sesi…"
       />
     );
   }

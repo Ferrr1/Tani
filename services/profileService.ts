@@ -1,19 +1,21 @@
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/types/profile";
 
-export async function getMyProfile(): Promise<Profile | null> {
-  const {
-    data: { user },
-    error: uerr,
-  } = await supabase.auth.getUser();
-  if (uerr || !user) return null;
+/** Centralized column selection for consistency */
+export const PROFILE_SELECT = "id, email, full_name, nama_desa, luas_lahan, role, mother_name_hash, created_at, updated_at";
+
+export async function getMyProfile(userId?: string): Promise<Profile | null> {
+  let uid = userId;
+  if (!uid) {
+    const { data: { user }, error: uerr } = await supabase.auth.getUser();
+    if (uerr || !user) return null;
+    uid = user.id;
+  }
 
   const { data, error } = await supabase
     .from("profiles")
-    .select(
-      "id, email, full_name, nama_desa, luas_lahan, role, mother_name_hash, created_at, updated_at"
-    )
-    .eq("id", user.id)
+    .select(PROFILE_SELECT)
+    .eq("id", uid)
     .maybeSingle();
 
   if (error) throw error;
@@ -23,10 +25,7 @@ export async function getMyProfile(): Promise<Profile | null> {
 export async function updateMyProfile(
   patch: Partial<Pick<Profile, "full_name" | "nama_desa" | "luas_lahan">>
 ): Promise<Profile> {
-  const {
-    data: { user },
-    error: uerr,
-  } = await supabase.auth.getUser();
+  const { data: { user }, error: uerr } = await supabase.auth.getUser();
   if (uerr || !user) throw uerr ?? new Error("Not authenticated");
 
   // Normalisasi angka & string kosong -> null
@@ -46,9 +45,7 @@ export async function updateMyProfile(
     .from("profiles")
     .update(body)
     .eq("id", user.id)
-    .select(
-      "id, email, full_name, nama_desa, luas_lahan, role, mother_name_hash, created_at, updated_at"
-    )
+    .select(PROFILE_SELECT)
     .maybeSingle();
 
   if (error) throw error;

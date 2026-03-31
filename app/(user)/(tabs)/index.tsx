@@ -2,13 +2,12 @@ import ButtonLogout from "@/components/ButtonLogout";
 import WeatherSkeleton from "@/components/WeatherSkeleton";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useWeather } from "@/hooks/useWeather";
 import { getInitialsName } from "@/utils/getInitialsName";
-import { codeToText } from "@/utils/weather";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Location from "expo-location";
 import { Link, useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   Image,
   Pressable,
@@ -20,21 +19,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type WeatherNow = {
-  tempC: number | null;
-  weatherCode: number | null;
-  conditionText: string;
-  tzId: string;
-  localIso: string;
-  city?: string;
-  region?: string;
-};
-
-
 export default function HomeScreen() {
   const scheme = (useColorScheme() ?? "light") as "light" | "dark";
   const router = useRouter();
   const { profile, reloadProfile } = useAuth();
+  const { weather, loading } = useWeather();
   const C = Colors[scheme];
   const S = Tokens;
 
@@ -47,95 +36,14 @@ export default function HomeScreen() {
     return "Selamat malam";
   }, []);
 
-  const [wx, setWx] = useState<WeatherNow | null>(null);
-  const [loading, setLoading] = useState(true);
-
   useFocusEffect(
     useCallback(() => {
       reloadProfile();
     }, [reloadProfile])
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadWeather() {
-      try {
-        setLoading(true);
-
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") throw new Error("Izin lokasi ditolak.");
-
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const { latitude: lat, longitude: lon } = pos.coords;
-
-        let city: string | undefined;
-        let region: string | undefined;
-        try {
-          const rg = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-          if (rg?.[0]) {
-            city = rg[0].city || rg[0].subregion || rg[0].district || rg[0].name || undefined;
-            region = rg[0].region || rg[0].subregion || undefined;
-          }
-        } catch {
-        }
-
-        const params = new URLSearchParams({
-          latitude: String(lat),
-          longitude: String(lon),
-          current: "temperature_2m,weather_code",
-          timezone: "auto",
-        });
-        const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Weather fetch failed: ${res.status}`);
-        const json = await res.json();
-
-        const tempC = json?.current?.temperature_2m ?? null;
-        const code = json?.current?.weather_code ?? null;
-        const timeIso = json?.current?.time ?? new Date().toISOString();
-        const tzId = json?.timezone ?? "Asia/Jakarta";
-
-        if (!cancelled) {
-          setWx({
-            tempC,
-            weatherCode: code,
-            conditionText: codeToText(code),
-            tzId,
-            localIso: timeIso,
-            city,
-            region,
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          const tz = "Asia/Jakarta";
-          const nowJakarta = new Date().toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
-          setWx({
-            tempC: 28,
-            weatherCode: 2,
-            conditionText: "Cerah berawan",
-            tzId: tz,
-            localIso: nowJakarta,
-            city: "Malang",
-            region: "Jawa Timur",
-          });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadWeather();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const dateText = useMemo(() => {
-    const iso = wx?.localIso;
+    const iso = weather?.localIso;
     if (!iso) return "";
     const d = new Date(iso);
     return d.toLocaleDateString("id-ID", {
@@ -144,7 +52,7 @@ export default function HomeScreen() {
       month: "2-digit",
       year: "numeric",
     });
-  }, [wx?.localIso]);
+  }, [weather?.localIso]);
 
   const menus = [
     { key: "season", label: "Musim", icon: "calendar-outline", color: C.tint, href: "/sub/season" },
@@ -219,10 +127,10 @@ export default function HomeScreen() {
             ) : (
               <>
                 <Image
-                  source={require("@/assets/images/logo.png")} // ganti path ke asetmu
+                  source={require("@/assets/images/logo.png")}
                   style={[
                     styles.bgImage,
-                    { tintColor: C.tint, opacity: 0.9 }, // efek bayangan
+                    { tintColor: C.tint, opacity: 0.9 },
                   ]}
                   resizeMode="contain"
                 />
@@ -235,7 +143,7 @@ export default function HomeScreen() {
                         { color: C.text, fontFamily: Fonts.rounded as any, fontWeight: "900" },
                       ]}
                     >
-                      {wx?.tempC != null ? Math.round(wx.tempC) : "-"}°
+                      {weather?.tempC != null ? Math.round(weather.tempC) : "-"}°
                     </Text>
                     <Text
                       style={[
@@ -243,12 +151,9 @@ export default function HomeScreen() {
                         { color: C.text, fontFamily: Fonts.sans as any, fontWeight: "700" },
                       ]}
                     >
-                      {wx?.conditionText ?? "-"}
+                      {weather?.conditionText ?? "-"}
                     </Text>
                   </View>
-
-                  {/* HAPUS Ionicons daun; tidak perlu lagi */}
-                  {/* <Ionicons name="leaf-outline" size={44} color={C.tint} /> */}
                 </View>
 
                 <View style={styles.chipsRow}>
@@ -259,7 +164,7 @@ export default function HomeScreen() {
                   <View style={[styles.chip, { borderColor: C.tint, backgroundColor: C.surface }]}>
                     <Ionicons name="location-outline" size={14} color={C.textMuted} />
                     <Text style={[styles.chipText, { color: C.text }]}>
-                      {(wx?.city ?? "") + (wx?.region ? `, ${wx.region}` : "")}
+                      {(weather?.city ?? "") + (weather?.region ? `, ${weather.region}` : "")}
                     </Text>
                   </View>
                 </View>
@@ -267,7 +172,6 @@ export default function HomeScreen() {
             )}
           </LinearGradient>
 
-          {/* Ganti container grid-mu jadi pakai styles.grid */}
           <View style={[styles.grid, { marginTop: S.spacing.lg }]}>
             {menus.map((m) => (
               <Link
@@ -327,7 +231,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    zIndex: 1,          // konten di atas gambar
+    zIndex: 1,
   },
 
   chipsRow: { flexDirection: "row", gap: 10, marginTop: 10, flexWrap: "wrap" },

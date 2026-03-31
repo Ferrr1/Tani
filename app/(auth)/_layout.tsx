@@ -12,29 +12,26 @@ const AuthLayout = () => {
     const pathname = usePathname() || "";
     const isRecoveryRoute = useMemo(() => pathname.includes("/reset-password"), [pathname]);
 
-    const { authReady, session, profileReady, role } = useAuth();
+    const { isInitialized, session, role } = useAuth();
 
-    // 1) Saat nav/auth belum siap → tampilkan UI loading (bukan splash)
-    if (!navReady || !authReady) {
+    // 1) Saat nav/auth belum siap → tampilkan UI loading
+    if (!navReady || !isInitialized) {
         return <LoadingScreen title="Menyiapkan aplikasi" subtitle="Memuat navigasi & sesi pengguna…" />;
     }
 
-    // 2) Recovery route selalu boleh tampil (tanpa nunggu profil)
+    // 2) Recovery route selalu boleh tampil
     if (isRecoveryRoute) {
         return <Stack screenOptions={STACK_ANIM} />;
     }
 
-    // 3) Session ada tapi profil belum siap → tampilkan UI loading
-    if (session && !profileReady) {
-        return <LoadingScreen title="Sinkronisasi profil" subtitle="Mengambil data akun & peran…" />;
+    // 3) Session + profil siap → redirect berdasar role
+    if (session) {
+        if (role === "superadmin") return <Redirect href="/(superadmin)/(tabs)" />;
+        if (role === "admin") return <Redirect href="/(admin)/(tabs)" />;
+        return <Redirect href="/(user)/(tabs)" />;
     }
 
-    // 4) Session + profil siap → redirect berdasar role
-    if (session && profileReady) {
-        return <Redirect href={role === "admin" ? "/(admin)/(tabs)" : "/(user)/(tabs)"} />;
-    }
-
-    // 5) Tidak ada session → render stack auth
+    // 4) Tidak ada session → render stack auth
     return <Stack screenOptions={STACK_ANIM} />;
 };
 
