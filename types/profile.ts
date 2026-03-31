@@ -1,4 +1,4 @@
-export type Role = "user" | "admin" | "superadmin";
+export type Role = "user" | "admin" | "operator";
 
 export type LoginForm = { email: string; password: string };
 

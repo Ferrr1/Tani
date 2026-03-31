@@ -19,8 +19,8 @@ export default function TabLayout() {
 
     if (!session) {
       router.replace("/(auth)");
-    } else if (role === "superadmin") {
-      router.replace("/(superadmin)/(tabs)");
+    } else if (role === "operator") {
+      router.replace("/(operator)/(tabs)");
     } else if (role === "admin") {
       router.replace("/(admin)/(tabs)");
     }
@@ -43,11 +43,59 @@ export default function TabLayout() {
           tabBarButton: HapticTab,
         }}
       >
-        <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Ionicons size={28} name="home-outline" color={color} /> }} />
-        <Tabs.Screen name="income" options={{ title: "Penerimaan", tabBarIcon: ({ color }) => <Ionicons size={28} name="arrow-down-circle-outline" color={color} /> }} />
-        <Tabs.Screen name="expense" options={{ title: "Pengeluaran", tabBarIcon: ({ color }) => <Ionicons size={28} name="arrow-up-circle-outline" color={color} /> }} />
-        <Tabs.Screen name="chart" options={{ title: "Grafik", tabBarIcon: ({ color }) => <Ionicons size={28} name="stats-chart-outline" color={color} /> }} />
-        <Tabs.Screen name="report" options={{ title: "Laporan", tabBarIcon: ({ color }) => <Ionicons size={28} name="document-text-outline" color={color} /> }} />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color }) => (
+              <Ionicons size={28} name="home-outline" color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="income"
+          options={{
+            title: "Penerimaan",
+            tabBarIcon: ({ color }) => (
+              <Ionicons
+                size={28}
+                name="arrow-down-circle-outline"
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="expense"
+          options={{
+            title: "Pengeluaran",
+            tabBarIcon: ({ color }) => (
+              <Ionicons
+                size={28}
+                name="arrow-up-circle-outline"
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="chart"
+          options={{
+            title: "Grafik",
+            tabBarIcon: ({ color }) => (
+              <Ionicons size={28} name="stats-chart-outline" color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="report"
+          options={{
+            title: "Laporan",
+            tabBarIcon: ({ color }) => (
+              <Ionicons size={28} name="document-text-outline" color={color} />
+            ),
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
