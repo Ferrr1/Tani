@@ -4,8 +4,8 @@ import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
-  SuperAdminUserRow,
-  useSuperAdminUserService,
+  OperatorUserRow,
+  useOperatorUserService,
 } from "@/services/operatorService";
 import { DetailForm } from "@/types/detail-admin";
 import { Role } from "@/types/profile";
@@ -31,7 +31,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function SuperAdminUserDetail() {
+export default function OperatorUserDetail() {
   const { detail } = useLocalSearchParams<{ detail?: string }>();
   const userId = detail && detail !== "new" ? detail : undefined;
   const isCreate = !userId; // "new" atau tanpa param → create
@@ -42,7 +42,7 @@ export default function SuperAdminUserDetail() {
   const router = useRouter();
   const { signOut, user, profile } = useAuth();
   const { getUserById, createUser, updateUser, deleteUser } =
-    useSuperAdminUserService();
+    useOperatorUserService();
 
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
@@ -74,7 +74,7 @@ export default function SuperAdminUserDetail() {
     if (!userId) return;
     setLoading(true);
     try {
-      const row = (await getUserById(userId)) as SuperAdminUserRow | null;
+      const row = (await getUserById(userId)) as OperatorUserRow | null;
       if (!row) {
         Alert.alert("Tidak ditemukan", "Pengguna tidak ditemukan.");
         router.back();

@@ -2,9 +2,9 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/profile";
 import {
-    FunctionsFetchError,
-    FunctionsHttpError,
-    FunctionsRelayError,
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
 } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 

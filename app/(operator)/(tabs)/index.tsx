@@ -1,7 +1,7 @@
 import ButtonLogout from "@/components/ButtonLogout";
 import { Colors, Fonts, Tokens } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { useSuperAdminUserList } from "@/services/operatorService";
+import { useOperatorUserList } from "@/services/operatorService";
 import { getInitialsName } from "@/utils/getInitialsName";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -39,7 +39,7 @@ export default function HomeAdminScreen() {
   const router = useRouter();
   const { profile, reloadProfile } = useAuth();
   const { rows, loading, refreshing, fetchOnce, refresh } =
-    useSuperAdminUserList();
+    useOperatorUserList();
 
   const users: AppUser[] = useMemo(
     () =>

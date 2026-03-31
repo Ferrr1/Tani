@@ -24,7 +24,6 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/logo-bg.png",
       backgroundColor: "#FFFFE7",
     },
-    edgeToEdgeEnabled: true,
     package: "com.fersetya.lambansayur",
   },
 
@@ -36,6 +35,8 @@ const config: ExpoConfig = {
 
   plugins: [
     "expo-router",
+    "@react-native-community/datetimepicker",
+    "expo-font",
     [
       "expo-splash-screen",
       {

@@ -9,18 +9,24 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <SeasonFilterProvider>
-            <StatusBar style="auto" />
-            <Stack screenOptions={STACK_ANIM} />
-          </SeasonFilterProvider>
-        </ThemeProvider>
+        <RootLayoutContent />
       </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+function RootLayoutContent() {
+  const colorScheme = useColorScheme();
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <SeasonFilterProvider>
+        <StatusBar style="auto" />
+        <Stack screenOptions={STACK_ANIM} />
+      </SeasonFilterProvider>
+    </ThemeProvider>
   );
 }

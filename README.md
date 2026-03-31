@@ -146,6 +146,15 @@ Daftar suite pengujian yang tersedia:
 - **[`expense-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense-calculator.test.ts)**: Menguji logika perhitungan pengeluaran, termasuk biaya bibit, tenaga kerja, alat, serta perhitungan biaya prorata.
 - **[`report-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/report-calculator.test.ts)**: Memastikan kalkulasi laporan tahunan akurat, menangani faktor skala luas lahan (_land factor_), dan perhitungan rasio R/C.
 - **[`chart-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/chart-calculator.test.ts)**: Menguji transformasi data pengeluaran untuk visualisasi diagram lingkaran (pie chart) dan perhitungan total pengeluaran.
+- **[`calculate.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/calculate.test.ts)**: Memverifikasi logika perhitungan subtotal tenaga kerja (borongan/harian) dan total harga input kimia/pupuk.
+- **[`currency.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/currency.test.ts)**: Memastikan format mata uang Rupiah (IDR) sesuai dengan standar lokal Indonesia.
+- **[`date.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/date.test.ts)**: Menguji berbagai fungsi manipulasi tanggal, termasuk pemformatan `id-ID`, parsing DD/MM/YYYY, konversi ke ISO, dan perhitungan selisih hari inklusif.
+- **[`debug.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/debug.test.ts)**: Memverifikasi hook `useDebug` untuk pencatatan log internal aplikasi dengan batasan riwayat baris.
+- **[`expense.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense.test.ts)**: Menguji fungsi validasi input pengeluaran (angka positif, nominal uang, dan teks wajib).
+- **[`getInitialsName.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/getInitialsName.test.ts)**: Memastikan ekstraksi inisial nama pengguna (maksimal 2 huruf) berjalan dengan benar untuk kebutuhan UI.
+- **[`season.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/season.test.ts)**: Memverifikasi validasi rentang tanggal musim tanam (tanggal mulai vs tanggal selesai).
+- **[`unitLabel.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/unitLabel.test.ts)**: Menguji normalisasi label satuan (kg, gram, liter) dari berbagai variasi input teks user.
+- **[`weather.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/weather.test.ts)**: Memastikan konversi kode cuaca numerik dari API ke deskripsi teks bahasa Indonesia.
 
 #### Layanan (Services)
 
@@ -159,6 +168,8 @@ Daftar suite pengujian yang tersedia:
 - **[`informationService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/informationService.test.ts)**: Memverifikasi CRUD konten edukasi/informasi yang hanya dapat dilakukan oleh admin/operator.
 - **[`weatherService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/weatherService.test.ts)**: Melakukan pengujian integrasi API cuaca (Open Meteo) dengan simulasi respons sukses dan gagal.
 - **[`openWhatsApp.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/openWhatsApp.test.ts)**: Menguji utilitas pembukaan WhatsApp dengan fallback ke URL web jika aplikasi tidak terpasang.
+- **[`reportService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportService.test.ts)**: Menguji hook `useReportData` untuk pengambilan data laporan, manajemen filter tahun/musim, dan transformasi dataset laporan.
+- **[`reportPdf.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportPdf.test.ts)**: Memverifikasi alur pembuatan dokumen PDF laporan, pemindahan berkas ke cache, dan fungsi berbagi (_sharing_) dokumen.
 
 ### 3. Lingkungan Pengujian
 

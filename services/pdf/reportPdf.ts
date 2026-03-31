@@ -608,44 +608,21 @@ export async function generateReportPdf({
 
   // Cetak & simpan
   const { uri: tmpUri } = await Print.printToFileAsync({ html });
-
-  const FSAny = FS as AnyFS;
   let outUri = tmpUri;
 
-  if (FSAny.Directory && FSAny.File) {
-    try {
-      const { Directory, File } = FSAny;
-      const reportsDir = await Directory.cache.createDirectoryAsync("reports", {
-        intermediates: true,
-      });
-      const finalName = (fileName || title) + ".pdf";
-      const target = await reportsDir.createFileAsync(finalName, {
-        overwrite: true,
-      });
-      await File.fromUri(tmpUri).moveAsync(target.uri);
-      outUri = target.uri;
-    } catch (e) {
-      console.warn("New FS API failed, falling back to legacy:", e);
+  try {
+    const reportsDir = FS.cacheDirectory + "reports/";
+    const info = await FS.getInfoAsync(reportsDir);
+    if (!info.exists) {
+      await FS.makeDirectoryAsync(reportsDir, { intermediates: true });
     }
-  }
-
-  if (outUri === tmpUri) {
-    const Legacy = await import("expo-file-system/legacy");
-    const reportsDir = Legacy.cacheDirectory + "reports/";
-    try {
-      const info = await Legacy.getInfoAsync(reportsDir);
-      if (!info.exists) {
-        await Legacy.makeDirectoryAsync(reportsDir, { intermediates: true });
-      }
-    } catch {}
     const finalName = (fileName || title) + ".pdf";
     const target = reportsDir + finalName;
-    try {
-      await Legacy.moveAsync({ from: tmpUri, to: target });
-      outUri = target;
-    } catch {
-      outUri = tmpUri;
-    }
+    await FS.moveAsync({ from: tmpUri, to: target });
+    outUri = target;
+  } catch (e) {
+    console.warn("FS operation failed, using tmpUri:", e);
+    outUri = tmpUri;
   }
 
   if (share) {

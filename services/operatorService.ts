@@ -3,14 +3,14 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/profile";
 import {
-    FunctionsFetchError,
-    FunctionsHttpError,
-    FunctionsRelayError,
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
 } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** ===== Types ===== */
-export type SuperAdminUserRow = {
+export type OperatorUserRow = {
   id: string;
   email: string;
   full_name: string | null;
@@ -21,7 +21,7 @@ export type SuperAdminUserRow = {
   updated_at: string;
 };
 
-export type SuperAdminCreateUserInput = {
+export type OperatorCreateUserInput = {
   email: string;
   password: string;
   fullName?: string;
@@ -30,7 +30,7 @@ export type SuperAdminCreateUserInput = {
   role: Role; // "user" | "admin" | "operator"
 };
 
-export type SuperAdminUpdateUserInput = {
+export type OperatorUpdateUserInput = {
   targetUserId: string;
   newEmail?: string;
   newPassword?: string;
@@ -40,7 +40,7 @@ export type SuperAdminUpdateUserInput = {
   newRole: Role;
 };
 
-export type SuperAdminListUsersOpts = {
+export type OperatorListUsersOpts = {
   q?: string;
   limit?: number;
   offset?: number;
@@ -50,7 +50,7 @@ type DeleteUserResult = { selfDelete: boolean };
 
 /** ===== Repo ===== */
 export const operatorUserRepo = {
-  async list(opts?: SuperAdminListUsersOpts): Promise<SuperAdminUserRow[]> {
+  async list(opts?: OperatorListUsersOpts): Promise<OperatorUserRow[]> {
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
 
@@ -74,20 +74,20 @@ export const operatorUserRepo = {
 
     const { data, error } = await q;
     if (error) throw error;
-    return (data || []) as SuperAdminUserRow[];
+    return (data || []) as OperatorUserRow[];
   },
 
-  async getById(id: string): Promise<SuperAdminUserRow | null> {
+  async getById(id: string): Promise<OperatorUserRow | null> {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return (data as SuperAdminUserRow) ?? null;
+    return (data as OperatorUserRow) ?? null;
   },
 
-  async create(input: SuperAdminCreateUserInput): Promise<SuperAdminUserRow> {
+  async create(input: OperatorCreateUserInput): Promise<OperatorUserRow> {
     const { email, password, fullName, role } = input;
 
     // Enforce per-role: non-user => null fields
@@ -125,8 +125,8 @@ export const operatorUserRepo = {
       throw error;
     }
 
-    const row: SuperAdminUserRow =
-      (data?.user as SuperAdminUserRow) ?? (data as SuperAdminUserRow);
+    const row: OperatorUserRow =
+      (data?.user as OperatorUserRow) ?? (data as OperatorUserRow);
 
     if (!row || !row.id) {
       throw new Error("Respon pembuatan user tidak valid.");
@@ -134,7 +134,7 @@ export const operatorUserRepo = {
     return row;
   },
 
-  async update(input: SuperAdminUpdateUserInput): Promise<void> {
+  async update(input: OperatorUpdateUserInput): Promise<void> {
     const {
       targetUserId,
       newEmail,
@@ -218,7 +218,7 @@ export const operatorUserRepo = {
 };
 
 /** ===== Hooks ===== */
-export function useSuperAdminUserService() {
+export function useOperatorUserService() {
   const { user, authReady, role } = useAuth();
 
   const ensureOperator = useCallback(() => {
@@ -229,7 +229,7 @@ export function useSuperAdminUserService() {
   }, [authReady, user, role]);
 
   const listUsers = useCallback(
-    (opts?: SuperAdminListUsersOpts) => {
+    (opts?: OperatorListUsersOpts) => {
       ensureOperator();
       return operatorUserRepo.list(opts);
     },
@@ -245,7 +245,7 @@ export function useSuperAdminUserService() {
   );
 
   const createUser = useCallback(
-    (input: SuperAdminCreateUserInput) => {
+    (input: OperatorCreateUserInput) => {
       ensureOperator();
       return operatorUserRepo.create(input);
     },
@@ -253,7 +253,7 @@ export function useSuperAdminUserService() {
   );
 
   const updateUser = useCallback(
-    (input: SuperAdminUpdateUserInput) => {
+    (input: OperatorUpdateUserInput) => {
       ensureOperator();
       return operatorUserRepo.update(input);
     },
@@ -281,8 +281,8 @@ export function useSuperAdminUserService() {
   );
 }
 
-export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
-  const [rows, setRows] = useState<SuperAdminUserRow[]>([]);
+export function useOperatorUserList(initialQ = "", initialLimit = 50) {
+  const [rows, setRows] = useState<OperatorUserRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [q, setQ] = useState(initialQ);
@@ -346,8 +346,8 @@ export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
   };
 }
 
-export function useSuperAdminUserDetail(targetUserId?: string) {
-  const [row, setRow] = useState<SuperAdminUserRow | null>(null);
+export function useOperatorUserDetail(targetUserId?: string) {
+  const [row, setRow] = useState<OperatorUserRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
@@ -393,7 +393,7 @@ export function useSuperAdminUserDetail(targetUserId?: string) {
   }, [targetUserId]);
 
   const update = useCallback(
-    async (input: Omit<SuperAdminUpdateUserInput, "targetUserId">) => {
+    async (input: Omit<OperatorUpdateUserInput, "targetUserId">) => {
       if (!targetUserId) throw new Error("targetUserId tidak ada.");
       await operatorUserRepo.update({ targetUserId, ...input });
       await refresh();
