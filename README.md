@@ -131,6 +131,7 @@ npm test
 ```
 
 Untuk menjalankan tes pada berkas spesifik:
+
 ```bash
 npx jest utils/__tests__/number.test.ts
 ```
@@ -140,26 +141,40 @@ npx jest utils/__tests__/number.test.ts
 Daftar suite pengujian yang tersedia:
 
 #### Utilitas (Utils)
-*   **[`number.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/number.test.ts)**: Memverifikasi fungsi normalisasi angka, konversi string ke angka (format Indonesia/US), dan pemformatan ribuan.
-*   **[`expense-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense-calculator.test.ts)**: Menguji logika perhitungan pengeluaran, termasuk biaya bibit, tenaga kerja, alat, serta perhitungan biaya prorata.
-*   **[`report-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/report-calculator.test.ts)**: Memastikan kalkulasi laporan tahunan akurat, menangani faktor skala luas lahan (*land factor*), dan perhitungan rasio R/C.
-*   **[`chart-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/chart-calculator.test.ts)**: Menguji transformasi data pengeluaran untuk visualisasi diagram lingkaran (pie chart) dan perhitungan total pengeluaran.
+
+- **[`number.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/number.test.ts)**: Memverifikasi fungsi normalisasi angka, konversi string ke angka (format Indonesia/US), dan pemformatan ribuan.
+- **[`expense-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense-calculator.test.ts)**: Menguji logika perhitungan pengeluaran, termasuk biaya bibit, tenaga kerja, alat, serta perhitungan biaya prorata.
+- **[`report-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/report-calculator.test.ts)**: Memastikan kalkulasi laporan tahunan akurat, menangani faktor skala luas lahan (_land factor_), dan perhitungan rasio R/C.
+- **[`chart-calculator.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/chart-calculator.test.ts)**: Menguji transformasi data pengeluaran untuk visualisasi diagram lingkaran (pie chart) dan perhitungan total pengeluaran.
+- **[`calculate.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/calculate.test.ts)**: Memverifikasi logika perhitungan subtotal tenaga kerja (borongan/harian) dan total harga input kimia/pupuk.
+- **[`currency.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/currency.test.ts)**: Memastikan format mata uang Rupiah (IDR) sesuai dengan standar lokal Indonesia.
+- **[`date.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/date.test.ts)**: Menguji berbagai fungsi manipulasi tanggal, termasuk pemformatan `id-ID`, parsing DD/MM/YYYY, konversi ke ISO, dan perhitungan selisih hari inklusif.
+- **[`debug.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/debug.test.ts)**: Memverifikasi hook `useDebug` untuk pencatatan log internal aplikasi dengan batasan riwayat baris.
+- **[`expense.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense.test.ts)**: Menguji fungsi validasi input pengeluaran (angka positif, nominal uang, dan teks wajib).
+- **[`getInitialsName.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/getInitialsName.test.ts)**: Memastikan ekstraksi inisial nama pengguna (maksimal 2 huruf) berjalan dengan benar untuk kebutuhan UI.
+- **[`season.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/season.test.ts)**: Memverifikasi validasi rentang tanggal musim tanam (tanggal mulai vs tanggal selesai).
+- **[`unitLabel.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/unitLabel.test.ts)**: Menguji normalisasi label satuan (kg, gram, liter) dari berbagai variasi input teks user.
+- **[`weather.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/weather.test.ts)**: Memastikan konversi kode cuaca numerik dari API ke deskripsi teks bahasa Indonesia.
+- **[`expense-form-logic.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense-form-logic.test.ts)**: Menguji logika inti pada form pengeluaran, termasuk perhitungan prorata biaya tahunan, pemetaan tahapan kerja dari database, validasi input benih dan bahan kimia, serta konstruksi payload untuk API.
+- **[`income-form-logic.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/income-form-logic.test.ts)** (**Penerimaan Form**): Menguji logika pada form penerimaan, termasuk perhitungan total pendapatan (Grand Total), filtrasi tanaman yang sudah dicatat per musim, pemilihan otomatis musim yang masih tersedia, serta penyusunan payload untuk pembuatan multi-data.
 
 #### Layanan (Services)
-*   **[`authService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/authService.test.ts)**: Menguji logika pemulihan sesi (*session restoration*) dan interaksi dengan Supabase Auth menggunakan *mocking*.
-*   **[`profileService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/profileService.test.ts)**: Memverifikasi fungsi pengambilan dan pembaruan profil pengguna (GET/PATCH) dengan simulasi respons API.
-*   **[`expenseService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/expenseService.test.ts)**: Memverifikasi manajemen pengeluaran (list, create, detail) termasuk panggilan RPC untuk operasi atomik di database.
-*   **[`seasonService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/seasonService.test.ts)**: Menguji pengelolaan musim tanam (list, create, status aktif) dan validasi kepemilikan data.
-*   **[`receiptService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/receiptService.test.ts)**: Menguji pencatatan kuitansi/penerimaan hasil panen dengan validasi kepemilikan musim tanam.
-*   **[`adminUserService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/adminUserService.test.ts)**: Memastikan manajemen akun operator (pendaftaran via Edge Function) dan update profil di Supabase.
-*   **[`superAdminService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/superAdminService.test.ts)**: Menguji fungsi manajemen superadmin, termasuk pembuatan operator baru dan pencegahan duplikasi superadmin.
-*   **[`informationService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/informationService.test.ts)**: Memverifikasi CRUD konten edukasi/informasi yang hanya dapat dilakukan oleh admin/operator.
-*   **[`weatherService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/weatherService.test.ts)**: Melakukan pengujian integrasi API cuaca (Open Meteo) dengan simulasi respons sukses dan gagal.
-*   **[`openWhatsApp.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/openWhatsApp.test.ts)**: Menguji utilitas pembukaan WhatsApp dengan fallback ke URL web jika aplikasi tidak terpasang.
+
+- **[`authService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/authService.test.ts)**: Menguji logika pemulihan sesi (_session restoration_) dan interaksi dengan Supabase Auth menggunakan _mocking_.
+- **[`profileService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/profileService.test.ts)**: Memverifikasi fungsi pengambilan dan pembaruan profil pengguna (GET/PATCH) dengan simulasi respons API.
+- **[`expenseService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/expenseService.test.ts)**: Memverifikasi manajemen pengeluaran (list, create, detail) termasuk panggilan RPC untuk operasi atomik di database.
+- **[`seasonService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/seasonService.test.ts)**: Menguji pengelolaan musim tanam (list, create, status aktif) dan validasi kepemilikan data.
+- **[`receiptService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/receiptService.test.ts)**: Menguji pencatatan kuitansi/penerimaan hasil panen dengan validasi kepemilikan musim tanam.
+- **[`adminUserService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/adminUserService.test.ts)**: Memastikan manajemen akun operator (pendaftaran via Edge Function) dan update profil di Supabase.
+- **[`operatorService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/operatorService.test.ts)**: Menguji fungsi manajemen operator, termasuk pembuatan operator baru dan pencegahan duplikasi operator.
+- **[`informationService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/informationService.test.ts)**: Memverifikasi CRUD konten edukasi/informasi yang hanya dapat dilakukan oleh admin/operator.
+- **[`weatherService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/weatherService.test.ts)**: Melakukan pengujian integrasi API cuaca (Open Meteo) dengan simulasi respons sukses dan gagal.
+- **[`reportService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportService.test.ts)**: Menguji hook `useReportData` untuk pengambilan data laporan, manajemen filter tahun/musim, dan transformasi dataset laporan.
+- **[`reportPdf.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportPdf.test.ts)**: Memverifikasi alur pembuatan dokumen PDF laporan, pemindahan berkas ke cache, dan fungsi berbagi (_sharing_) dokumen.
 
 ### 3. Lingkungan Pengujian
 
-Pengujian berjalan di lingkungan **Node.js** menggunakan **Jest**. Semua dependensi asli (seperti Supabase dan AsyncStorage) telah disimulasikan menggunakan sistem *mocking* global pada [**`jest-setup.ts`**](file:///Users/ferisetya/Project/Mobile/Tani/jest-setup.ts).
+Pengujian berjalan di lingkungan **Node.js** menggunakan **Jest**. Semua dependensi asli (seperti Supabase dan AsyncStorage) telah disimulasikan menggunakan sistem _mocking_ global pada [**`jest-setup.ts`**](file:///Users/ferisetya/Project/Mobile/Tani/jest-setup.ts).
 
 ---
 

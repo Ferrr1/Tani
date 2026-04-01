@@ -42,6 +42,12 @@ import { calcLaborSubtotal, sumChem } from "@/utils/calculate";
 import { currency } from "@/utils/currency";
 import { daysInclusive } from "@/utils/date";
 import { formatInputThousands, toNum } from "@/utils/number";
+import {
+    buildCashPayload,
+    calcProrata,
+    validateCashSeeds,
+    validateChemRows,
+} from "@/utils/expense-form-logic";
 
 type Mode = "create" | "edit";
 
@@ -485,15 +491,8 @@ export default function CashForm({
         return daysInclusive(seasonStart, seasonEnd);
     }, [seasonStart, seasonEnd]);
 
-    const taxSeason = useMemo(() => {
-        const v = toNum(taxW);
-        return seasonDays > 0 ? (v / 365) * seasonDays : 0;
-    }, [taxW, seasonDays]);
-
-    const landRentSeason = useMemo(() => {
-        const v = toNum(landRentW);
-        return seasonDays > 0 ? (v / 365) * seasonDays : 0;
-    }, [landRentW, seasonDays]);
+    const taxSeason = useMemo(() => calcProrata(taxW, seasonDays), [taxW, seasonDays]);
+    const landRentSeason = useMemo(() => calcProrata(landRentW, seasonDays), [landRentW, seasonDays]);
 
     const transportSeason = useMemo(() => toNum(transportW), [transportW]);
 
@@ -513,203 +512,21 @@ export default function CashForm({
     }, [seedSubtotal, chemOthersTotal, laborTotal, extrasSubtotal, extrasPanelSubtotal]);
 
     // ===== Validasi
-    const seedsValid = useCallback(() => {
-        if (!seedsW.length) return false;
-        return seedsW.every(
-            (r) =>
-                toNum(r.qty) > 0 &&
-                toNum(r.price) >= 0 &&
-                r.unit &&
-                (r.kind === "seed" || r.kind === "seedling")
-        );
-    }, [seedsW]);
-
-    const allChemRowsValid = (rows: ChemItem[]) =>
-        rows.length > 0 &&
-        rows.every(
-            (r) =>
-                (r.name?.trim()?.length ?? 0) > 0 &&
-                toNum(r.qty) > 0 &&
-                toNum(r.price) >= 0
-        );
-
-    const chemRowsValidIfAny = (rows: ChemItem[]) =>
-        rows.length === 0 ||
-        rows.every(
-            (r) =>
-                (r.name?.trim()?.length ?? 0) > 0 &&
-                toNum(r.qty) > 0 &&
-                toNum(r.price) >= 0
-        );
+    const seedsValid = useCallback(() => validateCashSeeds(seedsW), [seedsW]);
+    const allChemRowsValid = (rows: ChemItem[]) => validateChemRows(rows, true);
+    const chemRowsValidIfAny = (rows: ChemItem[]) => validateChemRows(rows, false);
 
     // ===== Build payload (gunakan nilai PRORATA untuk tax & land rent)
-    const buildPayload = (fv: any) => {
-        const out: any[] = [];
-
-        // SEEDS (multi)
-        (seedsW as SeedLine[]).forEach((s) => {
-            const unit: Unit = (s.unit as Unit) ?? (s.kind === "seed" ? SEED_UNIT_CHOICES : SEEDLING_UNIT_CHOICES);
-            const q = toNum(s.qty);
-            const p = toNum(s.price);
-            if (q > 0 && p >= 0) {
-                out.push({
-                    category: s.kind,
-                    itemName: s.cropName,
-                    unit,
-                    quantity: q,
-                    unitPrice: p,
-                    _meta: { category: s.kind, unit, cropName: s.cropName },
-                });
-            }
-        });
-
-
-        // Kimia lain
-        const chemToRows = (rows: ChemItem[]) =>
-            rows.map((r) => ({
-                category: r.category,
-                itemName: r.name ?? null,
-                unit: r.unit,
-                quantity: toNum(r.qty),
-                unitPrice: toNum(r.price),
-                _meta: { category: r.category, unit: r.unit },
-            }));
-
-        out.push(
-            ...chemToRows(fertilizerItems),
-            ...chemToRows(insectItems),
-            ...chemToRows(herbItems),
-            ...chemToRows(fungiItems)
+    const buildPayload = (fv: any) =>
+        buildCashPayload(
+            fv,
+            fertilizerItems,
+            insectItems,
+            herbItems,
+            fungiItems,
+            extraItems,
+            seasonDays
         );
-
-        // Tenaga kerja
-        const laborOne = (cat: Category, lf: LaborForm) => {
-            if (lf.tipe === "borongan") {
-                const kontrak = Math.max(0, toNum(lf.hargaBorongan));
-                if (!(kontrak >= 0)) return null;
-                return {
-                    category: cat,
-                    itemName: "borongan",
-                    unit: "service" as Unit,
-                    quantity: 1,
-                    unitPrice: kontrak,
-                    _meta: {
-                        category: cat,
-                        unit: "service",
-                        laborType: "contract",
-                        prevailingWage: lf.upahBerlaku
-                            ? Math.max(0, toNum(lf.upahBerlaku))
-                            : undefined,
-                        jamKerja: lf.jamKerja || undefined,
-                    },
-                };
-            }
-            const people = Math.max(0, toNum(lf.jumlahOrang));
-            const days = Math.max(0, toNum(lf.jumlahHari));
-            const qty = Math.max(0, people * days);
-            const upah = Math.max(0, toNum(lf.upahHarian));
-            if (qty <= 0) return null;
-            return {
-                category: cat,
-                itemName: "harian",
-                unit: "service" as Unit,
-                quantity: qty,
-                unitPrice: upah,
-                _meta: {
-                    category: cat,
-                    unit: "service",
-                    laborType: "daily",
-                    peopleCount: people,
-                    days,
-                    jamKerja: lf.jamKerja || undefined,
-                },
-            };
-        };
-
-        const laborRows = [
-            laborOne("labor_nursery", fv.labor.nursery),
-            laborOne("labor_land_prep", fv.labor.land_prep),
-            laborOne("labor_planting", fv.labor.planting),
-            laborOne("labor_fertilizing", fv.labor.fertilizing),
-            laborOne("labor_irrigation", fv.labor.irrigation),
-            laborOne("labor_weeding", fv.labor.weeding),
-            laborOne("labor_pest_ctrl", fv.labor.pest_ctrl),
-            laborOne("labor_harvest", fv.labor.harvest),
-            laborOne("labor_postharvest", fv.labor.postharvest),
-        ].filter(Boolean) as any[];
-
-        out.push(...laborRows);
-
-        // EXTRAS (pakai nilai PRORATA utk pajak & sewa)
-        const extras: any[] = [];
-        const vTax = toNum(fv.extras.tax);
-        if (vTax > 0)
-            extras.push({
-                category: "tax",
-                unit: SERVICE_UNIT,
-                quantity: 1,
-                unitPrice: vTax,
-                itemName: null,
-                _meta: {
-                    category: "tax",
-                    unit: SERVICE_UNIT,
-                    proratedFromYearly: toNum(fv.extras.tax) || undefined,
-                    seasonDays: seasonDays || undefined,
-                },
-            });
-
-        const vRent = toNum(fv.extras.landRent);
-        if (vRent > 0)
-            extras.push({
-                category: "land_rent",
-                unit: SERVICE_UNIT,
-                quantity: 1,
-                unitPrice: vRent,
-                itemName: null,
-                _meta: {
-                    category: "land_rent",
-                    unit: SERVICE_UNIT,
-                    proratedFromYearly: toNum(fv.extras.landRent) || undefined,
-                    seasonDays: seasonDays || undefined,
-                },
-            });
-
-        const vTrans = Math.max(0, toNum(fv.extras.transport));
-        if (vTrans > 0)
-            extras.push({
-                category: "transport",
-                unit: SERVICE_UNIT,
-                quantity: 1,
-                unitPrice: vTrans,
-                itemName: null,
-                _meta: { category: "transport", unit: SERVICE_UNIT },
-            });
-
-        (extraItems || []).forEach((e) => {
-            const amt = toNum(e.amount);
-            if (!Number.isFinite(amt) || amt < 0) return;
-
-            extras.push({
-                category: e.label || "Biaya Lain",
-                unit: SERVICE_UNIT,
-                quantity: 1,
-                unitPrice: amt,
-                itemName: e.label,
-                _meta: { category: "other", unit: SERVICE_UNIT },
-            });
-        });
-
-        out.push(...extras);
-
-        // filter final
-        return out.filter(
-            (x) =>
-                Number.isFinite(x.quantity) &&
-                x.quantity > 0 &&
-                Number.isFinite(x.unitPrice) &&
-                x.unitPrice >= 0
-        );
-    };
 
     // ===== Submit
     const [saving, setSaving] = useState(false);

@@ -1,4 +1,4 @@
-// services/superAdminUserService.ts
+// services/operatorUserService.ts
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/profile";
@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** ===== Types ===== */
-export type SuperAdminUserRow = {
+export type OperatorUserRow = {
   id: string;
   email: string;
   full_name: string | null;
@@ -21,16 +21,16 @@ export type SuperAdminUserRow = {
   updated_at: string;
 };
 
-export type SuperAdminCreateUserInput = {
+export type OperatorCreateUserInput = {
   email: string;
   password: string;
   fullName?: string;
   namaDesa?: string;
   luasLahan?: number; // hanya dipakai untuk role "user"
-  role: Role; // "user" | "admin" | "superadmin"
+  role: Role; // "user" | "admin" | "operator"
 };
 
-export type SuperAdminUpdateUserInput = {
+export type OperatorUpdateUserInput = {
   targetUserId: string;
   newEmail?: string;
   newPassword?: string;
@@ -40,7 +40,7 @@ export type SuperAdminUpdateUserInput = {
   newRole: Role;
 };
 
-export type SuperAdminListUsersOpts = {
+export type OperatorListUsersOpts = {
   q?: string;
   limit?: number;
   offset?: number;
@@ -49,15 +49,15 @@ export type SuperAdminListUsersOpts = {
 type DeleteUserResult = { selfDelete: boolean };
 
 /** ===== Repo ===== */
-export const superAdminUserRepo = {
-  async list(opts?: SuperAdminListUsersOpts): Promise<SuperAdminUserRow[]> {
+export const operatorUserRepo = {
+  async list(opts?: OperatorListUsersOpts): Promise<OperatorUserRow[]> {
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
 
     let q = supabase
       .from("profiles")
       .select("*")
-      .neq("role", "superadmin") // superadmin tidak ditampilkan
+      .neq("role", "operator") // operator tidak ditampilkan
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -68,30 +68,30 @@ export const superAdminUserRepo = {
           `full_name.ilike.${key}`,
           `email.ilike.${key}`,
           `nama_desa.ilike.${key}`,
-        ].join(",")
+        ].join(","),
       );
     }
 
     const { data, error } = await q;
     if (error) throw error;
-    return (data || []) as SuperAdminUserRow[];
+    return (data || []) as OperatorUserRow[];
   },
 
-  async getById(id: string): Promise<SuperAdminUserRow | null> {
+  async getById(id: string): Promise<OperatorUserRow | null> {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return (data as SuperAdminUserRow) ?? null;
+    return (data as OperatorUserRow) ?? null;
   },
 
-  async create(input: SuperAdminCreateUserInput): Promise<SuperAdminUserRow> {
+  async create(input: OperatorCreateUserInput): Promise<OperatorUserRow> {
     const { email, password, fullName, role } = input;
 
     // Enforce per-role: non-user => null fields
-    const namaDesa = role === "user" ? input.namaDesa ?? null : null;
+    const namaDesa = role === "user" ? (input.namaDesa ?? null) : null;
     const luasLahan =
       role === "user" && typeof input.luasLahan === "number"
         ? input.luasLahan
@@ -108,12 +108,12 @@ export const superAdminUserRepo = {
           luasLahan,
           role,
         },
-      }
+      },
     );
 
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const payload = await error.context.json().catch(() => ({} as any));
+        const payload = await error.context.json().catch(() => ({}) as any);
         throw new Error(payload?.error || "Gagal membuat user");
       }
       if (
@@ -125,8 +125,8 @@ export const superAdminUserRepo = {
       throw error;
     }
 
-    const row: SuperAdminUserRow =
-      (data?.user as SuperAdminUserRow) ?? (data as SuperAdminUserRow);
+    const row: OperatorUserRow =
+      (data?.user as OperatorUserRow) ?? (data as OperatorUserRow);
 
     if (!row || !row.id) {
       throw new Error("Respon pembuatan user tidak valid.");
@@ -134,7 +134,7 @@ export const superAdminUserRepo = {
     return row;
   },
 
-  async update(input: SuperAdminUpdateUserInput): Promise<void> {
+  async update(input: OperatorUpdateUserInput): Promise<void> {
     const {
       targetUserId,
       newEmail,
@@ -151,11 +151,11 @@ export const superAdminUserRepo = {
         "admin-update-user",
         {
           body: { targetUserId, newEmail, newPassword },
-        }
+        },
       );
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          const payload = await error.context.json().catch(() => ({} as any));
+          const payload = await error.context.json().catch(() => ({}) as any);
           throw new Error(payload?.error || "Gagal memperbarui email/password");
         }
         if (
@@ -174,8 +174,8 @@ export const superAdminUserRepo = {
     // 2) Update profil via RPC, patuhi aturan per-role:
     //    jika role !== 'user' maka nama_desa & luas_lahan = null
     const roleIsUser = newRole === "user";
-    const namaDesaFinal = roleIsUser ? newNamaDesa ?? null : null;
-    const luasLahanFinal = roleIsUser ? newLuasLahan ?? null : null;
+    const namaDesaFinal = roleIsUser ? (newNamaDesa ?? null) : null;
+    const luasLahanFinal = roleIsUser ? (newLuasLahan ?? null) : null;
 
     const { error: eRpc } = await supabase.rpc("admin_update_profile_only", {
       target_user_id: targetUserId,
@@ -192,12 +192,12 @@ export const superAdminUserRepo = {
       "admin-delete-user",
       {
         body: { targetUserId },
-      }
+      },
     );
 
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const payload = await error.context.json().catch(() => ({} as any));
+        const payload = await error.context.json().catch(() => ({}) as any);
         throw new Error(payload?.error || "Gagal menghapus user");
       }
       if (
@@ -218,55 +218,54 @@ export const superAdminUserRepo = {
 };
 
 /** ===== Hooks ===== */
-export function useSuperAdminUserService() {
+export function useOperatorUserService() {
   const { user, authReady, role } = useAuth();
 
-  const ensureSuperadmin = useCallback(() => {
+  const ensureOperator = useCallback(() => {
     if (!authReady) throw new Error("Auth belum siap.");
     if (!user) throw new Error("Tidak ada sesi login.");
-    if (role !== "superadmin")
-      throw new Error("Hanya operator yang diizinkan.");
+    if (role !== "operator") throw new Error("Hanya operator yang diizinkan.");
     return user;
   }, [authReady, user, role]);
 
   const listUsers = useCallback(
-    (opts?: SuperAdminListUsersOpts) => {
-      ensureSuperadmin();
-      return superAdminUserRepo.list(opts);
+    (opts?: OperatorListUsersOpts) => {
+      ensureOperator();
+      return operatorUserRepo.list(opts);
     },
-    [ensureSuperadmin]
+    [ensureOperator],
   );
 
   const getUserById = useCallback(
     (id: string) => {
-      ensureSuperadmin();
-      return superAdminUserRepo.getById(id);
+      ensureOperator();
+      return operatorUserRepo.getById(id);
     },
-    [ensureSuperadmin]
+    [ensureOperator],
   );
 
   const createUser = useCallback(
-    (input: SuperAdminCreateUserInput) => {
-      ensureSuperadmin();
-      return superAdminUserRepo.create(input);
+    (input: OperatorCreateUserInput) => {
+      ensureOperator();
+      return operatorUserRepo.create(input);
     },
-    [ensureSuperadmin]
+    [ensureOperator],
   );
 
   const updateUser = useCallback(
-    (input: SuperAdminUpdateUserInput) => {
-      ensureSuperadmin();
-      return superAdminUserRepo.update(input);
+    (input: OperatorUpdateUserInput) => {
+      ensureOperator();
+      return operatorUserRepo.update(input);
     },
-    [ensureSuperadmin]
+    [ensureOperator],
   );
 
   const deleteUser = useCallback(
     (id: string) => {
-      ensureSuperadmin();
-      return superAdminUserRepo.remove(id); // -> Promise<{ selfDelete: boolean }>
+      ensureOperator();
+      return operatorUserRepo.remove(id); // -> Promise<{ selfDelete: boolean }>
     },
-    [ensureSuperadmin]
+    [ensureOperator],
   );
 
   return useMemo(
@@ -278,12 +277,12 @@ export function useSuperAdminUserService() {
       updateUser,
       deleteUser, // kembalikan { selfDelete }
     }),
-    [authReady, listUsers, getUserById, createUser, updateUser, deleteUser]
+    [authReady, listUsers, getUserById, createUser, updateUser, deleteUser],
   );
 }
 
-export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
-  const [rows, setRows] = useState<SuperAdminUserRow[]>([]);
+export function useOperatorUserList(initialQ = "", initialLimit = 50) {
+  const [rows, setRows] = useState<OperatorUserRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [q, setQ] = useState(initialQ);
@@ -305,7 +304,7 @@ export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
     inFlight.current = true;
     try {
       if (mounted.current) setLoadingList(true);
-      const data = await superAdminUserRepo.list({ q, limit, offset });
+      const data = await operatorUserRepo.list({ q, limit, offset });
       if (!mounted.current) return;
       setRows(data);
     } finally {
@@ -323,7 +322,7 @@ export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
     inFlight.current = true;
     try {
       if (mounted.current) setRefreshing(true);
-      const data = await superAdminUserRepo.list({ q, limit, offset });
+      const data = await operatorUserRepo.list({ q, limit, offset });
       if (!mounted.current) return;
       setRows(data);
     } finally {
@@ -347,8 +346,8 @@ export function useSuperAdminUserList(initialQ = "", initialLimit = 50) {
   };
 }
 
-export function useSuperAdminUserDetail(targetUserId?: string) {
-  const [row, setRow] = useState<SuperAdminUserRow | null>(null);
+export function useOperatorUserDetail(targetUserId?: string) {
+  const [row, setRow] = useState<OperatorUserRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
@@ -366,7 +365,7 @@ export function useSuperAdminUserDetail(targetUserId?: string) {
     inFlight.current = true;
     try {
       if (mounted.current) setLoading(true);
-      const data = await superAdminUserRepo.getById(targetUserId);
+      const data = await operatorUserRepo.getById(targetUserId);
       if (!mounted.current) return;
       setRow(data);
     } finally {
@@ -384,7 +383,7 @@ export function useSuperAdminUserDetail(targetUserId?: string) {
     inFlight.current = true;
     try {
       if (mounted.current) setRefreshing(true);
-      const data = await superAdminUserRepo.getById(targetUserId);
+      const data = await operatorUserRepo.getById(targetUserId);
       if (!mounted.current) return;
       setRow(data);
     } finally {
@@ -394,18 +393,18 @@ export function useSuperAdminUserDetail(targetUserId?: string) {
   }, [targetUserId]);
 
   const update = useCallback(
-    async (input: Omit<SuperAdminUpdateUserInput, "targetUserId">) => {
+    async (input: Omit<OperatorUpdateUserInput, "targetUserId">) => {
       if (!targetUserId) throw new Error("targetUserId tidak ada.");
-      await superAdminUserRepo.update({ targetUserId, ...input });
+      await operatorUserRepo.update({ targetUserId, ...input });
       await refresh();
     },
-    [targetUserId, refresh]
+    [targetUserId, refresh],
   );
 
   const remove = useCallback(async () => {
     if (!targetUserId) throw new Error("targetUserId tidak ada.");
     // kembalikan selfDelete ke caller (UI)
-    const res = await superAdminUserRepo.remove(targetUserId);
+    const res = await operatorUserRepo.remove(targetUserId);
     return res; // { selfDelete: boolean }
   }, [targetUserId]);
 

@@ -46,8 +46,8 @@ export const adminUserRepo = {
     let q = supabase
       .from("profiles")
       .select("*")
-      // hanya tampilkan pengguna role "user" (admin/superadmin dikecualikan dari listing)
-      .not("role", "in", '("admin","superadmin")')
+      // hanya tampilkan pengguna role "user" (admin/operator dikecualikan dari listing)
+      .not("role", "in", '("admin","operator")')
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -58,7 +58,7 @@ export const adminUserRepo = {
           `full_name.ilike.${key}`,
           `email.ilike.${key}`,
           `nama_desa.ilike.${key}`,
-        ].join(",")
+        ].join(","),
       );
     }
 
@@ -94,11 +94,11 @@ export const adminUserRepo = {
         "admin-update-user",
         {
           body: { targetUserId, newEmail, newPassword },
-        }
+        },
       );
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          const payload = await error.context.json().catch(() => ({} as any));
+          const payload = await error.context.json().catch(() => ({}) as any);
           throw new Error(payload?.error || "Gagal memperbarui email/password");
         }
         if (
@@ -118,8 +118,8 @@ export const adminUserRepo = {
     // 2) Update profil saja via RPC, dengan kebijakan per-role:
     // - jika role !== 'user' maka nama_desa & luas_lahan dipaksa null
     const roleIsUser = newRole === "user";
-    const namaDesaFinal = roleIsUser ? newNamaDesa ?? null : null;
-    const luasLahanFinal = roleIsUser ? newLuasLahan ?? null : null;
+    const namaDesaFinal = roleIsUser ? (newNamaDesa ?? null) : null;
+    const luasLahanFinal = roleIsUser ? (newLuasLahan ?? null) : null;
 
     const { error: eRpc } = await supabase.rpc("admin_update_profile_only", {
       target_user_id: targetUserId,
@@ -136,12 +136,12 @@ export const adminUserRepo = {
       "admin-delete-user",
       {
         body: { targetUserId },
-      }
+      },
     );
 
     if (error) {
       if (error instanceof FunctionsHttpError) {
-        const payload = await error.context.json().catch(() => ({} as any));
+        const payload = await error.context.json().catch(() => ({}) as any);
         throw new Error(payload?.error || "Gagal menghapus user");
       }
       if (
@@ -176,7 +176,7 @@ export function useAdminUserService() {
       ensureAdmin();
       return adminUserRepo.list(opts);
     },
-    [ensureAdmin]
+    [ensureAdmin],
   );
 
   const getUserById = useCallback(
@@ -184,7 +184,7 @@ export function useAdminUserService() {
       ensureAdmin();
       return adminUserRepo.getById(id);
     },
-    [ensureAdmin]
+    [ensureAdmin],
   );
 
   const updateUser = useCallback(
@@ -192,7 +192,7 @@ export function useAdminUserService() {
       ensureAdmin();
       return adminUserRepo.update(input);
     },
-    [ensureAdmin]
+    [ensureAdmin],
   );
 
   const deleteUser = useCallback(
@@ -200,7 +200,7 @@ export function useAdminUserService() {
       ensureAdmin();
       return adminUserRepo.remove(id); // -> Promise<{ selfDelete: boolean }>
     },
-    [ensureAdmin]
+    [ensureAdmin],
   );
 
   return useMemo(
@@ -211,7 +211,7 @@ export function useAdminUserService() {
       updateUser,
       deleteUser, // kembalikan { selfDelete }
     }),
-    [authReady, listUsers, getUserById, updateUser, deleteUser]
+    [authReady, listUsers, getUserById, updateUser, deleteUser],
   );
 }
 
@@ -332,7 +332,7 @@ export function useAdminUserDetail(targetUserId?: string) {
       await adminUserRepo.update({ targetUserId, ...input });
       await refresh();
     },
-    [targetUserId, refresh]
+    [targetUserId, refresh],
   );
 
   const remove = useCallback(async () => {
