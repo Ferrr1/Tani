@@ -5,6 +5,13 @@ import { IncomeFormValues, UNIT_OPTIONS } from "@/types/income";
 import { currency } from "@/utils/currency";
 import { formatWithOutYear } from "@/utils/date";
 import { formatInputThousands, parseThousandsToNumber } from "@/utils/number";
+import {
+    buildIncomeCreatePayloads,
+    buildIncomeUpdatePayload,
+    calcIncomeGrandTotal,
+    getAvailableCrops,
+    getDefaultSeasonId,
+} from "@/utils/income-form-logic";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -105,13 +112,7 @@ export default function IncomeForm() {
         [seasonRows]
     );
 
-    const grandTotal = isEdit
-        ? 0
-        : (items ?? []).reduce((acc, it) => {
-            const q = Math.max(0, parseThousandsToNumber(it.qty));
-            const p = Math.max(0, parseThousandsToNumber(it.price));
-            return acc + q * p;
-        }, 0);
+    const grandTotal = isEdit ? 0 : calcIncomeGrandTotal(items || []);
 
     const didHydrateEdit = useRef(false);
     const didSetDefaultSeason = useRef(false);
@@ -221,24 +222,7 @@ export default function IncomeForm() {
         if (isEdit) return;
         if (didSetDefaultSeason.current) return;
 
-        const seasonHasFreeCrop = (sid: string | undefined) => {
-            if (!sid) return false;
-            const s = seasons.find((x) => x.id === sid);
-            if (!s) return false;
-            const crops: string[] = Array.isArray(s.crop_type) ? s.crop_type : [];
-            const used = usedBySeason.get(sid) ?? new Set<string>();
-            const free = crops.filter((c) => !used.has(String(c).trim().toLowerCase()));
-            return free.length > 0;
-        };
-
-        let defaultSeasonId: string | undefined =
-            (typeof seasonIdFromQuery === "string" && seasonIdFromQuery) || undefined;
-
-        if (!seasonHasFreeCrop(defaultSeasonId)) {
-            const firstFree = seasons.find((s) => seasonHasFreeCrop(s.id));
-            defaultSeasonId = firstFree?.id;
-        }
-
+        const defaultSeasonId = getDefaultSeasonId(seasons, seasonIdFromQuery, usedBySeason);
         if (defaultSeasonId) {
             setValue("seasonId", defaultSeasonId, { shouldValidate: true });
             didSetDefaultSeason.current = true;
@@ -255,9 +239,10 @@ export default function IncomeForm() {
             return;
         }
         const s = seasons.find((x) => x.id === selSeasonId);
-        const crops: string[] = (s && Array.isArray(s.crop_type)) ? s!.crop_type : [];
-        const used = usedBySeason.get(selSeasonId) ?? new Set<string>();
-        const available = crops.filter((c) => !used.has(String(c).trim().toLowerCase()));
+        const available = getAvailableCrops(
+            s && Array.isArray(s.crop_type) ? s.crop_type : [],
+            usedBySeason.get(selSeasonId) ?? new Set()
+        );
 
         const nextItems: ReceiptItemInput[] = available.map((c) => ({
             cropName: String(c),
@@ -277,43 +262,16 @@ export default function IncomeForm() {
             setSaving(true);
 
             if (isEdit && receiptId) {
-                // EDIT: tetap single row
-                const q = parseThousandsToNumber(v.quantity);
-                const p = parseThousandsToNumber(v.price);
-                if (!v.unit) return Alert.alert("Validasi", "Pilih jenis satuan dulu.");
-                if (!Number.isFinite(q) || q <= 0) return Alert.alert("Validasi", "Kuantitas harus angka > 0.");
-                if (!Number.isFinite(p) || p < 0) return Alert.alert("Validasi", "Harga/satuan harus angka ≥ 0.");
-
-                await updateReceipt({
-                    id: receiptId,
-                    seasonId: v.seasonId,
-                    quantity: q,
-                    unitType: v.unit,
-                    unitPrice: p,
-                    // item_name tidak diubah di mode edit (atau tambahkan kalau kamu ingin)
-                });
+                const payload = buildIncomeUpdatePayload(receiptId, v.seasonId, v.quantity, v.unit, v.price);
+                await updateReceipt(payload);
             } else {
-                // CREATE: buat satu receipt per crop yang diisi valid
-                const lines = (v.items ?? []).map((it) => ({
-                    cropName: it.cropName,
-                    qty: parseThousandsToNumber(it.qty),
-                    price: parseThousandsToNumber(it.price),
-                    unit: it.unit,
-                }));
-
-                const validLines = lines.filter((l) => l.unit && l.qty > 0 && l.price >= 0);
+                const validLines = buildIncomeCreatePayloads(v.seasonId, v.items || []);
                 if (validLines.length === 0) {
                     return Alert.alert("Validasi", "Isi minimal satu baris penerimaan yang valid.");
                 }
 
                 for (const row of validLines) {
-                    await createReceipt({
-                        seasonId: v.seasonId,
-                        itemName: row.cropName, // <-- mapping ke kolom item_name
-                        quantity: row.qty,
-                        unitType: row.unit,
-                        unitPrice: row.price,
-                    });
+                    await createReceipt(row);
                 }
             }
 

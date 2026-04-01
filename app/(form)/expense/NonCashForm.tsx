@@ -36,6 +36,11 @@ import { formatInputThousands, toNum } from "@/utils/number";
 
 import { useSeasonService } from "@/services/seasonService";
 import { daysInclusive } from "@/utils/date";
+import {
+    buildNonCashPayload,
+    calcProrata,
+    getStageKeyFromRow,
+} from "@/utils/expense-form-logic";
 
 export default function NonCashForm({
     seasonId,
@@ -188,37 +193,6 @@ export default function NonCashForm({
                     }
                 });
 
-                const labelToKey: Record<string, keyof NonCashFormValues["labor"]> = {
-                    persemaian: "nursery",
-                    "pengolahan lahan": "land_prep",
-                    penanaman: "planting",
-                    pemupukan: "fertilizing",
-                    penyiraman: "irrigation",
-                    penyiangan: "weeding",
-                    "pengendalian hama & penyakit": "pest_ctrl",
-                    "pengendalian hama dan penyakit": "pest_ctrl",
-                    panen: "harvest",
-                    "pasca panen": "postharvest",
-                };
-
-                const getStageKeyFromRow = (
-                    r: any
-                ): keyof NonCashFormValues["labor"] | undefined => {
-                    const lbl = String(r?.label ?? "").trim().toLowerCase();
-                    if (labelToKey[lbl]) return labelToKey[lbl];
-                    const contains = (s: string) => lbl.includes(s);
-                    if (contains("semai")) return "nursery";
-                    if (contains("olah") && contains("lahan")) return "land_prep";
-                    if (contains("tanam")) return "planting";
-                    if (contains("pupuk")) return "fertilizing";
-                    if (contains("siram")) return "irrigation";
-                    if (contains("siang")) return "weeding";
-                    if (contains("hama") || contains("penyakit")) return "pest_ctrl";
-                    if (contains("panen") && !contains("pasca")) return "harvest";
-                    if (contains("pasca")) return "postharvest";
-                    return undefined;
-                };
-
                 // labor
                 const setLabor = (
                     key: keyof NonCashFormValues["labor"],
@@ -333,10 +307,8 @@ export default function NonCashForm({
     const landRentW = watch("extras.landRent");
 
     const TAX_DAYS_IN_YEAR = 365;
-    const taxPerYear = toNum(taxW);
-    const landRentPerYear = toNum(landRentW);
-    const taxSeason = (taxPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
-    const landRentSeason = (landRentPerYear / TAX_DAYS_IN_YEAR) * seasonDays;
+    const taxSeason = calcProrata(taxW, seasonDays);
+    const landRentSeason = calcProrata(landRentW, seasonDays);
 
     const extrasSubtotal = useMemo(() => {
         return taxSeason + landRentSeason;
@@ -371,93 +343,7 @@ export default function NonCashForm({
     }, [toolsTotal, laborTotal, extrasSubtotal, extrasPanelSubtotal]);
 
     /** ===== Build payload (sesuai service) + extras dinamis ===== */
-    const buildPayload = (fv: NonCashFormValues) => {
-        const mapLabor = (
-            key: keyof NonCashFormValues["labor"],
-            stageLabel: string
-        ): NonCashLaborInput | null => {
-            const r = fv.labor[key];
-
-            if (r.tipe === "borongan") {
-                const contractPrice = Math.max(0, toNum(r.hargaBorongan));
-                const prevailingWage = Math.max(0, toNum(r.upahBerlaku));
-                return {
-                    laborType: "contract",
-                    contractPrice,
-                    prevailingWage,
-                    stageLabel,
-                };
-            }
-
-            // harian
-            const people = Math.max(0, toNum(r.jumlahOrang));
-            const days = Math.max(0, toNum(r.jumlahHari));
-            const wage = Math.max(0, toNum(r.upahHarian));
-            if (!(people > 0 && days > 0 && wage >= 0)) return null;
-
-            return {
-                laborType: "daily",
-                peopleCount: people,
-                days,
-                dailyWage: wage,
-                jamKerja: r.jamKerja !== "" ? Math.max(0, toNum(r.jamKerja)) : null,
-                stageLabel,
-            };
-        };
-
-        const labors = [
-            mapLabor("nursery", "Persemaian"),
-            mapLabor("land_prep", "Pengolahan Lahan"),
-            mapLabor("planting", "Penanaman"),
-            mapLabor("fertilizing", "Pemupukan"),
-            mapLabor("irrigation", "Penyiraman"),
-            mapLabor("weeding", "Penyiangan"),
-            mapLabor("pest_ctrl", "Pengendalian Hama & Penyakit"),
-            mapLabor("harvest", "Panen"),
-            mapLabor("postharvest", "Pasca Panen"),
-        ].filter((v): v is NonCashLaborInput => v !== null);
-
-        // tools
-        const toolItems = (tools || [])
-            .map((t): NonCashToolInput | null => {
-                const quantity = Math.max(0, toNum(t.jumlah));
-                const purchasePrice = Math.max(0, toNum(t.hargaBeli));
-                if (!(quantity > 0 && purchasePrice >= 0)) return null;
-
-                const uly = t.umurThn ? Math.max(0, toNum(t.umurThn)) : undefined;
-                const sv = t.nilaiSisa ? Math.max(0, toNum(t.nilaiSisa)) : undefined;
-
-                return {
-                    toolName: t.nama?.trim() || "Alat",
-                    quantity,
-                    purchasePrice,
-                    ...(uly !== undefined ? { usefulLifeYears: uly } : {}),
-                    ...(sv !== undefined ? { salvageValue: sv } : {}),
-                };
-            })
-            .filter((v): v is NonCashToolInput => v !== null);
-
-        // extras (fixed) — SIMPAN NILAI TAHUNAN (TIDAK DIUBAH)
-        const extras: any[] = [];
-        const vTax = toNum(fv.extras.tax);
-        if (vTax > 0) extras.push({ type: "tax", amount: vTax });
-        const vRent = toNum(fv.extras.landRent);
-        if (vRent > 0) extras.push({ type: "land_rent", amount: vRent });
-
-        // extras (dinamis dari ExtrasPanel) — type = label, metadata lain tidak diubah
-        (extraItems || []).forEach((e) => {
-            const amt = toNum(e.amount);
-            if (!Number.isFinite(amt) || amt < 0) return;
-            extras.push({
-                type: e.label,
-                amount: amt,
-                note: null,
-                _meta: { category: "other", unit: SERVICE_UNIT },
-            });
-        });
-
-        return { labors, tools: toolItems, extras };
-    };
+    const buildPayload = (fv: NonCashFormValues) => buildNonCashPayload(fv, tools, extraItems);
 
     const [saving, setSaving] = useState(false);
     const onSubmit = async (fv: NonCashFormValues) => {

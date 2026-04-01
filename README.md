@@ -155,6 +155,8 @@ Daftar suite pengujian yang tersedia:
 - **[`season.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/season.test.ts)**: Memverifikasi validasi rentang tanggal musim tanam (tanggal mulai vs tanggal selesai).
 - **[`unitLabel.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/unitLabel.test.ts)**: Menguji normalisasi label satuan (kg, gram, liter) dari berbagai variasi input teks user.
 - **[`weather.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/weather.test.ts)**: Memastikan konversi kode cuaca numerik dari API ke deskripsi teks bahasa Indonesia.
+- **[`expense-form-logic.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/expense-form-logic.test.ts)**: Menguji logika inti pada form pengeluaran, termasuk perhitungan prorata biaya tahunan, pemetaan tahapan kerja dari database, validasi input benih dan bahan kimia, serta konstruksi payload untuk API.
+- **[`income-form-logic.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/utils/__tests__/income-form-logic.test.ts)** (**Penerimaan Form**): Menguji logika pada form penerimaan, termasuk perhitungan total pendapatan (Grand Total), filtrasi tanaman yang sudah dicatat per musim, pemilihan otomatis musim yang masih tersedia, serta penyusunan payload untuk pembuatan multi-data.
 
 #### Layanan (Services)
 
@@ -167,7 +169,6 @@ Daftar suite pengujian yang tersedia:
 - **[`operatorService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/operatorService.test.ts)**: Menguji fungsi manajemen operator, termasuk pembuatan operator baru dan pencegahan duplikasi operator.
 - **[`informationService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/informationService.test.ts)**: Memverifikasi CRUD konten edukasi/informasi yang hanya dapat dilakukan oleh admin/operator.
 - **[`weatherService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/weatherService.test.ts)**: Melakukan pengujian integrasi API cuaca (Open Meteo) dengan simulasi respons sukses dan gagal.
-- **[`openWhatsApp.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/openWhatsApp.test.ts)**: Menguji utilitas pembukaan WhatsApp dengan fallback ke URL web jika aplikasi tidak terpasang.
 - **[`reportService.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportService.test.ts)**: Menguji hook `useReportData` untuk pengambilan data laporan, manajemen filter tahun/musim, dan transformasi dataset laporan.
 - **[`reportPdf.test.ts`](file:///Users/ferisetya/Project/Mobile/Tani/services/__tests__/reportPdf.test.ts)**: Memverifikasi alur pembuatan dokumen PDF laporan, pemindahan berkas ke cache, dan fungsi berbagi (_sharing_) dokumen.
 
