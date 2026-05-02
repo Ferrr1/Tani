@@ -4,51 +4,62 @@ import LoadingScreen from "@/components/LoadingScreen";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { router, Tabs, useRootNavigationState } from "expo-router";
+import { Redirect, router, Tabs, useRootNavigationState } from "expo-router";
 import React, { useEffect } from "react";
 import { useColorScheme } from "react-native";
 
 const AdminLayout = () => {
-    const scheme = useColorScheme();
-    const navReady = !!useRootNavigationState()?.key;
-    const { isInitialized, session, role } = useAuth();
+  const scheme = useColorScheme();
+  const navReady = !!useRootNavigationState()?.key;
+  const { isInitialized, session, role } = useAuth();
 
-    useEffect(() => {
-        if (!navReady || !isInitialized) return;
-        if (!session) {
-            router.replace("/(auth)");
-        } else if (role !== "admin") {
-            router.replace("/(user)/(tabs)");
-        }
-    }, [session, role, navReady, isInitialized]);
-
-    if (!navReady || !isInitialized) {
-        return <LoadingScreen title="Menyiapkan panel admin" subtitle="Memuat profil & sesi…" />;
+  useEffect(() => {
+    if (!navReady || !isInitialized || !session) return;
+    if (role !== "admin") {
+      router.replace("/(user)/(tabs)");
     }
+  }, [session, role, navReady, isInitialized]);
+
+  if (!navReady || !isInitialized) {
     return (
-        <Tabs
-            screenOptions={{
-                tabBarActiveTintColor: Colors[scheme ?? "light"].tint,
-                headerShown: false,
-                tabBarButton: HapticTab,
-            }}
-        >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: "Home",
-                    tabBarIcon: ({ color }) => <Ionicons size={28} name="home-outline" color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="information"
-                options={{
-                    title: "Informasi",
-                    tabBarIcon: ({ color }) => <Ionicons size={28} name="information-circle" color={color} />,
-                }}
-            />
-        </Tabs>
+      <LoadingScreen
+        title="Menyiapkan panel admin"
+        subtitle="Memuat profil & sesi…"
+      />
     );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
+  return (
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: Colors[scheme ?? "light"].tint,
+        headerShown: false,
+        tabBarButton: HapticTab,
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Home",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={28} name="home-outline" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="information"
+        options={{
+          title: "Informasi",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={28} name="information-circle" color={color} />
+          ),
+        }}
+      />
+    </Tabs>
+  );
 };
 
 export default AdminLayout;

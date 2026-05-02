@@ -4,7 +4,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { router, Tabs, useRootNavigationState } from "expo-router";
+import { Redirect, router, Tabs, useRootNavigationState } from "expo-router";
 import React, { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,11 +15,9 @@ export default function TabLayout() {
   const { isInitialized, session, role } = useAuth();
 
   useEffect(() => {
-    if (!navReady || !isInitialized) return;
+    if (!navReady || !isInitialized || !session) return;
 
-    if (!session) {
-      router.replace("/(auth)");
-    } else if (role === "operator") {
+    if (role === "operator") {
       router.replace("/(operator)/(tabs)");
     } else if (role === "admin") {
       router.replace("/(admin)/(tabs)");
@@ -33,6 +31,10 @@ export default function TabLayout() {
         subtitle="Memuat profil & sesi…"
       />
     );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)" />;
   }
   return (
     <SafeAreaProvider>

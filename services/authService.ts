@@ -32,7 +32,7 @@ export async function restoreSession(): Promise<Session | null> {
     if (setRes.session) {
       await AsyncStorage.setItem(
         AUTH_TOKEN_KEY,
-        JSON.stringify(setRes.session)
+        JSON.stringify(setRes.session),
       );
       return setRes.session;
     }
