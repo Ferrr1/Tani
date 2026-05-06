@@ -172,6 +172,9 @@ function formatCropTypeLine(cropType: unknown): string | null {
   return `Jenis Tanaman: <b>${label}</b>`;
 }
 
+// ===== formatIDR helper to add ,00 =====
+const formatIDR = (n: number) => currency(n) + ",00";
+
 export async function generateReportPdf({
   fileName,
   title = "Report",
@@ -285,14 +288,14 @@ export async function generateReportPdf({
         const qtyStr =
           p.quantity != null ? Number(p.quantity)?.toFixed(0) : "-";
         const unitStr = p.unitType ?? "-";
-        const priceStr = p.unitPrice != null ? currency(p.unitPrice) : "-";
+        const priceStr = p.unitPrice != null ? formatIDR(p.unitPrice) : "-";
         return `
           <tr>
             <td>${p.label ?? "Penerimaan"}</td>
             <td>${qtyStr}</td>
             <td>${unitStr}</td>
             <td>${priceStr}</td>
-            <td class="td-right">${currency(value)}</td>
+            <td class="td-right">${formatIDR(value)}</td>
           </tr>
         `;
       })
@@ -302,7 +305,7 @@ export async function generateReportPdf({
       <td></td>
       <td></td>
       <td></td>
-      <td class="td-right">${currency(totalProduksi)}</td>
+      <td class="td-right">${formatIDR(totalProduksi)}</td>
     </tr>
 
     <!-- BIAYA PRODUKSI -->
@@ -317,7 +320,7 @@ export async function generateReportPdf({
         const unitStr = c.unit ?? "-";
         const priceStr =
           c.quantity != null && c.unitPrice != null
-            ? currency(c.unitPrice)
+            ? formatIDR(c.unitPrice)
             : "-";
         return `
           <tr>
@@ -325,7 +328,7 @@ export async function generateReportPdf({
             <td>${qtyStr}</td>
             <td>${unitStr}</td>
             <td>${priceStr}</td>
-            <td class="td-right">${currency(value)}</td>
+            <td class="td-right">${formatIDR(value)}</td>
           </tr>
         `;
       })
@@ -345,7 +348,7 @@ export async function generateReportPdf({
             <td>-</td>
             <td>-</td>
             <td>-</td>
-            <td class="td-right">${currency(value)}</td>
+            <td class="td-right">${formatIDR(value)}</td>
           </tr>
         `;
       })
@@ -365,10 +368,10 @@ export async function generateReportPdf({
         <td>${laborNonCashDetail.unit ?? "-"}</td>
         <td>${
           laborNonCashDetail.unitPrice != null
-            ? currency(laborNonCashDetail.unitPrice)
+            ? formatIDR(laborNonCashDetail.unitPrice)
             : "-"
         }</td>
-        <td class="td-right">${currency(laborNonCashDetail.amount)}</td>
+        <td class="td-right">${formatIDR(laborNonCashDetail.amount)}</td>
       </tr>`
         : totalBiayaNonTunaiTK > 0
         ? `
@@ -377,7 +380,7 @@ export async function generateReportPdf({
         <td>-</td>
         <td>-</td>
         <td>-</td>
-        <td class="td-right">${currency(totalBiayaNonTunaiTK)}</td>
+        <td class="td-right">${formatIDR(totalBiayaNonTunaiTK)}</td>
       </tr>`
         : ""
     }
@@ -391,7 +394,7 @@ export async function generateReportPdf({
       <td>${Number(totalToolsQty).toFixed(0)}</td>
       <td>-</td>
       <td>-</td>
-      <td class="td-right">${currency(totalTools)}</td>
+      <td class="td-right">${formatIDR(totalTools)}</td>
     </tr>
     `
           : ""
@@ -407,7 +410,7 @@ export async function generateReportPdf({
           <td>-</td>
           <td>-</td>
           <td>-</td>
-          <td class="td-right">${currency(value)}</td>
+          <td class="td-right">${formatIDR(value)}</td>
         </tr>
       `;
     })
@@ -435,7 +438,7 @@ export async function generateReportPdf({
         (n) => `
       <tr>
         <td>Penerimaan MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Penerimaan MT ${n}`)
         )}</td>
       </tr>`
@@ -443,7 +446,7 @@ export async function generateReportPdf({
       .join("")}
     <tr class="total-row">
       <td>Total Penerimaan</td>
-      <td class="td-right">${currency(totals.penerimaan)}</td>
+      <td class="td-right">${formatIDR(totals.penerimaan)}</td>
     </tr>
 
     <!-- BIAYA PRODUKSI -->
@@ -454,19 +457,19 @@ export async function generateReportPdf({
       <tr><td class="sub-title" colspan="2">MT ${n}</td></tr>
       <tr>
         <td>Biaya Non Tunai MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Biaya Non Tunai MT ${n}`)
         )}</td>
       </tr>
       <tr>
         <td>Biaya Tunai MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Biaya Tunai MT ${n}`)
         )}</td>
       </tr>
       <tr>
         <td>Biaya Total MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Biaya Total MT ${n}`)
         )}</td>
       </tr>`
@@ -474,15 +477,15 @@ export async function generateReportPdf({
       .join("")}
     <tr class="total-row">
       <td>Total Biaya Non Tunai</td>
-      <td class="td-right">${currency(totals.biayaNonTunai)}</td>
+      <td class="td-right">${formatIDR(totals.biayaNonTunai)}</td>
     </tr>
     <tr class="total-row">
       <td>Total Biaya Tunai</td>
-      <td class="td-right">${currency(totals.biayaTunai)}</td>
+      <td class="td-right">${formatIDR(totals.biayaTunai)}</td>
     </tr>
     <tr class="total-row">
       <td class="bold">Total Biaya</td>
-      <td class="td-right bold">${currency(totals.biayaTotal)}</td>
+      <td class="td-right bold">${formatIDR(totals.biayaTotal)}</td>
     </tr>
 
     <!-- PENDAPATAN -->
@@ -492,19 +495,19 @@ export async function generateReportPdf({
         (n) => `
       <tr>
         <td>Pendapatan Atas Biaya Tunai MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Pendapatan Atas Biaya Tunai MT ${n}`)
         )}</td>
       </tr>
       <tr>
         <td>Pendapatan Atas Biaya Non Tunai MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Pendapatan Atas Biaya Non Tunai MT ${n}`)
         )}</td>
       </tr>
       <tr>
         <td>Pendapatan Atas Biaya Total MT ${n}</td>
-        <td class="td-right">${currency(
+        <td class="td-right">${formatIDR(
           yr(yearRows, `Pendapatan Atas Biaya Total MT ${n}`)
         )}</td>
       </tr>`
@@ -512,15 +515,15 @@ export async function generateReportPdf({
       .join("")}
     <tr class="total-row">
       <td>Total Pendapatan Atas Biaya Tunai</td>
-      <td class="td-right">${currency(totals.pendTunai)}</td>
+      <td class="td-right">${formatIDR(totals.pendTunai)}</td>
     </tr>
     <tr class="total-row">
       <td>Total Pendapatan Atas Biaya Non Tunai</td>
-      <td class="td-right">${currency(totals.pendNonTunai)}</td>
+      <td class="td-right">${formatIDR(totals.pendNonTunai)}</td>
     </tr>
     <tr class="total-row">
       <td class="bold">Total Pendapatan Atas Biaya Total</td>
-      <td class="td-right bold">${currency(totals.pendTotal)}</td>
+      <td class="td-right bold">${formatIDR(totals.pendTotal)}</td>
     </tr>
 
     <!-- R/C (per MT saja, tanpa total) -->
@@ -589,13 +592,13 @@ export async function generateReportPdf({
       ? ""
       : `
   <div class="totals">
-    <div class="row"><div>Total Biaya Tunai</div><div>${currency(
+    <div class="row"><div>Total Biaya Tunai</div><div>${formatIDR(
       totalBiayaTunai
     )}</div></div>
-    <div class="row"><div>Total Biaya Non Tunai</div><div>${currency(
+    <div class="row"><div>Total Biaya Non Tunai</div><div>${formatIDR(
       totalBiayaNonTunai
     )}</div></div>
-    <div class="row"><div class="bold">Total Biaya</div><div class="bold">${currency(
+    <div class="row"><div class="bold">Total Biaya</div><div class="bold">${formatIDR(
       totalBiaya
     )}</div></div>
   </div>
